@@ -1,0 +1,590 @@
+@import 'tailwindcss';
+@plugin "@tailwindcss/forms";
+@plugin '@tailwindcss/typography';
+@source '../node_modules/pliny';
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* 核心主题配置 */
+@theme {
+  /* 字体系列 */
+  --font-sans:
+    var(--font-noto-sans-sc), var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif,
+    'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+
+  /* Colors */
+  /* Copied from https://tailwindcss.com/docs/theme#default-theme-variable-reference */
+  --color-primary-50: oklch(0.971 0.014 343.198);
+  --color-primary-100: oklch(0.948 0.028 342.258);
+  --color-primary-200: oklch(0.899 0.061 343.231);
+  --color-primary-300: oklch(0.823 0.12 346.018);
+  --color-primary-400: oklch(0.718 0.202 349.761);
+  --color-primary-500: oklch(0.656 0.241 354.308);
+  --color-primary-600: oklch(0.592 0.249 0.584);
+  --color-primary-700: oklch(0.525 0.223 3.958);
+  --color-primary-800: oklch(0.459 0.187 3.815);
+  --color-primary-900: oklch(0.408 0.153 2.432);
+  --color-primary-950: oklch(0.284 0.109 3.907);
+
+  --color-gray-50: oklch(0.985 0.002 247.839);
+  --color-gray-100: oklch(0.967 0.003 264.542);
+  --color-gray-200: oklch(0.928 0.006 264.531);
+  --color-gray-300: oklch(0.872 0.01 258.338);
+  --color-gray-400: oklch(0.707 0.022 261.325);
+  --color-gray-500: oklch(0.551 0.027 264.364);
+  --color-gray-600: oklch(0.446 0.03 256.802);
+  --color-gray-700: oklch(0.373 0.034 259.733);
+  --color-gray-800: oklch(0.278 0.033 256.848);
+  --color-gray-900: oklch(0.21 0.034 264.665);
+  --color-gray-950: oklch(0.13 0.028 261.692);
+
+  /* Line heights */
+  --line-height-11: 2.75rem;
+  --line-height-12: 3rem;
+  --line-height-13: 3.25rem;
+  --line-height-14: 3.5rem;
+
+  /* Z-index values */
+  --z-60: 60;
+  --z-70: 70;
+  --z-80: 80;
+}
+
+/*
+  The default border color has changed to `currentColor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+
+  a,
+  button {
+    outline-color: var(--color-primary-500);
+  }
+
+  a:focus-visible,
+  button:focus-visible {
+    outline: 2px solid;
+    border-radius: var(--radius-sm);
+    outline-color: var(--color-primary-500);
+  }
+}
+
+@layer utilities {
+  .prose {
+    & a {
+      color: var(--color-primary-500);
+      &:hover {
+        color: var(--color-primary-600);
+      }
+      & code {
+        color: var(--color-primary-400);
+      }
+    }
+    & :where(h1, h2) {
+      font-weight: 700;
+      letter-spacing: var(--tracking-tight);
+    }
+    & h3 {
+      font-weight: 600;
+    }
+    & :where(code):not(pre code) {
+      color: var(--color-indigo-500);
+    }
+  }
+
+  .prose-invert {
+    & a {
+      color: var(--color-primary-500);
+      &:hover {
+        color: var(--color-primary-400);
+      }
+      & code {
+        color: var(--color-primary-400);
+      }
+    }
+    & :where(h1, h2, h3, h4, h5, h6) {
+      color: var(--color-gray-100);
+    }
+  }
+}
+
+.task-list-item::before {
+  @apply hidden;
+}
+
+.task-list-item {
+  @apply list-none;
+}
+
+.footnotes {
+  @apply mt-12 border-t border-gray-200 pt-8 dark:border-gray-700;
+}
+
+.data-footnote-backref {
+  @apply no-underline;
+}
+
+.csl-entry {
+  @apply my-5;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+/* https://stackoverflow.com/questions/61083813/how-to-avoid-internal-autofill-selected-style-to-be-applied */
+input:-webkit-autofill,
+input:-webkit-autofill:focus {
+  transition:
+    background-color 600000s 0s,
+    color 600000s 0s;
+}
+
+.katex-display {
+  overflow: auto hidden;
+}
+
+.content-header-link {
+  opacity: 0;
+  margin-left: -24px;
+  padding-right: 4px;
+}
+
+.content-header:hover .content-header-link,
+.content-header-link:hover {
+  opacity: 1;
+}
+
+.linkicon {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* macOS 风格代码块样式 */
+pre[class*='language-'] {
+  @apply rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900;
+  padding: 3rem 1.5rem 1.5rem 1.5rem; /* 增加顶部padding为窗口装饰留空间 */
+  margin: 1rem 0;
+  overflow-x: auto;
+  font-family:
+    'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  position: relative; /* 为伪元素定位 */
+}
+
+/* macOS 窗口装饰 - 顶部栏 */
+pre[class*='language-']::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2.5rem;
+  @apply bg-gray-100 dark:bg-gray-800;
+  border-radius: 0.5rem 0.5rem 0 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* macOS 窗口控制按钮 */
+pre[class*='language-']::after {
+  content: '';
+  position: absolute;
+  top: 0.75rem;
+  left: 1rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background: #ff5f57; /* 红色关闭按钮 */
+  box-shadow:
+    1.25rem 0 0 #ffbd2e,
+    /* 黄色最小化按钮 */ 2.5rem 0 0 #28ca42; /* 绿色最大化按钮 */
+}
+
+/* 代码标题样式 - macOS 风格 */
+.remark-code-title {
+  @apply rounded-t-lg border border-b-0 border-gray-200 bg-gray-100 px-5 py-3 font-mono text-sm font-semibold text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300;
+  position: relative;
+  padding-left: 4rem; /* 为窗口控制按钮留空间 */
+}
+
+/* 为有标题的代码块添加窗口控制按钮 */
+.remark-code-title::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 1rem;
+  transform: translateY(-50%);
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background: #ff5f57; /* 红色关闭按钮 */
+  box-shadow:
+    1.25rem 0 0 #ffbd2e,
+    /* 黄色最小化按钮 */ 2.5rem 0 0 #28ca42; /* 绿色最大化按钮 */
+}
+
+.remark-code-title + div > pre {
+  @apply mt-0 rounded-t-none;
+  padding-top: 1.5rem; /* 有标题时减少顶部padding */
+}
+
+/* 有标题的代码块不显示默认的窗口装饰 */
+.remark-code-title + div > pre::before,
+.remark-code-title + div > pre::after {
+  display: none;
+}
+
+/* 深色模式下的窗口装饰优化 */
+.dark pre[class*='language-']::before {
+  @apply bg-gray-800;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* 深色模式下的代码标题优化 */
+.dark .remark-code-title {
+  @apply bg-gray-800;
+}
+
+/* 窗口控制按钮悬停效果 */
+pre[class*='language-']:hover::after,
+.remark-code-title:hover::before {
+  box-shadow:
+    1.25rem 0 0 #ffbd2e,
+    2.5rem 0 0 #28ca42;
+  transition: box-shadow 0.2s ease;
+}
+
+/* 为窗口装饰添加微妙的渐变效果 */
+pre[class*='language-']::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.6) 100%);
+}
+
+.dark pre[class*='language-']::before {
+  background: linear-gradient(180deg, rgba(55, 65, 81, 0.9) 0%, rgba(55, 65, 81, 0.7) 100%);
+}
+
+/* macOS 风格代码块 - 深色主题 */
+pre {
+  background: #1e1e1e !important; /* VS Code 深色背景 */
+  border: 1px solid #3e3e3e !important;
+  border-radius: 8px !important;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+  padding: 40px 24px 24px 24px !important;
+  margin: 16px 0 !important;
+  overflow-x: auto !important;
+  font-family:
+    'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+  position: relative !important;
+  color: #d4d4d4 !important; /* 浅灰色文字 */
+}
+
+/* 深色模式下保持一致 */
+.dark pre {
+  background: #1e1e1e !important;
+  border-color: #3e3e3e !important;
+  color: #d4d4d4 !important;
+}
+
+/* macOS 窗口装饰 - 深灰色顶部栏 */
+pre::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 40px !important;
+  background: #2d2d2d !important; /* 深灰色标题栏 */
+  border-radius: 8px 8px 0 0 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  z-index: 1 !important;
+}
+
+/* 深色模式下保持一致 */
+.dark pre::before {
+  background: #2d2d2d !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* macOS 窗口控制按钮 */
+pre::after {
+  content: '' !important;
+  position: absolute !important;
+  top: 12px !important;
+  left: 16px !important;
+  width: 12px !important;
+  height: 12px !important;
+  border-radius: 50% !important;
+  background: #ff5f57 !important; /* 红色关闭按钮 */
+  box-shadow:
+    20px 0 0 #ffbd2e,
+    /* 黄色最小化按钮 */ 40px 0 0 #28ca42 !important; /* 绿色最大化按钮 */
+  z-index: 2 !important;
+}
+
+/* 深色模式下保持一致 */
+.dark pre::after {
+  background: #ff5f57 !important;
+  box-shadow:
+    20px 0 0 #ffbd2e,
+    40px 0 0 #28ca42 !important;
+}
+
+/* macOS 窗口控制按钮 */
+pre::after {
+  content: '' !important;
+  position: absolute !important;
+  top: 12px !important;
+  left: 16px !important;
+  width: 12px !important;
+  height: 12px !important;
+  border-radius: 50% !important;
+  background: #ff5f57 !important;
+  box-shadow:
+    20px 0 0 #ffbd2e,
+    40px 0 0 #28ca42 !important;
+  z-index: 2 !important;
+}
+
+/* macOS 风格的语法高亮 - 深色主题优化 */
+pre code {
+  background: transparent !important;
+  padding: 0 !important;
+  font-size: inherit !important;
+  color: inherit !important;
+}
+
+/* 关键字 - 亮紫色 */
+.token.keyword,
+.token.selector,
+.token.important {
+  color: #c586c0 !important;
+  font-weight: 600 !important;
+}
+
+/* 字符串 - 亮绿色 */
+.token.string,
+.token.char,
+.token.attr-value {
+  color: #ce9178 !important;
+}
+
+/* 注释 - 灰绿色 */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: #6a9955 !important;
+  font-style: italic !important;
+}
+
+/* 数字 - 亮蓝色 */
+.token.number,
+.token.boolean {
+  color: #b5cea8 !important;
+}
+
+/* 函数名 - 黄色 */
+.token.function,
+.token.class-name {
+  color: #dcdcaa !important;
+}
+
+/* 操作符 - 浅灰色 */
+.token.operator,
+.token.punctuation {
+  color: #d4d4d4 !important;
+}
+
+/* 属性名 - 浅蓝色 */
+.token.property,
+.token.tag {
+  color: #9cdcfe !important;
+}
+
+/* 变量 - 浅蓝色 */
+.token.variable {
+  color: #9cdcfe !important;
+}
+
+/* 深色模式下保持相同的语法高亮 */
+.dark .token.keyword,
+.dark .token.selector,
+.dark .token.important {
+  color: #c586c0 !important;
+  font-weight: 600 !important;
+}
+
+.dark .token.string,
+.dark .token.char,
+.dark .token.attr-value {
+  color: #ce9178 !important;
+}
+
+.dark .token.comment,
+.dark .token.prolog,
+.dark .token.doctype,
+.dark .token.cdata {
+  color: #6a9955 !important;
+  font-style: italic !important;
+}
+
+.dark .token.number,
+.dark .token.boolean {
+  color: #b5cea8 !important;
+}
+
+.dark .token.function,
+.dark .token.class-name {
+  color: #dcdcaa !important;
+}
+
+.dark .token.operator,
+.dark .token.punctuation {
+  color: #d4d4d4 !important;
+}
+
+.dark .token.property,
+.dark .token.tag {
+  color: #9cdcfe !important;
+}
+
+.dark .token.variable {
+  color: #9cdcfe !important;
+}
+
+/* 复制按钮样式 - macOS 风格 */
+.copy-button {
+  position: absolute !important;
+  top: 8px !important;
+  right: 12px !important;
+  z-index: 10 !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-radius: 6px !important;
+  padding: 6px 8px !important;
+  font-size: 12px !important;
+  color: #d4d4d4 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  backdrop-filter: blur(10px) !important;
+  font-family:
+    'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace !important;
+}
+
+.copy-button:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  color: #ffffff !important;
+}
+
+.copy-button:active {
+  background: rgba(255, 255, 255, 0.3) !important;
+  transform: scale(0.95) !important;
+}
+
+/* 深色模式下的复制按钮 */
+.dark .copy-button {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #d4d4d4 !important;
+}
+
+.dark .copy-button:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  color: #ffffff !important;
+}
+
+/* 确保复制按钮在代码块容器内正确定位 */
+pre {
+  position: relative !important;
+}
+
+/* 为 pliny Pre 组件的复制按钮提供样式 */
+button[aria-label='Copy code'] {
+  position: absolute !important;
+  top: 8px !important;
+  right: 12px !important;
+  z-index: 10 !important;
+  width: 32px !important;
+  height: 32px !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 2px solid rgba(255, 255, 255, 0.2) !important;
+  border-radius: 6px !important;
+  padding: 4px !important;
+  color: #d4d4d4 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  backdrop-filter: blur(10px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+button[aria-label='Copy code']:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  color: #ffffff !important;
+  transform: scale(1.05) !important;
+}
+
+button[aria-label='Copy code']:active {
+  background: rgba(255, 255, 255, 0.3) !important;
+  transform: scale(0.95) !important;
+}
+
+/* 复制成功状态 */
+button[aria-label='Copy code'].border-green-400 {
+  border-color: #4ade80 !important;
+  background: rgba(74, 222, 128, 0.2) !important;
+}
+
+/* 深色模式下的复制按钮 */
+.dark button[aria-label='Copy code'] {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #d4d4d4 !important;
+}
+
+.dark button[aria-label='Copy code']:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  color: #ffffff !important;
+}
+
+/* 确保复制按钮的 SVG 图标正确显示 */
+button[aria-label='Copy code'] svg {
+  width: 16px !important;
+  height: 16px !important;
+  stroke-width: 2 !important;
+}
+
+/* 确保 pliny Pre 组件的容器样式 */
+div.relative > pre {
+  position: static !important;
+}
+
+/* 为 pliny Pre 组件容器提供正确的定位上下文 */
+div.relative {
+  position: relative !important;
+}

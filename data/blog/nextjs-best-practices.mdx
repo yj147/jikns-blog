@@ -1,0 +1,286 @@
+---
+title: 'Next.js 开发最佳实践指南'
+date: '2025-06-21'
+lastmod: '2025-06-21'
+tags: ['Next.js', 'React', '最佳实践', '前端开发', 'TypeScript']
+draft: false
+summary: '分享 Next.js 开发中的最佳实践，包括项目结构、性能优化、SEO 配置等方面的经验总结。'
+images: ['/static/images/nextjs-guide.jpg']
+authors: ['default']
+---
+
+# Next.js 开发最佳实践指南
+
+Next.js 作为 React 的生产级框架，为我们提供了许多开箱即用的功能。在实际开发中，遵循一些最佳实践可以让我们的项目更加健壮、高效。
+
+## 项目结构组织
+
+### 推荐的目录结构
+
+```
+my-nextjs-app/
+├── app/                    # App Router (Next.js 13+)
+│   ├── globals.css
+│   ├── layout.tsx
+│   ├── page.tsx
+│   └── (routes)/
+├── components/             # 可复用组件
+│   ├── ui/                # 基础 UI 组件
+│   └── features/          # 功能组件
+├── lib/                   # 工具函数和配置
+├── hooks/                 # 自定义 Hooks
+├── types/                 # TypeScript 类型定义
+├── public/               # 静态资源
+└── styles/               # 样式文件
+```
+
+### 组件命名规范
+
+```tsx
+// ✅ 好的命名
+const UserProfile = () => {
+  /* ... */
+}
+const ProductCard = () => {
+  /* ... */
+}
+const NavigationMenu = () => {
+  /* ... */
+}
+
+// ❌ 避免的命名
+const component1 = () => {
+  /* ... */
+}
+const temp = () => {
+  /* ... */
+}
+const MyComp = () => {
+  /* ... */
+}
+```
+
+## 性能优化
+
+### 1. 图片优化
+
+使用 Next.js 的 `Image` 组件：
+
+```tsx
+import Image from 'next/image'
+
+const OptimizedImage = () => {
+  return (
+    <Image
+      src="/hero-image.jpg"
+      alt="描述性文字"
+      width={800}
+      height={600}
+      priority // 对于首屏重要图片
+      placeholder="blur" // 模糊占位符
+      blurDataURL="data:image/jpeg;base64,..." // 可选
+    />
+  )
+}
+```
+
+### 2. 代码分割
+
+利用动态导入实现组件懒加载：
+
+```tsx
+import dynamic from 'next/dynamic'
+
+// 懒加载组件
+const HeavyComponent = dynamic(() => import('./HeavyComponent'), {
+  loading: () => <div>加载中...</div>,
+  ssr: false, // 如果不需要服务端渲染
+})
+
+// 懒加载第三方库
+const Chart = dynamic(() => import('react-chartjs-2'), {
+  ssr: false,
+})
+```
+
+### 3. 字体优化
+
+使用 `next/font` 优化字体加载：
+
+```tsx
+import { Inter, Noto_Sans_SC } from 'next/font/google'
+
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+})
+
+const notoSansSC = Noto_Sans_SC({
+  subsets: ['latin'],
+  weight: ['400', '500', '700'],
+  display: 'swap',
+})
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="zh-CN" className={`${inter.variable} ${notoSansSC.variable}`}>
+      <body>{children}</body>
+    </html>
+  )
+}
+```
+
+## SEO 优化
+
+### 元数据配置
+
+```tsx
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: '页面标题',
+  description: '页面描述，控制在 160 字符以内',
+  keywords: ['关键词1', '关键词2', '关键词3'],
+  authors: [{ name: '作者姓名' }],
+  openGraph: {
+    title: '社交媒体标题',
+    description: '社交媒体描述',
+    images: ['/og-image.jpg'],
+    locale: 'zh_CN',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Twitter 标题',
+    description: 'Twitter 描述',
+    images: ['/twitter-image.jpg'],
+  },
+}
+```
+
+### 结构化数据
+
+```tsx
+export default function ArticlePage() {
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: '文章标题',
+    author: {
+      '@type': 'Person',
+      name: '作者姓名',
+    },
+    datePublished: '2025-06-21',
+    dateModified: '2025-06-21',
+    description: '文章描述',
+  }
+
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      {/* 页面内容 */}
+    </>
+  )
+}
+```
+
+## 状态管理
+
+### 使用 Zustand 进行状态管理
+
+```tsx
+import { create } from 'zustand'
+
+interface UserStore {
+  user: User | null
+  setUser: (user: User) => void
+  clearUser: () => void
+}
+
+export const useUserStore = create<UserStore>((set) => ({
+  user: null,
+  setUser: (user) => set({ user }),
+  clearUser: () => set({ user: null }),
+}))
+
+// 在组件中使用
+const UserProfile = () => {
+  const { user, setUser } = useUserStore()
+
+  return <div>{user ? `欢迎，${user.name}` : '请登录'}</div>
+}
+```
+
+## 错误处理
+
+### 全局错误边界
+
+```tsx
+'use client'
+
+import { useEffect } from 'react'
+
+export default function Error({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string }
+  reset: () => void
+}) {
+  useEffect(() => {
+    // 记录错误到监控服务
+    console.error(error)
+  }, [error])
+
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center">
+      <h2 className="mb-4 text-2xl font-bold">出现了一些问题</h2>
+      <p className="mb-4 text-gray-600">抱歉，页面加载时出现错误。</p>
+      <button
+        onClick={reset}
+        className="rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
+      >
+        重试
+      </button>
+    </div>
+  )
+}
+```
+
+## 环境变量管理
+
+```bash
+# .env.local
+NEXT_PUBLIC_API_URL=https://api.example.com
+DATABASE_URL=postgresql://...
+SECRET_KEY=your-secret-key
+
+# .env.example (提交到版本控制)
+NEXT_PUBLIC_API_URL=
+DATABASE_URL=
+SECRET_KEY=
+```
+
+```tsx
+// 在代码中使用
+const apiUrl = process.env.NEXT_PUBLIC_API_URL
+const secretKey = process.env.SECRET_KEY // 仅在服务端可用
+```
+
+## 总结
+
+遵循这些最佳实践可以帮助我们：
+
+1. **提升性能**：通过图片优化、代码分割等技术
+2. **改善 SEO**：正确配置元数据和结构化数据
+3. **增强可维护性**：清晰的项目结构和命名规范
+4. **提高开发效率**：合理的状态管理和错误处理
+
+Next.js 的生态系统在不断发展，建议定期关注官方文档和社区最佳实践，保持技术栈的更新。
+
+---
+
+_希望这些实践对您的 Next.js 项目有所帮助！如有问题，欢迎在评论区讨论。_
