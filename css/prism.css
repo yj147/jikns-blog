@@ -1,4 +1,4 @@
-/* @reference "./tailwind.css"; */
+@reference "./tailwind.css";
 
 /**
  * 代码高亮的 CSS 样式。
@@ -64,10 +64,8 @@
   min-width: 100%;
 }
 
-/* 苹果风格代码块容器 - 使用更广泛的选择器 */
-pre[class*='language-'],
-pre.language-,
-pre {
+/* 苹果风格代码块容器 - 只针对代码块 */
+pre[class*='language-'] {
   background: white !important;
   border: 1px solid #e5e7eb !important;
   border-radius: 0.5rem !important;
@@ -91,9 +89,7 @@ pre {
 }
 
 /* macOS 窗口装饰 - 顶部栏 */
-pre[class*='language-']::before,
-pre.language-::before,
-pre::before {
+pre[class*='language-']::before {
   content: '' !important;
   position: absolute !important;
   top: 0 !important;
@@ -107,17 +103,13 @@ pre::before {
 }
 
 /* 深色模式下的窗口装饰 */
-.dark pre[class*='language-']::before,
-.dark pre.language-::before,
-.dark pre::before {
+.dark pre[class*='language-']::before {
   background: #1f2937 !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
 /* macOS 窗口控制按钮 */
-pre[class*='language-']::after,
-pre.language-::after,
-pre::after {
+pre[class*='language-']::after {
   content: '' !important;
   position: absolute !important;
   top: 0.75rem !important;
@@ -442,13 +434,13 @@ pre[class*='language-']:hover {
 
 /* 深色模式下的窗口装饰优化 */
 .dark pre[class*='language-']::before {
-  @apply bg-gray-800;
+  background-color: #374151;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* 深色模式下的代码标题优化 */
 .dark .remark-code-title {
-  @apply bg-gray-800;
+  background-color: #374151;
 }
 
 /* 窗口控制按钮悬停效果 */

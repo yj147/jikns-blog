@@ -119,23 +119,28 @@
 }
 
 .task-list-item::before {
-  @apply hidden;
+  display: none;
 }
 
 .task-list-item {
-  @apply list-none;
+  list-style: none;
 }
 
 .footnotes {
-  @apply mt-12 border-t border-gray-200 pt-8 dark:border-gray-700;
+  margin-top: 3rem;
+  border-top: 1px solid var(--color-gray-200);
+  padding-top: 2rem;
+  .dark & {
+    border-color: var(--color-gray-700);
+  }
 }
 
 .data-footnote-backref {
-  @apply no-underline;
+  text-decoration: none;
 }
 
 .csl-entry {
-  @apply my-5;
+  margin: 1.25rem 0;
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -177,7 +182,10 @@ input:-webkit-autofill:focus {
 
 /* macOS 风格代码块样式 */
 pre[class*='language-'] {
-  @apply rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-gray-200);
+  background-color: white;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   padding: 3rem 1.5rem 1.5rem 1.5rem; /* 增加顶部padding为窗口装饰留空间 */
   margin: 1rem 0;
   overflow-x: auto;
@@ -186,6 +194,10 @@ pre[class*='language-'] {
   font-size: 0.875rem;
   line-height: 1.6;
   position: relative; /* 为伪元素定位 */
+  .dark & {
+    border-color: var(--color-gray-700);
+    background-color: var(--color-gray-900);
+  }
 }
 
 /* macOS 窗口装饰 - 顶部栏 */
@@ -196,7 +208,10 @@ pre[class*='language-']::before {
   left: 0;
   right: 0;
   height: 2.5rem;
-  @apply bg-gray-100 dark:bg-gray-800;
+  background-color: var(--color-gray-100);
+  .dark & {
+    background-color: var(--color-gray-800);
+  }
   border-radius: 0.5rem 0.5rem 0 0;
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
@@ -218,7 +233,21 @@ pre[class*='language-']::after {
 
 /* 代码标题样式 - macOS 风格 */
 .remark-code-title {
-  @apply rounded-t-lg border border-b-0 border-gray-200 bg-gray-100 px-5 py-3 font-mono text-sm font-semibold text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300;
+  border-radius: 0.5rem 0.5rem 0 0;
+  border: 1px solid var(--color-gray-200);
+  border-bottom: 0;
+  background-color: var(--color-gray-100);
+  padding: 0.75rem 1.25rem;
+  font-family:
+    ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-gray-700);
+  .dark & {
+    border-color: var(--color-gray-700);
+    background-color: var(--color-gray-800);
+    color: var(--color-gray-300);
+  }
   position: relative;
   padding-left: 4rem; /* 为窗口控制按钮留空间 */
 }
@@ -240,7 +269,8 @@ pre[class*='language-']::after {
 }
 
 .remark-code-title + div > pre {
-  @apply mt-0 rounded-t-none;
+  margin-top: 0;
+  border-radius: 0 0 0.5rem 0.5rem;
   padding-top: 1.5rem; /* 有标题时减少顶部padding */
 }
 
@@ -252,13 +282,13 @@ pre[class*='language-']::after {
 
 /* 深色模式下的窗口装饰优化 */
 .dark pre[class*='language-']::before {
-  @apply bg-gray-800;
+  background-color: var(--color-gray-800);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* 深色模式下的代码标题优化 */
 .dark .remark-code-title {
-  @apply bg-gray-800;
+  background-color: var(--color-gray-800);
 }
 
 /* 窗口控制按钮悬停效果 */
@@ -587,4 +617,36 @@ div.relative > pre {
 /* 为 pliny Pre 组件容器提供正确的定位上下文 */
 div.relative {
   position: relative !important;
+}
+
+/* KBar 搜索框样式修复 */
+[data-kbar-search] {
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  width: 100% !important;
+  height: auto !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  font-size: 16px !important;
+  line-height: 1.5 !important;
+  color: inherit !important;
+  font-family: inherit !important;
+}
+
+/* 确保 KBar 搜索框在深色模式下正常显示 */
+.dark [data-kbar-search] {
+  color: rgb(243 244 246) !important;
+}
+
+/* KBar 搜索框占位符样式 */
+[data-kbar-search]::placeholder {
+  color: rgb(156 163 175) !important;
+  opacity: 1 !important;
+}
+
+.dark [data-kbar-search]::placeholder {
+  color: rgb(107 114 128) !important;
+  opacity: 1 !important;
 }

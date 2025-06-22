@@ -88,6 +88,26 @@ const siteMetadata = {
     provider: 'kbar', // kbar 或 algolia
     kbarConfig: {
       searchDocumentsPath: `${process.env.BASE_PATH || ''}/search.json`, // 加载搜索文档的路径
+      // 自定义搜索结果处理函数，用于中文化
+      onSearchDocumentsLoad: (json) => {
+        const formatDate = (dateStr) => {
+          const date = new Date(dateStr)
+          return date.toLocaleDateString('zh-CN', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          })
+        }
+
+        return json.map((post) => ({
+          id: post.path,
+          name: post.title,
+          keywords: post.summary || '',
+          section: '内容', // 将 "Content" 替换为 "内容"
+          subtitle: formatDate(post.date),
+          perform: () => (window.location.href = `/${post.path}`),
+        }))
+      },
     },
     // provider: 'algolia',
     // algoliaConfig: {
