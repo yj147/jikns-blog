@@ -1,0 +1,191 @@
+/* 评论表情包动画样式 */
+
+/* 表情包角色动画 */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes sparkle {
+  0%, 100% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes wiggle {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-3deg);
+  }
+  75% {
+    transform: rotate(3deg);
+  }
+}
+
+/* 表情包容器悬浮效果 */
+.emoji-character {
+  animation: float 3s ease-in-out infinite;
+}
+
+.emoji-character:hover {
+  animation: wiggle 0.5s ease-in-out;
+}
+
+/* 装饰粒子动画 */
+.sparkle-1 {
+  animation: sparkle 2s ease-in-out infinite;
+  animation-delay: 0s;
+}
+
+.sparkle-2 {
+  animation: sparkle 2s ease-in-out infinite;
+  animation-delay: 0.5s;
+}
+
+.sparkle-3 {
+  animation: sparkle 2s ease-in-out infinite;
+  animation-delay: 1s;
+}
+
+/* 对话气泡动画 */
+@keyframes bubble-appear {
+  0% {
+    opacity: 0;
+    transform: translateX(10px) scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.speech-bubble {
+  animation: bubble-appear 0.3s ease-out;
+}
+
+/* 输入框焦点状态渐变 */
+.comment-textarea {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.comment-textarea:focus {
+  transform: scale(1.01);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* 表情包显示/隐藏动画 */
+.emoji-container {
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.emoji-container.show {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+}
+
+.emoji-container.hide {
+  opacity: 0;
+  transform: translateX(20px) scale(0.8);
+  pointer-events: none;
+}
+
+/* 提交按钮动画 */
+.submit-button {
+  transition: all 0.2s ease-in-out;
+}
+
+.submit-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.submit-button:active {
+  transform: translateY(0);
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .emoji-character {
+    animation-duration: 4s;
+  }
+  
+  .speech-bubble {
+    font-size: 0.75rem;
+    padding: 0.5rem;
+  }
+}
+
+/* 深色模式适配 */
+@media (prefers-color-scheme: dark) {
+  .speech-bubble {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  }
+  
+  .comment-textarea:focus {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  }
+}
+
+/* 可访问性支持 */
+@media (prefers-reduced-motion: reduce) {
+  .emoji-character,
+  .sparkle-1,
+  .sparkle-2,
+  .sparkle-3 {
+    animation: none;
+  }
+  
+  .emoji-container {
+    transition: opacity 0.2s ease;
+  }
+}
+
+/* 自定义滚动条（用于长评论） */
+.comment-content::-webkit-scrollbar {
+  width: 4px;
+}
+
+.comment-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.comment-content::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.5);
+  border-radius: 2px;
+}
+
+.comment-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.8);
+}
+
+/* 表情包角色主题变化 */
+.emoji-theme-pink {
+  background: linear-gradient(135deg, #fce7f3, #ddd6fe);
+}
+
+.emoji-theme-yellow {
+  background: linear-gradient(135deg, #fef3c7, #fed7aa);
+}
+
+.emoji-theme-blue {
+  background: linear-gradient(135deg, #dbeafe, #c7d2fe);
+}
+
+.emoji-theme-gray {
+  background: linear-gradient(135deg, #f3f4f6, #d1d5db);
+}
+
+.emoji-theme-green {
+  background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+}

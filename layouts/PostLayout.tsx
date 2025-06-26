@@ -9,6 +9,8 @@ import Image from '@/components/Image'
 import Tag from '@/components/Tag'
 import siteMetadata from '@/data/siteMetadata'
 import ScrollTopAndComment from '@/components/ScrollTopAndComment'
+import CopyrightNotice from '@/components/CopyrightNotice'
+import LikeButton from '@/components/LikeButton'
 
 const editUrl = (path) => `${siteMetadata.siteRepo}/blob/main/data/${path}`
 const discussUrl = (path) =>
@@ -109,6 +111,41 @@ export default function PostLayout({
             </dl>
             <div className="divide-y divide-gray-200 xl:col-span-3 xl:row-span-2 xl:pb-0 dark:divide-gray-700">
               <div className="prose dark:prose-invert max-w-none pt-10 pb-8">{children}</div>
+
+              {/* 版权信息 */}
+              <CopyrightNotice date={date} title={title} slug={slug} />
+
+              {/* 点赞功能 */}
+              <div className="border-t border-gray-200 pt-8 pb-6 dark:border-gray-700">
+                <LikeButton slug={slug} iconType="double" />
+              </div>
+
+              {/* 下一篇按钮 */}
+              {next && next.path && (
+                <div className="pt-8 pb-6 text-center">
+                  <Link
+                    href={`/${next.path}`}
+                    className="bg-primary-500 hover:bg-primary-600 inline-flex items-center rounded-lg px-6 py-3 font-medium text-white shadow-sm transition-colors duration-200 hover:shadow-md"
+                  >
+                    <span>下一篇</span>
+                    <svg
+                      className="ml-2 h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
+                  </Link>
+                  <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">{next.title}</div>
+                </div>
+              )}
+
               <div className="pt-6 pb-6 text-sm text-gray-700 dark:text-gray-300">
                 <Link href={discussUrl(path)} rel="nofollow">
                   在 Twitter 上讨论

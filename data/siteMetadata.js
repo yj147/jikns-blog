@@ -52,14 +52,25 @@ const siteMetadata = {
   newsletter: {
     // supports mailchimp, buttondown, convertkit, klaviyo, revue, emailoctopus, beehive
     // Please add your .env file and modify it according to your selection
-    provider: 'buttondown',
+    provider: '', // 已移除newsletter功能
   },
   comments: {
-    // 如果您想使用分析服务提供商，您需要将其添加到
-    // `next.config.js` 文件中的内容安全策略中。
-    // 选择一个提供商并使用与其关联的环境变量
-    // https://vercel.com/docs/environment-variables
-    provider: 'giscus', // 支持的提供商：giscus、utterances、disqus
+    // 评论系统提供商：custom（自定义）、giscus、utterances、disqus
+    provider: 'custom', // 使用自定义评论系统
+
+    // 自定义评论系统配置
+    customConfig: {
+      // 是否启用评论功能
+      enabled: true,
+      // 是否需要审核（垃圾评论会自动标记为需要审核）
+      moderation: true,
+      // 最大评论长度
+      maxLength: 2000,
+      // 是否允许匿名评论
+      allowAnonymous: true,
+    },
+
+    // 备用 Giscus 配置（如果需要切换回 Giscus）
     giscusConfig: {
       // 访问下面的链接，并按照"配置"部分的步骤操作
       // https://giscus.app/

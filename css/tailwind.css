@@ -4,6 +4,9 @@
 @source '../node_modules/pliny';
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* 评论表情包样式 */
+@import './comment-emoji.css';
+
 /* 核心主题配置 */
 @theme {
   /* 字体系列 */
@@ -649,4 +652,232 @@ div.relative {
 .dark [data-kbar-search]::placeholder {
   color: rgb(107 114 128) !important;
   opacity: 1 !important;
+}
+
+/* 自定义评论系统样式 */
+.comments-section {
+  max-width: none;
+}
+
+/* 音乐播放器样式 */
+.music-player-container {
+  position: relative;
+}
+
+/* 自定义滑块样式 */
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  background: rgb(59 130 246);
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.slider::-moz-range-thumb {
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  background: rgb(59 130 246);
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* 深色模式下的滑块样式 */
+.dark .slider::-webkit-slider-thumb {
+  background: rgb(96 165 250);
+  border-color: rgb(31 41 55);
+}
+
+.dark .slider::-moz-range-thumb {
+  background: rgb(96 165 250);
+  border-color: rgb(31 41 55);
+}
+
+/* 音乐播放器动画 */
+@keyframes music-wave {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.5); }
+}
+
+.music-wave {
+  animation: music-wave 1s ease-in-out infinite;
+}
+
+.music-wave:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.music-wave:nth-child(3) {
+  animation-delay: 0.2s;
+}
+
+/* 音乐播放器面板过渡动画 */
+.music-player-panel {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: top right;
+}
+
+.music-player-panel.entering {
+  opacity: 0;
+  transform: scale(0.95) translateY(-10px);
+}
+
+.music-player-panel.entered {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
+/* 浮动音乐控制器样式 */
+.floating-music-control {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* 浮动控制器拖拽时的样式 */
+.floating-music-control.dragging {
+  transition: none !important;
+  z-index: 9999;
+}
+
+/* 拖拽时保留圆形背景，只移除阴影和边框 */
+.floating-music-control.dragging > div > div {
+  box-shadow: none !important;
+  border: none !important;
+}
+
+/* 拖拽时禁用所有过渡效果和浏览器默认行为 */
+.dragging * {
+  transition: none !important;
+  pointer-events: none;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-user-drag: none !important;
+  -webkit-touch-callout: none !important;
+}
+
+/* 禁用浏览器默认拖拽样式 */
+.floating-music-control {
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  user-drag: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none; /* 禁用触摸手势 */
+}
+
+/* 拖拽时的全局样式 */
+body.dragging-music-control {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  touch-action: none !important;
+  overflow: hidden !important;
+}
+
+/* 浮动控制器悬停效果 */
+.floating-music-control:hover {
+  transform: scale(1.05);
+}
+
+/* 旋转动画优化 */
+@keyframes music-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.music-spin {
+  animation: music-spin 3s linear infinite;
+}
+
+/* 确保浮动控制器在合适的层级 */
+.floating-music-control {
+  z-index: 45; /* 高于目录按钮(z-40)但低于模态框 */
+}
+
+/* 移动端优化 */
+@media (max-width: 768px) {
+  .floating-music-control .w-14 {
+    width: 50px !important;
+    height: 50px !important;
+  }
+
+  .floating-music-control svg {
+    width: 20px !important;
+    height: 20px !important;
+  }
+
+  /* 确保在移动端可见 */
+  .floating-music-control {
+    min-width: 50px;
+    min-height: 50px;
+    z-index: 9999 !important;
+  }
+
+
+}
+
+.comments-section input,
+.comments-section textarea {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.comments-section input:focus,
+.comments-section textarea:focus {
+  border-color: var(--color-primary-500);
+  box-shadow: 0 0 0 3px rgba(var(--color-primary-500), 0.1);
+}
+
+/* 私密评论开关样式 */
+.toggle-checkbox:checked {
+  right: 0;
+  border-color: var(--color-primary-500);
+  background-color: var(--color-primary-500);
+}
+
+.toggle-checkbox:checked + .toggle-label {
+  background-color: var(--color-primary-500);
+}
+
+.toggle-label {
+  transition: background-color 0.2s ease;
+}
+
+/* 评论项悬停效果 */
+.comment-item:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.dark .comment-item:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* 回复表单动画 */
+.reply-form-enter {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.reply-form-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* 评论加载动画 */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.comment-loading {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }

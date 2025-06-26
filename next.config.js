@@ -10,7 +10,7 @@ const ContentSecurityPolicy = `
   script-src 'self' 'unsafe-eval' 'unsafe-inline' giscus.app analytics.umami.is;
   style-src 'self' 'unsafe-inline';
   img-src * blob: data:;
-  media-src *.s3.amazonaws.com;
+  media-src 'self' *.s3.amazonaws.com;
   connect-src *;
   font-src 'self';
   frame-src giscus.app
@@ -78,6 +78,50 @@ module.exports = () => {
         {
           protocol: 'https',
           hostname: 'picsum.photos',
+        },
+        {
+          protocol: 'https',
+          hostname: 'www.gravatar.com',
+        },
+        {
+          protocol: 'https',
+          hostname: 'avatars.githubusercontent.com',
+        },
+        {
+          protocol: 'https',
+          hostname: 'github.com',
+        },
+        {
+          protocol: 'https',
+          hostname: 'avatars0.githubusercontent.com',
+        },
+        {
+          protocol: 'https',
+          hostname: 'avatars1.githubusercontent.com',
+        },
+        {
+          protocol: 'https',
+          hostname: 'avatars2.githubusercontent.com',
+        },
+        {
+          protocol: 'https',
+          hostname: 'avatars3.githubusercontent.com',
+        },
+        {
+          protocol: 'https',
+          hostname: 'lh3.googleusercontent.com',
+        },
+        {
+          protocol: 'https',
+          hostname: 'cdn.discordapp.com',
+        },
+        {
+          protocol: 'https',
+          hostname: 'q1.qlogo.cn',
+        },
+        {
+          protocol: 'https',
+          hostname: 'q2.qlogo.cn',
         },
       ],
       unoptimized,

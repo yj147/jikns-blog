@@ -1,9 +1,9 @@
 {
-  "name": "",
-  "short_name": "",
+  "name": "jikns博客",
+  "short_name": "jikns",
   "icons": [
     {
-      "src": "/android-chrome-96x96.png",
+      "src": "/static/images/logo.png",
       "sizes": "96x96",
       "type": "image/png"
     }

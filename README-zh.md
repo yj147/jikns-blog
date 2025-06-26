@@ -13,7 +13,8 @@
 - **搜索功能**：内置 Kbar 搜索，支持中文内容搜索
 - **响应式设计**：完美适配桌面端和移动端
 - **SEO 友好**：完整的中文 SEO 优化
-- **评论系统**：支持 Giscus、Utterances 等评论系统
+- **评论系统**：基于 Supabase 的自定义评论系统，支持匿名评论、用户登录评论、嵌套回复、垃圾过滤
+- **用户认证**：完整的用户注册/登录系统，支持 OAuth（GitHub、Google）
 - **数学公式**：KaTeX 数学公式渲染支持
 - **代码高亮**：语法高亮和代码块功能
 - **标签系统**：文章分类和标签管理
@@ -56,7 +57,24 @@ yarn dev
 pnpm dev
 ```
 
-4. 在浏览器中打开 [http://localhost:3000](http://localhost:3000) 查看效果
+4. 配置 Supabase（评论系统和用户认证）
+
+```bash
+# 1. 创建 Supabase 项目
+# 访问 https://app.supabase.com 创建新项目
+
+# 2. 配置环境变量
+cp .env.example .env.local
+# 编辑 .env.local 填入 Supabase 配置
+
+# 3. 初始化数据库
+# 在 Supabase 控制台的 SQL Editor 中运行 database/supabase-init.sql
+
+# 4. 测试连接
+npm run test:supabase
+```
+
+5. 在浏览器中打开 [http://localhost:3000](http://localhost:3000) 查看效果
 
 ## 📝 配置
 
@@ -180,18 +198,57 @@ summary: '文章摘要'
 创建 `.env.local` 文件来配置环境变量：
 
 ```bash
-# Giscus 评论系统
+# Supabase 配置（自定义评论系统 + 用户认证）
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# 可选：Supabase 服务角色密钥（用于管理员操作）
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+
+# 应用配置
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+NEXT_PUBLIC_COMMENTS_ENABLED=true
+NEXT_PUBLIC_ANONYMOUS_COMMENTS_ENABLED=true
+NEXT_PUBLIC_USER_REGISTRATION_ENABLED=true
+
+# 备用评论系统（Giscus）
 NEXT_PUBLIC_GISCUS_REPO=
 NEXT_PUBLIC_GISCUS_REPOSITORY_ID=
 NEXT_PUBLIC_GISCUS_CATEGORY=
 NEXT_PUBLIC_GISCUS_CATEGORY_ID=
 
+# QQ登录配置
+NEXT_PUBLIC_QQ_APP_ID=your_qq_app_id
+QQ_APP_SECRET=your_qq_app_secret
+
 # 分析工具
 NEXT_UMAMI_ID=
-
-# 邮件订阅
-BUTTONDOWN_API_KEY=
 ```
+
+### QQ登录配置说明
+
+要启用QQ登录功能，需要：
+
+1. **注册QQ互联开发者账号**
+   - 访问 [QQ互联开放平台](https://connect.qq.com/)
+   - 注册开发者账号并完成认证
+
+2. **创建应用**
+   - 在开发者中心创建网站应用
+   - 获取 App ID 和 App Key
+   - 配置回调地址：`https://yourdomain.com/auth/qq/callback`
+
+3. **配置环境变量**
+   ```bash
+   NEXT_PUBLIC_QQ_APP_ID=你的QQ应用ID
+   QQ_APP_SECRET=你的QQ应用密钥
+   ```
+
+4. **功能特性**
+   - 与现有邮箱登录系统完全兼容
+   - 自动创建用户账户并同步到Supabase
+   - 支持用户头像和昵称同步
+   - 统一的用户体验和界面设计
 
 ## 📚 技术栈
 
@@ -199,6 +256,8 @@ BUTTONDOWN_API_KEY=
 - **UI 库**：React 19
 - **样式**：Tailwind CSS 4
 - **内容管理**：Contentlayer2
+- **数据库**：Supabase (PostgreSQL)
+- **认证**：Supabase Auth
 - **语言**：TypeScript
 - **部署**：Vercel
 
