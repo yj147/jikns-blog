@@ -60,6 +60,7 @@ export function UserAvatar({
         width={size === 'sm' ? 24 : size === 'md' ? 32 : size === 'lg' ? 40 : 48}
         height={size === 'sm' ? 24 : size === 'md' ? 32 : size === 'lg' ? 40 : 48}
         className={`${sizeClasses[size]} rounded-full object-cover ${className}`}
+        unoptimized={true}
         onError={(e) => {
           console.error('Avatar image failed to load:', avatarUrl)
           setImageError(true)

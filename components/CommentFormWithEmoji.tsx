@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import Image from 'next/image'
 import type { CommentFormData } from '@/lib/supabase'
 import { commentSchema, safeValidate } from '@/lib/validation'
 import EmojiPicker from './EmojiPicker'
@@ -9,7 +10,8 @@ import { useAuth } from '@/components/auth'
 interface CommentFormWithEmojiProps {
   slug: string
   parentId?: string
-  onCommentAdded: () => void
+  onCommentAdded?: () => void
+  onCommentAddedAction: () => void
   onCancel?: () => void
   placeholder?: string
 }
@@ -17,7 +19,7 @@ interface CommentFormWithEmojiProps {
 export default function CommentFormWithEmoji({
   slug,
   parentId,
-  onCommentAdded,
+  onCommentAdded: onCommentAddedAction,
   onCancel,
   placeholder = '说点什么吧......',
 }: CommentFormWithEmojiProps) {
@@ -200,7 +202,7 @@ export default function CommentFormWithEmoji({
         setIsTyping(false)
         setShowEmojiPicker(false)
         // 通知父组件刷新评论列表
-        onCommentAdded()
+        onCommentAddedAction?.()
         // 如果是回复，关闭回复表单
         if (onCancel) {
           setTimeout(() => onCancel(), 1500)
@@ -239,10 +241,13 @@ export default function CommentFormWithEmoji({
           <div className="flex items-center space-x-3 rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/20">
             <div className="flex-shrink-0">
               {user.avatar_url ? (
-                <img
+                <Image
                   src={user.avatar_url}
                   alt={user.display_name || '用户头像'}
+                  width={32} // 对应 h-8 w-8
+                  height={32} // 对应 h-8 w-8
                   className="h-8 w-8 rounded-full"
+                  unoptimized={true}
                 />
               ) : (
                 <div className="bg-primary-500 flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium text-white">
@@ -455,10 +460,16 @@ export default function CommentFormWithEmoji({
             <span className="mr-2">私密评论</span>
             <div className="relative mr-2 inline-block w-10 align-middle select-none">
               <input
+                id="private-comment-toggle-emoji"
                 type="checkbox"
                 className="toggle-checkbox absolute block h-6 w-6 cursor-pointer appearance-none rounded-full border-4 bg-white transition-all duration-200"
               />
-              <label className="toggle-label block h-6 cursor-pointer overflow-hidden rounded-full bg-gray-300 transition-all duration-200"></label>
+              <label
+                htmlFor="private-comment-toggle-emoji"
+                className="toggle-label block h-6 cursor-pointer overflow-hidden rounded-full bg-gray-300 transition-all duration-200"
+              >
+                <span className="sr-only">私密评论开关</span>
+              </label>
             </div>
           </div>
         </div>

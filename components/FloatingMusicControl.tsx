@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 
 interface FloatingMusicControlProps {
   isPlaying: boolean
@@ -21,6 +21,8 @@ const FloatingMusicControl: React.FC<FloatingMusicControlProps> = ({
   const [isDragging, setIsDragging] = useState(false)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [isInitialized, setIsInitialized] = useState(false)
+  const [clickStartPos, setClickStartPos] = useState({ x: 0, y: 0 })
+  const [hasMoved, setHasMoved] = useState(false)
 
   // 初始化位置
   useEffect(() => {
@@ -105,34 +107,36 @@ const FloatingMusicControl: React.FC<FloatingMusicControlProps> = ({
     document.body.classList.add('dragging-music-control')
   }
 
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!isDragging) return
+  const handleMouseMove = React.useCallback(
+    (e: MouseEvent) => {
+      if (!isDragging) return
 
-    // 计算新位置：鼠标位置减去偏移量
-    const newX = e.clientX - dragOffset.x
-    const newY = e.clientY - dragOffset.y
+      // 计算新位置：鼠标位置减去偏移量
+      const newX = e.clientX - dragOffset.x
+      const newY = e.clientY - dragOffset.y
 
-    // 获取元素尺寸（响应式）
-    const elementSize = window.innerWidth < 768 ? 50 : 56
+      // 获取元素尺寸（响应式）
+      const elementSize = window.innerWidth < 768 ? 50 : 56
 
-    // 限制在视窗范围内
-    const maxX = window.innerWidth - elementSize
-    const maxY = window.innerHeight - elementSize
+      // 限制在视窗范围内
+      const maxX = window.innerWidth - elementSize
+      const maxY = window.innerHeight - elementSize
 
-    setPosition({
-      x: Math.max(0, Math.min(newX, maxX)),
-      y: Math.max(0, Math.min(newY, maxY)),
-    })
-  }
+      setPosition({
+        x: Math.max(0, Math.min(newX, maxX)),
+        y: Math.max(0, Math.min(newY, maxY)),
+      })
+    },
+    [isDragging, dragOffset.x, dragOffset.y, setPosition]
+  )
 
-  const handleMouseUp = () => {
+  const handleMouseUp = useCallback(() => {
     setIsDragging(false)
 
     // 恢复文本选择
     document.body.classList.remove('dragging-music-control')
-  }
+  }, [])
 
-  // 触摸事件处理
   const handleTouchStart = (e: React.TouchEvent) => {
     const touch = e.touches[0]
     const rect = e.currentTarget.getBoundingClientRect()
@@ -148,39 +152,50 @@ const FloatingMusicControl: React.FC<FloatingMusicControlProps> = ({
     // 不在这里调用 preventDefault，而是在全局事件监听器中处理
   }
 
-  const handleTouchMove = (e: TouchEvent) => {
-    if (!isDragging) return
+  const handleTouchMove = React.useCallback(
+    (e: TouchEvent) => {
+      if (!isDragging) return
 
-    const touch = e.touches[0]
-    const newX = touch.clientX - dragOffset.x
-    const newY = touch.clientY - dragOffset.y
+      const touch = e.touches[0]
+      const newX = touch.clientX - dragOffset.x
+      const newY = touch.clientY - dragOffset.y
 
-    const elementSize = window.innerWidth < 768 ? 50 : 56
-    const maxX = window.innerWidth - elementSize
-    const maxY = window.innerHeight - elementSize
+      const elementSize = window.innerWidth < 768 ? 50 : 56
+      const maxX = window.innerWidth - elementSize
+      const maxY = window.innerHeight - elementSize
 
-    setPosition({
-      x: Math.max(0, Math.min(newX, maxX)),
-      y: Math.max(0, Math.min(newY, maxY)),
-    })
+      setPosition({
+        x: Math.max(0, Math.min(newX, maxX)),
+        y: Math.max(0, Math.min(newY, maxY)),
+      })
 
-    // 检查是否移动了足够距离
-    const moveDistance = Math.sqrt(
-      Math.pow(touch.clientX - clickStartPos.x, 2) + Math.pow(touch.clientY - clickStartPos.y, 2)
-    )
-    if (moveDistance > 5) {
-      setHasMoved(true)
-    }
+      // 检查是否移动了足够距离
+      const moveDistance = Math.sqrt(
+        Math.pow(touch.clientX - clickStartPos.x, 2) + Math.pow(touch.clientY - clickStartPos.y, 2)
+      )
+      if (moveDistance > 5) {
+        setHasMoved(true)
+      }
 
-    // 移除 preventDefault，避免被动事件监听器警告
-  }
+      // 移除 preventDefault，避免被动事件监听器警告
+    },
+    [
+      isDragging,
+      dragOffset.x,
+      dragOffset.y,
+      setPosition,
+      clickStartPos.x,
+      clickStartPos.y,
+      setHasMoved,
+    ]
+  )
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = useCallback(() => {
     setIsDragging(false)
 
     // 恢复文本选择
     document.body.classList.remove('dragging-music-control')
-  }
+  }, [])
 
   useEffect(() => {
     if (isDragging) {
@@ -212,12 +227,17 @@ const FloatingMusicControl: React.FC<FloatingMusicControlProps> = ({
         document.body.classList.remove('dragging-music-control')
       }
     }
-  }, [isDragging, dragOffset.x, dragOffset.y])
+  }, [
+    isDragging,
+    dragOffset.x,
+    dragOffset.y,
+    handleMouseMove,
+    handleTouchMove,
+    handleMouseUp,
+    handleTouchEnd,
+  ])
 
   // 点击处理（区分拖拽和点击）
-  const [clickStartPos, setClickStartPos] = useState({ x: 0, y: 0 })
-  const [hasMoved, setHasMoved] = useState(false)
-
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
 
@@ -267,7 +287,9 @@ const FloatingMusicControl: React.FC<FloatingMusicControlProps> = ({
   return (
     <>
       {/* 浮动音乐控制器 */}
-      <div
+      <button
+        type="button"
+        aria-label={isPlaying ? '暂停音乐' : '播放音乐'}
         className={`floating-music-control fixed ${
           isDragging ? 'dragging z-[9999]' : 'z-[45] transition-all duration-300'
         } ${isVisible ? 'scale-100 opacity-100' : 'pointer-events-none scale-95 opacity-0'}`}
@@ -339,7 +361,7 @@ const FloatingMusicControl: React.FC<FloatingMusicControlProps> = ({
             )}
           </div>
         </div>
-      </div>
+      </button>
     </>
   )
 }

@@ -3,15 +3,25 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { supabase, type User } from '@/lib/supabase'
 import type { Session } from '@supabase/supabase-js'
+import { AuthError } from '@supabase/supabase-js'
+
+// 定义认证响应类型
+interface AuthResult {
+  data: {
+    user: User | null
+    session: Session | null
+  }
+  error: AuthError | { message: string } | null
+}
 
 interface AuthContextType {
   user: User | null
   session: Session | null
   loading: boolean
-  signIn: (email: string, password: string) => Promise<{ error: any }>
-  signUp: (email: string, password: string, metadata?: any) => Promise<{ error: any }>
-  signOut: () => Promise<{ error: any }>
-  signInWithOAuth: (provider: 'github' | 'google' | 'discord' | 'qq') => Promise<{ error: any }>
+  signIn: (email: string, password: string) => Promise<AuthResult>
+  signUp: (email: string, password: string, metadata?: object) => Promise<AuthResult>
+  signOut: () => Promise<AuthResult>
+  signInWithOAuth: (provider: 'github' | 'google' | 'discord' | 'qq') => Promise<AuthResult>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -34,7 +44,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true)
 
   // 获取或创建用户资料的统一函数
-  const fetchOrCreateUser = async (authUser: any) => {
+  const fetchOrCreateUser = async (authUser: import('@supabase/supabase-js').User) => {
     try {
       // 首先尝试获取现有用户数据
       const { data: userData, error: userError } = await supabase
@@ -50,17 +60,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       // 如果用户不存在，创建新用户资料
       if (userError && userError.code === 'PGRST116') {
-        console.log('Creating new user profile for:', authUser.email)
-
-        // 调试：打印用户元数据
-        console.log('GitHub user metadata:', authUser.user_metadata)
-        console.log('Available avatar URLs:', {
-          avatar_url: authUser.user_metadata?.avatar_url,
-          picture: authUser.user_metadata?.picture,
-          user_name: authUser.user_metadata?.user_name,
-          preferred_username: authUser.user_metadata?.preferred_username,
-        })
-
         const newUserData = {
           id: authUser.id,
           email: authUser.email,
@@ -82,16 +81,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
           .single()
 
         if (!createError && newUser) {
-          console.log('User profile created successfully:', newUser)
           setUser(newUser)
-        } else {
-          console.error('Error creating user profile:', createError)
         }
-      } else {
+      } else if (process.env.NODE_ENV === 'development') {
         console.error('Error fetching user data:', userError)
       }
     } catch (error) {
-      console.error('Error in fetchOrCreateUser:', error)
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error in fetchOrCreateUser:', error)
+      }
     }
   }
 
@@ -104,7 +102,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       } = await supabase.auth.getSession()
 
       if (error) {
-        console.error('Error getting session:', error)
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Error getting session:', error)
+        }
       } else {
         setSession(session)
         if (session?.user) {
@@ -122,8 +122,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event, session)
-
       setSession(session)
 
       if (session?.user) {
@@ -141,51 +139,45 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [])
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+  const signIn = async (email: string, password: string): Promise<AuthResult> => {
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
-    return { error }
+    return { data: { user: data.user as User | null, session: data.session }, error }
   }
 
-  const signUp = async (email: string, password: string, metadata?: any) => {
-    const { error } = await supabase.auth.signUp({
+  const signUp = async (
+    email: string,
+    password: string,
+    metadata?: object
+  ): Promise<AuthResult> => {
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: metadata,
       },
     })
-    return { error }
+    return { data: { user: data.user as User | null, session: data.session }, error }
   }
 
-  const signOut = async () => {
+  const signOut = async (): Promise<AuthResult> => {
     const { error } = await supabase.auth.signOut()
-    return { error }
+    return { data: { user: null, session: null }, error }
   }
 
-  const signInWithOAuth = async (provider: 'github' | 'google' | 'discord' | 'qq') => {
+  const signInWithOAuth = async (
+    provider: 'github' | 'google' | 'discord' | 'qq'
+  ): Promise<AuthResult> => {
     if (provider === 'qq') {
       // QQ登录使用自定义流程
-      return await signInWithQQ()
-    }
-
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    })
-    return { error }
-  }
-
-  const signInWithQQ = async () => {
-    try {
-      // 构建QQ OAuth授权URL
       const qqAppId = process.env.NEXT_PUBLIC_QQ_APP_ID
       if (!qqAppId) {
-        return { error: { message: 'QQ登录配置错误：缺少App ID' } }
+        return {
+          data: { user: null, session: null },
+          error: { message: 'QQ登录配置错误：缺少App ID' },
+        }
       }
 
       const redirectUri = encodeURIComponent(`${window.location.origin}/auth/qq/callback`)
@@ -199,11 +191,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // 跳转到QQ授权页面
       window.location.href = qqAuthUrl
 
-      return { error: null }
-    } catch (error) {
-      console.error('QQ OAuth error:', error)
-      return { error: { message: 'QQ登录初始化失败' } }
+      return { data: { user: null, session: null }, error: null }
     }
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    })
+    return { data: { user: null, session: null }, error }
   }
 
   const value: AuthContextType = {

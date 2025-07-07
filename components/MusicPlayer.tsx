@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import {
   Song,
   getDefaultSong,
@@ -67,6 +67,43 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   }, [isPlaying, onPlayingChange])
 
   // 更新当前歌曲到父组件
+  // 播放/暂停
+  const togglePlay = useCallback(async () => {
+    if (!globalAudio) return
+
+    try {
+      if (isPlaying) {
+        globalAudio.pause()
+        globalIsPlaying = false
+        setIsPlaying(false)
+      } else {
+        await globalAudio.play()
+        globalIsPlaying = true
+        setIsPlaying(true)
+      }
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('播放失败:', error)
+      }
+      globalIsPlaying = false
+      setIsPlaying(false)
+    }
+  }, [isPlaying])
+
+  // 下一首
+  const handleNext = useCallback(() => {
+    if (!currentSong || playlist.length === 0) return
+
+    const nextSong = getNextSong(currentSong.id, playlist)
+    if (nextSong && globalAudio) {
+      globalCurrentSong = nextSong
+      globalAudio.src = nextSong.src
+      setCurrentSong(nextSong)
+      globalIsPlaying = false
+      setIsPlaying(false)
+    }
+  }, [currentSong, playlist])
+
   useEffect(() => {
     onCurrentSongChange?.(currentSong)
   }, [currentSong, onCurrentSongChange])
@@ -74,7 +111,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   // 注册全局播放控制函数
   useEffect(() => {
     onTogglePlayChange?.(togglePlay)
-  }, [onTogglePlayChange])
+  }, [onTogglePlayChange, togglePlay])
 
   // 加载播放列表
   useEffect(() => {
@@ -174,7 +211,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         globalAudio.removeEventListener('ended', handleEnded)
       }
     }
-  }, [currentSong])
+  }, [currentSong, handleNext])
 
   // 音量控制
   useEffect(() => {
@@ -183,29 +220,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }
   }, [volume])
 
-  // 播放/暂停
-  const togglePlay = async () => {
-    if (!globalAudio) return
-
-    try {
-      if (isPlaying) {
-        globalAudio.pause()
-        globalIsPlaying = false
-        setIsPlaying(false)
-      } else {
-        await globalAudio.play()
-        globalIsPlaying = true
-        setIsPlaying(true)
-      }
-    } catch (error) {
-      console.error('播放失败:', error)
-      globalIsPlaying = false
-      setIsPlaying(false)
-    }
-  }
-
   // 上一首
-  const handlePrev = () => {
+  const handlePrev = useCallback(() => {
     if (!currentSong || playlist.length === 0) return
 
     const prevSong = getPrevSong(currentSong.id, playlist)
@@ -216,21 +232,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       globalIsPlaying = false
       setIsPlaying(false)
     }
-  }
-
-  // 下一首
-  const handleNext = () => {
-    if (!currentSong || playlist.length === 0) return
-
-    const nextSong = getNextSong(currentSong.id, playlist)
-    if (nextSong && globalAudio) {
-      globalCurrentSong = nextSong
-      globalAudio.src = nextSong.src
-      setCurrentSong(nextSong)
-      globalIsPlaying = false
-      setIsPlaying(false)
-    }
-  }
+  }, [currentSong, playlist])
 
   // 进度条拖拽
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {

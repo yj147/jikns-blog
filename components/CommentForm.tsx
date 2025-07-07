@@ -8,7 +8,7 @@ import EmojiPicker from './EmojiPicker'
 interface CommentFormProps {
   slug: string
   parentId?: string
-  onCommentAdded: () => void
+  onCommentAddedAction: () => void
   onCancel?: () => void
   placeholder?: string
 }
@@ -16,11 +16,10 @@ interface CommentFormProps {
 export default function CommentForm({
   slug,
   parentId,
-  onCommentAdded,
+  onCommentAddedAction,
   onCancel,
   placeholder = '说点什么吧......',
 }: CommentFormProps) {
-
   const [formData, setFormData] = useState<CommentFormData>({
     author_name: '',
     author_email: '',
@@ -48,7 +47,9 @@ export default function CommentForm({
           author_website: userInfo.author_website || '',
         }))
       } catch (error) {
-        console.error('Failed to parse saved user info:', error)
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to parse saved user info:', error)
+        }
       }
     }
   }, [])
@@ -153,7 +154,7 @@ export default function CommentForm({
         }))
         setShowEmojiPicker(false)
         // 通知父组件刷新评论列表
-        onCommentAdded()
+        onCommentAddedAction()
         // 如果是回复，关闭回复表单
         if (onCancel) {
           setTimeout(() => onCancel(), 1500)
@@ -163,7 +164,9 @@ export default function CommentForm({
       }
     } catch (error) {
       setMessage({ type: 'error', text: '网络错误，请稍后重试' })
-      console.error('Failed to submit comment:', error)
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to submit comment:', error)
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -308,10 +311,16 @@ export default function CommentForm({
           <span className="mr-2">私密评论</span>
           <div className="relative mr-2 inline-block w-10 align-middle select-none">
             <input
+              id="private-comment-toggle"
               type="checkbox"
               className="toggle-checkbox absolute block h-6 w-6 cursor-pointer appearance-none rounded-full border-4 bg-white"
             />
-            <label className="toggle-label block h-6 cursor-pointer overflow-hidden rounded-full bg-gray-300"></label>
+            <label
+              htmlFor="private-comment-toggle"
+              className="toggle-label block h-6 cursor-pointer overflow-hidden rounded-full bg-gray-300"
+            >
+              <span className="sr-only">私密评论开关</span>
+            </label>
           </div>
         </div>
       </div>

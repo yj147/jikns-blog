@@ -126,10 +126,14 @@ export function UserProfile({ className = '' }: UserProfileProps) {
               {editing ? (
                 <div className="space-y-4">
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <label
+                      htmlFor="display-name"
+                      className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                    >
                       显示名称
                     </label>
                     <input
+                      id="display-name"
                       type="text"
                       value={formData.display_name}
                       onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
@@ -138,10 +142,14 @@ export function UserProfile({ className = '' }: UserProfileProps) {
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <label
+                      htmlFor="username"
+                      className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                    >
                       用户名
                     </label>
                     <input
+                      id="username"
                       type="text"
                       value={formData.username}
                       onChange={(e) => setFormData({ ...formData, username: e.target.value })}
@@ -166,11 +174,15 @@ export function UserProfile({ className = '' }: UserProfileProps) {
 
           {/* 个人简介 */}
           <div>
-            <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label
+              htmlFor="bio"
+              className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
               个人简介
             </label>
             {editing ? (
               <textarea
+                id="bio"
                 value={formData.bio}
                 onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
                 rows={4}
@@ -186,11 +198,15 @@ export function UserProfile({ className = '' }: UserProfileProps) {
 
           {/* 网站 */}
           <div>
-            <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label
+              htmlFor="website"
+              className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
               个人网站
             </label>
             {editing ? (
               <input
+                id="website"
                 type="url"
                 value={formData.website}
                 onChange={(e) => setFormData({ ...formData, website: e.target.value })}

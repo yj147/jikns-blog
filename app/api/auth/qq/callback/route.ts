@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabase, User } from '@/lib/supabase'
 import { z } from 'zod'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 // QQ回调验证模式
 const qqCallbackSchema = z.object({
@@ -81,10 +82,10 @@ export async function POST(request: NextRequest) {
     const avatarUrl = userInfo.figureurl_qq_2 || userInfo.figureurl_qq_1
 
     // 检查用户是否已存在（通过auth.users表查询）
-    const { data: authUsers } = await supabase.auth.admin.listUsers()
-    const existingAuthUser = authUsers?.users?.find((u: any) => u.email === email)
+    const { data: authUsersData } = await supabase.auth.admin.listUsers()
+    const existingAuthUser = authUsersData?.users?.find((u: SupabaseUser) => u.email === email)
 
-    let existingUser: any = null
+    let existingUser: User | null = null
     if (existingAuthUser) {
       const { data } = await supabase
         .from('users')
@@ -154,7 +155,9 @@ export async function POST(request: NextRequest) {
       redirect_url: sessionData.properties.action_link,
     })
   } catch (error) {
-    console.error('QQ OAuth callback error:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('QQ OAuth callback error:', error)
+    }
 
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors[0].message }, { status: 400 })

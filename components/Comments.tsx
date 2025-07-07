@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import CommentFormWithEmoji from './CommentFormWithEmoji'
 import CommentList from './CommentList'
 import Pagination from './Pagination'
@@ -34,48 +34,55 @@ export default function Comments({ slug }: CommentsProps) {
     hasPrev: false,
   })
 
-  // 获取评论列表
-  const fetchComments = async (page: number = 1) => {
-    try {
-      setLoading(true)
-      const response = await fetch(
-        `/api/comments/${encodeURIComponent(slug)}?page=${page}&limit=10`
-      )
-      const data = await response.json()
+  const fetchComments = useCallback(
+    async (page: number = 1) => {
+      try {
+        setLoading(true)
+        const response = await fetch(
+          `/api/comments/${encodeURIComponent(slug)}?page=${page}&limit=10`
+        )
+        const data = await response.json()
 
-      if (data.success) {
-        setComments(data.comments)
-        setPagination(data.pagination)
-        setError(null)
-      } else {
-        setError(data.error || '获取评论失败')
+        if (data.success) {
+          setComments(data.comments)
+          setPagination(data.pagination)
+          setError(null)
+        } else {
+          setError(data.error || '获取评论失败')
+        }
+      } catch (err) {
+        setError('网络错误，请稍后重试')
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to fetch comments:', err)
+        }
+      } finally {
+        setLoading(false)
       }
-    } catch (err) {
-      setError('网络错误，请稍后重试')
-      console.error('Failed to fetch comments:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
+    },
+    [slug]
+  )
 
   // 处理页码变化
-  const handlePageChange = (page: number) => {
-    fetchComments(page)
-    // 滚动到评论区顶部
-    const commentsSection = document.querySelector('.comments-section')
-    if (commentsSection) {
-      commentsSection.scrollIntoView({ behavior: 'smooth' })
-    }
-  }
+  const handlePageChange = useCallback(
+    (page: number) => {
+      fetchComments(page)
+      // 滚动到评论区顶部
+      const commentsSection = document.querySelector('.comments-section')
+      if (commentsSection) {
+        commentsSection.scrollIntoView({ behavior: 'smooth' })
+      }
+    },
+    [fetchComments]
+  )
 
   // 添加新评论后刷新列表（回到第一页）
-  const handleCommentAdded = () => {
+  const handleCommentAddedAction = useCallback(() => {
     fetchComments(1)
-  }
+  }, [fetchComments])
 
   useEffect(() => {
     fetchComments(1)
-  }, [slug])
+  }, [fetchComments])
 
   if (loading) {
     return (
@@ -98,7 +105,11 @@ export default function Comments({ slug }: CommentsProps) {
                 {pagination.total} 条评论
               </h3>
             </div>
-            <CommentList comments={comments} slug={slug} onCommentAdded={handleCommentAdded} />
+            <CommentList
+              comments={comments}
+              slug={slug}
+              onCommentAddedAction={handleCommentAddedAction}
+            />
 
             {/* 分页组件 */}
             <Pagination
@@ -127,7 +138,7 @@ export default function Comments({ slug }: CommentsProps) {
             )}
           </div>
         </div>
-        <CommentFormWithEmoji slug={slug} onCommentAdded={handleCommentAdded} />
+        <CommentFormWithEmoji slug={slug} onCommentAddedAction={handleCommentAddedAction} />
       </div>
     </div>
   )

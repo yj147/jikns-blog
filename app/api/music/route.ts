@@ -7,7 +7,7 @@ const SUPPORTED_AUDIO_FORMATS = ['.mp3', '.ogg', '.wav', '.m4a', '.aac', '.flac'
 
 // 缓存配置
 let musicCache: {
-  data: any[]
+  data: MusicFile[]
   timestamp: number
   lastModified: number
 } | null = null
@@ -171,7 +171,6 @@ async function scanMusicFiles(): Promise<MusicFile[]> {
     try {
       await stat(musicDir)
     } catch (error) {
-      console.log('音乐目录不存在:', musicDir)
       return []
     }
 
@@ -207,7 +206,9 @@ async function scanMusicFiles(): Promise<MusicFile[]> {
           lastModified: stats.mtime.getTime(),
         })
       } catch (error) {
-        console.error(`处理文件 ${file} 时出错:`, error)
+        if (process.env.NODE_ENV === 'development') {
+          console.error(`处理文件 ${file} 时出错:`, error)
+        }
         continue
       }
     }
@@ -215,7 +216,9 @@ async function scanMusicFiles(): Promise<MusicFile[]> {
     // 按文件名排序
     return musicFiles.sort((a, b) => a.filename.localeCompare(b.filename))
   } catch (error) {
-    console.error('扫描音乐文件时出错:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('扫描音乐文件时出错:', error)
+    }
     return []
   }
 }
@@ -268,7 +271,9 @@ export async function GET(request: NextRequest) {
       scannedAt: new Date().toISOString(),
     })
   } catch (error) {
-    console.error('获取音乐列表时出错:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('获取音乐列表时出错:', error)
+    }
 
     return NextResponse.json(
       {
@@ -308,7 +313,9 @@ export async function POST(request: NextRequest) {
       refreshedAt: new Date().toISOString(),
     })
   } catch (error) {
-    console.error('刷新音乐缓存时出错:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('刷新音乐缓存时出错:', error)
+    }
 
     return NextResponse.json(
       {

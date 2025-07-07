@@ -5,8 +5,9 @@
  * 用于验证 Supabase 配置是否正确
  */
 
-const { createClient } = require('@supabase/supabase-js')
-require('dotenv').config({ path: '.env.local' })
+import { createClient } from '@supabase/supabase-js'
+import dotenv from 'dotenv'
+dotenv.config({ path: '.env.local' })
 
 // 颜色输出函数
 const colors = {

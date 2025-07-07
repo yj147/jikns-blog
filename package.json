@@ -9,10 +9,10 @@
     "serve": "next start",
     "analyze": "cross-env ANALYZE=true next build",
     "lint": "next lint --fix --dir pages --dir app --dir components --dir lib --dir layouts --dir scripts",
-    "test:comments": "node scripts/test-comments.js",
-    "test:supabase": "node scripts/test-supabase.js",
-    "test:postgres": "node scripts/test-postgres-connection.js",
-    "migrate:mysql-to-postgres": "node scripts/migrate-mysql-to-postgres.js",
+    "test:comments": "node scripts/test-comments.mjs",
+    "test:supabase": "node scripts/test-supabase.mjs",
+    "test:postgres": "node scripts/test-postgres-connection.mjs",
+    "migrate:mysql-to-postgres": "node scripts/migrate-mysql-to-postgres.mjs",
     "prepare": "husky"
   },
   "dependencies": {
@@ -24,6 +24,7 @@
     "@tailwindcss/forms": "^0.5.9",
     "@tailwindcss/postcss": "^4.0.5",
     "@tailwindcss/typography": "^0.5.15",
+    "@vercel/speed-insights": "^1.2.0",
     "body-scroll-lock": "^4.0.0-beta.0",
     "contentlayer2": "0.5.5",
     "crypto-js": "^4.2.0",

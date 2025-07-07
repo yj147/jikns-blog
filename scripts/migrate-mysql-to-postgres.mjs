@@ -3,8 +3,9 @@
  * 用于将现有的 MySQL 评论数据迁移到 Vercel Postgres
  */
 
-const mysql = require('mysql2/promise')
-require('dotenv').config({ path: '.env.local' })
+import mysql from 'mysql2/promise'
+import dotenv from 'dotenv'
+dotenv.config({ path: '.env.local' })
 
 async function migrateData() {
   console.log('🔄 开始数据迁移：MySQL -> Vercel Postgres')
@@ -194,7 +195,7 @@ function showUsage() {
   console.log('📚 MySQL 到 PostgreSQL 数据迁移脚本')
   console.log('')
   console.log('使用方法:')
-  console.log('  node scripts/migrate-mysql-to-postgres.js [选项]')
+  console.log('  node scripts/migrate-mysql-to-postgres.mjs [选项]')
   console.log('')
   console.log('选项:')
   console.log('  --clear    迁移前清空 PostgreSQL 表')
@@ -206,17 +207,15 @@ function showUsage() {
   console.log('  3. 确保 PostgreSQL 表已初始化（执行 database/init.sql）')
   console.log('')
   console.log('示例:')
-  console.log('  node scripts/migrate-mysql-to-postgres.js')
-  console.log('  node scripts/migrate-mysql-to-postgres.js --clear')
+  console.log('  node scripts/migrate-mysql-to-postgres.mjs')
+  console.log('  node scripts/migrate-mysql-to-postgres.mjs --clear')
 }
 
 // 运行脚本
-if (require.main === module) {
-  if (process.argv.includes('--help')) {
-    showUsage()
-  } else {
-    migrateData().catch(console.error)
-  }
+if (process.argv.includes('--help')) {
+  showUsage()
+} else {
+  migrateData().catch(console.error)
 }
 
-module.exports = { migrateData }
+export { migrateData }

@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
+import type { Session } from '@supabase/supabase-js'
+import crypto from 'crypto'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -37,7 +39,7 @@ export interface User {
   avatar_url?: string
   bio?: string
   website?: string
-  preferences?: any
+  preferences?: Record<string, unknown>
   is_active?: boolean
   last_login_at?: string
   created_at?: string
@@ -85,7 +87,6 @@ export function rowToComment(row: CommentRow): Comment {
 
 // 生成头像 URL（使用 Gravatar）
 export function generateAvatarUrl(email: string): string {
-  const crypto = require('crypto')
   const hash = crypto.createHash('md5').update(email.toLowerCase().trim()).digest('hex')
   return `https://www.gravatar.com/avatar/${hash}?d=identicon&s=80`
 }
@@ -102,7 +103,7 @@ export async function getCurrentUser() {
 // 用户认证相关函数
 export const auth = {
   // 用户注册
-  signUp: async (email: string, password: string, metadata?: any) => {
+  signUp: async (email: string, password: string, metadata?: object) => {
     return await supabase.auth.signUp({
       email,
       password,
@@ -166,7 +167,7 @@ export const auth = {
   },
 
   // 监听认证状态变化
-  onAuthStateChange: (callback: (event: string, session: any) => void) => {
+  onAuthStateChange: (callback: (event: string, session: Session | null) => void) => {
     return supabase.auth.onAuthStateChange(callback)
   },
 }

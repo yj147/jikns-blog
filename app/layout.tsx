@@ -13,6 +13,7 @@ import { ThemeProviders } from './theme-providers'
 import { AuthProvider } from '@/components/auth'
 import { ToastProvider } from '@/components/ui/ToastContainer'
 import { Metadata } from 'next'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 
 const space_grotesk = Space_Grotesk({
   subsets: ['latin'],
@@ -103,6 +104,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </ToastProvider>
           </AuthProvider>
         </ThemeProviders>
+        <SpeedInsights />
       </body>
     </html>
   )

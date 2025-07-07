@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 interface LikeButtonProps {
   slug: string
@@ -20,8 +20,7 @@ export default function LikeButton({
   const [loading, setLoading] = useState(false)
   const [animating, setAnimating] = useState(false)
 
-  // 获取点赞状态和数量
-  const fetchLikeData = async () => {
+  const fetchLikeData = useCallback(async () => {
     try {
       const url = userId
         ? `/api/likes/${encodeURIComponent(slug)}?user_id=${userId}`
@@ -37,7 +36,7 @@ export default function LikeButton({
     } catch (error) {
       console.error('Failed to fetch like data:', error)
     }
-  }
+  }, [slug, userId])
 
   // 处理点赞/取消点赞
   const handleLike = async () => {
@@ -82,7 +81,7 @@ export default function LikeButton({
 
   useEffect(() => {
     fetchLikeData()
-  }, [slug, userId])
+  }, [fetchLikeData])
 
   // 单个顶呱呱图标
   const SingleThumbIcon = ({ className }: { className?: string }) => (

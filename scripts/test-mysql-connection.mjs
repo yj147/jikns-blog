@@ -3,8 +3,9 @@
  * 用于测试数据库连接和基本操作
  */
 
-const mysql = require('mysql2/promise')
-require('dotenv').config({ path: '.env.local' })
+import mysql from 'mysql2/promise'
+import dotenv from 'dotenv'
+dotenv.config({ path: '.env.local' })
 
 // 数据库配置
 const dbConfig = {
@@ -122,8 +123,6 @@ async function main() {
 }
 
 // 运行测试
-if (require.main === module) {
-  main().catch(console.error)
-}
+main().catch(console.error)
 
-module.exports = { testConnection, testEnvironmentVariables }
+export { testConnection, testEnvironmentVariables }

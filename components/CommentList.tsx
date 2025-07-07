@@ -6,10 +6,10 @@ import type { CommentWithReplies } from '@/lib/supabase'
 interface CommentListProps {
   comments: CommentWithReplies[]
   slug: string
-  onCommentAdded: () => void
+  onCommentAddedAction: () => void
 }
 
-export default function CommentList({ comments, slug, onCommentAdded }: CommentListProps) {
+export default function CommentList({ comments, slug, onCommentAddedAction }: CommentListProps) {
   if (comments.length === 0) {
     return (
       <div className="py-8 text-center text-gray-500 dark:text-gray-400">
@@ -40,7 +40,7 @@ export default function CommentList({ comments, slug, onCommentAdded }: CommentL
           key={comment.id}
           comment={comment}
           slug={slug}
-          onCommentAdded={onCommentAdded}
+          onCommentAddedAction={onCommentAddedAction}
         />
       ))}
     </div>

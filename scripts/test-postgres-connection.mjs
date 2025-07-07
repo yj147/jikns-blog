@@ -3,7 +3,8 @@
  * 用于测试数据库连接和基本操作
  */
 
-require('dotenv').config({ path: '.env.local' })
+import dotenv from 'dotenv'
+dotenv.config({ path: '.env.local' })
 
 async function testConnection() {
   console.log('🔗 测试 Vercel Postgres 数据库连接...')
@@ -200,8 +201,6 @@ async function main() {
 }
 
 // 运行测试
-if (require.main === module) {
-  main().catch(console.error)
-}
+main().catch(console.error)
 
-module.exports = { testConnection, testEnvironmentVariables }
+export { testConnection, testEnvironmentVariables }

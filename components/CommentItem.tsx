@@ -8,14 +8,15 @@ import type { CommentWithReplies } from '@/lib/supabase'
 interface CommentItemProps {
   comment: CommentWithReplies
   slug: string
-  onCommentAdded: () => void
+  onCommentAdded?: () => void
+  onCommentAddedAction: () => void
   isReply?: boolean
 }
 
 export default function CommentItem({
   comment,
   slug,
-  onCommentAdded,
+  onCommentAddedAction,
   isReply = false,
 }: CommentItemProps) {
   const [showReplyForm, setShowReplyForm] = useState(false)
@@ -39,7 +40,7 @@ export default function CommentItem({
 
   const handleReplyAdded = () => {
     setShowReplyForm(false)
-    onCommentAdded()
+    onCommentAddedAction()
   }
 
   return (
@@ -55,6 +56,7 @@ export default function CommentItem({
                   alt={`${comment.author_name}的头像`}
                   fill
                   className="object-cover"
+                  unoptimized={true}
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center font-semibold text-gray-500 dark:text-gray-400">
@@ -120,7 +122,7 @@ export default function CommentItem({
             <CommentFormWithEmoji
               slug={slug}
               parentId={comment.id}
-              onCommentAdded={handleReplyAdded}
+              onCommentAddedAction={handleReplyAdded}
               onCancel={() => setShowReplyForm(false)}
               placeholder={`回复 @${comment.author_name}...`}
             />
@@ -135,7 +137,7 @@ export default function CommentItem({
                 key={reply.id}
                 comment={reply}
                 slug={slug}
-                onCommentAdded={onCommentAdded}
+                onCommentAddedAction={onCommentAddedAction}
                 isReply={true}
               />
             ))}

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useAuth } from './AuthProvider'
+import Image from 'next/image'
 
 interface LoginButtonProps {
   className?: string
@@ -57,10 +58,13 @@ export function LoginButton({ className = '', children }: LoginButtonProps) {
     return (
       <div className={`inline-flex items-center space-x-2 ${className}`}>
         {user.avatar_url && (
-          <img
+          <Image
             src={user.avatar_url}
             alt={user.display_name || '用户头像'}
+            width={24} // 对应 h-6 w-6
+            height={24} // 对应 h-6 w-6
             className="h-6 w-6 rounded-full"
+            unoptimized={true}
           />
         )}
         <span className="text-sm text-gray-700 dark:text-gray-300">

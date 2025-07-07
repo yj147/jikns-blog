@@ -205,9 +205,11 @@ async function runTests() {
 }
 
 // 如果直接运行此脚本
+import fetch from 'node-fetch'
+
+// 如果直接运行此脚本
 if (typeof window === 'undefined') {
   // Node.js 环境
-  const fetch = require('node-fetch')
   runTests()
 } else {
   // 浏览器环境

@@ -38,8 +38,8 @@ export default [
       },
 
       parser: tsParser,
-      ecmaVersion: 5,
-      sourceType: 'commonjs',
+      ecmaVersion: 'latest',
+      sourceType: 'module',
 
       parserOptions: {
         project: true,

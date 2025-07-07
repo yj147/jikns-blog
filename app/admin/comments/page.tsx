@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { Comment } from '@/lib/supabase'
 
 export default function AdminCommentsPage() {
@@ -8,11 +8,7 @@ export default function AdminCommentsPage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved'>('all')
 
-  useEffect(() => {
-    fetchComments()
-  }, [filter])
-
-  const fetchComments = async () => {
+  const fetchComments = useCallback(async () => {
     setLoading(true)
     try {
       let url = '/api/admin/comments'
@@ -33,55 +29,65 @@ export default function AdminCommentsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filter])
 
-  const updateCommentStatus = async (commentId: string, isApproved: boolean) => {
-    try {
-      const response = await fetch(`/api/admin/comments/${commentId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ is_approved: isApproved }),
-      })
+  useEffect(() => {
+    fetchComments()
+  }, [fetchComments])
 
-      const data = await response.json()
+  const updateCommentStatus = useCallback(
+    async (commentId: string, isApproved: boolean) => {
+      try {
+        const response = await fetch(`/api/admin/comments/${commentId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ is_approved: isApproved }),
+        })
 
-      if (data.success) {
-        fetchComments()
-      } else {
-        console.error('Error updating comment:', data.error)
+        const data = await response.json()
+
+        if (data.success) {
+          fetchComments()
+        } else {
+          console.error('Error updating comment:', data.error)
+          alert('更新失败')
+        }
+      } catch (error) {
+        console.error('Error:', error)
         alert('更新失败')
       }
-    } catch (error) {
-      console.error('Error:', error)
-      alert('更新失败')
-    }
-  }
+    },
+    [fetchComments]
+  )
 
-  const deleteComment = async (commentId: string) => {
-    if (!confirm('确定要删除这条评论吗？')) {
-      return
-    }
+  const deleteComment = useCallback(
+    async (commentId: string) => {
+      if (!confirm('确定要删除这条评论吗？')) {
+        return
+      }
 
-    try {
-      const response = await fetch(`/api/admin/comments/${commentId}`, {
-        method: 'DELETE',
-      })
+      try {
+        const response = await fetch(`/api/admin/comments/${commentId}`, {
+          method: 'DELETE',
+        })
 
-      const data = await response.json()
+        const data = await response.json()
 
-      if (data.success) {
-        fetchComments()
-      } else {
-        console.error('Error deleting comment:', data.error)
+        if (data.success) {
+          fetchComments()
+        } else {
+          console.error('Error deleting comment:', data.error)
+          alert('删除失败')
+        }
+      } catch (error) {
+        console.error('Error:', error)
         alert('删除失败')
       }
-    } catch (error) {
-      console.error('Error:', error)
-      alert('删除失败')
-    }
-  }
+    },
+    [fetchComments]
+  )
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString('zh-CN')
