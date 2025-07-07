@@ -6,7 +6,7 @@ const siteMetadata = {
   description: '基于 Next.js 和 Tailwind CSS 构建的博客',
   language: 'zh-cn',
   theme: 'system', // 系统主题、深色或浅色
-  siteUrl: 'https://your-chinese-blog.vercel.app',
+  siteUrl: 'https://jikns666.xyz',
   siteRepo: 'https://github.com/yj147/jikns-blog',
   siteLogo: `${process.env.BASE_PATH || ''}/static/images/logo.png`,
   socialBanner: `${process.env.BASE_PATH || ''}/static/images/twitter-card.png`,
