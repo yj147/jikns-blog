@@ -3,8 +3,9 @@
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline'
+import { Suspense } from 'react'
 
-export default function AuthError() {
+function AuthErrorContent() {
   const searchParams = useSearchParams()
   const message = searchParams.get('message') || '认证过程中发生未知错误'
 
@@ -34,5 +35,27 @@ export default function AuthError() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function AuthError() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
+          <div className="w-full max-w-md space-y-8">
+            <div className="text-center">
+              <ExclamationTriangleIcon className="mx-auto h-12 w-12 text-red-500" />
+              <h2 className="mt-6 text-3xl font-extrabold text-gray-900 dark:text-white">
+                登录失败
+              </h2>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">加载中...</p>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <AuthErrorContent />
+    </Suspense>
   )
 }

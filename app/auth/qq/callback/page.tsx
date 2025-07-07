@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
-export default function QQAuthCallback() {
+function QQCallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -84,5 +84,27 @@ export default function QQAuthCallback() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function QQAuthCallback() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
+          <div className="w-full max-w-md space-y-8">
+            <div className="text-center">
+              <div className="border-primary-600 mx-auto h-12 w-12 animate-spin rounded-full border-b-2"></div>
+              <h2 className="mt-6 text-3xl font-extrabold text-gray-900 dark:text-white">
+                正在处理QQ登录...
+              </h2>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">加载中...</p>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <QQCallbackContent />
+    </Suspense>
   )
 }
