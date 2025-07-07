@@ -123,6 +123,10 @@ module.exports = () => {
           protocol: 'https',
           hostname: 'q2.qlogo.cn',
         },
+        {
+          protocol: 'https',
+          hostname: 'anwzyxjxyogambkhtjsw.supabase.co',
+        },
       ],
       unoptimized,
     },
