@@ -1,4 +1,4 @@
-// import { withContentlayer } from 'next-contentlayer2'
+import { withContentlayer } from 'next-contentlayer2'
 import withBundleAnalyzer from '@next/bundle-analyzer'
 
 const ContentSecurityPolicy = `
@@ -143,5 +143,5 @@ const bundleAnalyzer = withBundleAnalyzer({
   enabled: process.env.ANALYZE === 'true',
 })
 
-export default bundleAnalyzer(nextConfig)
+export default withContentlayer(bundleAnalyzer(nextConfig))
 
