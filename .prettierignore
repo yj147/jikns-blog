@@ -1,0 +1,96 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Production builds
+.next/
+dist/
+build/
+out/
+
+# Generated files
+*.generated.ts
+*.generated.js
+.d.ts
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+
+# Cache directories
+.cache/
+.parcel-cache/
+.nyc_output/
+
+# Coverage reports
+coverage/
+
+# Temporary folders
+tmp/
+temp/
+.tmp/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Package manager files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Prisma generated files
+prisma/generated/
+
+# Test coverage
+coverage/
+*.lcov
+
+# Storybook build outputs
+storybook-static/
+
+# Compiled binary addons
+build/Release
+
+# TypeScript build outputs
+*.tsbuildinfo
+
+# Public assets (shouldn't be formatted)
+public/
+
+# Supabase generated types
+types/supabase.ts
+
+# Lock files and generated content
+CHANGELOG.md
+README.md
+LICENSE
+
+# Ignore specific files that shouldn't be formatted
+*.min.js
+*.min.css
+*.bundle.js
+*.chunk.js

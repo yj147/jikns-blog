@@ -1,0 +1,42 @@
+# 构建输出
+.next/
+out/
+dist/
+build/
+
+# 依赖和缓存
+node_modules/
+.pnpm-store/
+
+# 环境文件
+.env*
+!.env.example
+
+# 日志和临时文件
+*.log
+.DS_Store
+.vscode/
+.idea/
+
+# 测试覆盖率和报告
+coverage/
+.nyc_output/
+
+# SuperClaude Framework (第三方框架，不需要检查)
+SuperClaude_Framework/
+
+# 已禁用的测试 (不需要维护的旧代码)
+tests_disabled/
+
+# 生成的文件
+*.d.ts
+lib/generated/
+
+# 数据库相关
+prisma/generated/
+*.db
+*.sqlite
+
+# Supabase
+supabase/.branches
+supabase/.temp

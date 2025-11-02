@@ -1,0 +1,339 @@
+// 现代化博客与社交动态平台 - 数据库架构设计
+// 版本: 4.1
+// 日期: 2025-08-24
+
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../lib/generated/prisma"
+  engineType    = "binary"
+  binaryTargets = ["native"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// 枚举类型定义 (Enums)
+// ============================================================================
+
+/// 用户角色枚举
+enum Role {
+  USER // 普通用户：可发布动态、评论、点赞、关注
+  ADMIN // 管理员：拥有全部权限，可管理博客内容和用户
+}
+
+/// 用户状态枚举
+enum UserStatus {
+  ACTIVE // 活跃：可正常使用所有功能
+  BANNED // 封禁：无法进行互动操作，仅可查看内容
+}
+
+// ============================================================================
+// 用户系统相关模型 (User System Models)
+// ============================================================================
+
+/// 用户基础模型 - 核心用户信息和认证数据
+model User {
+  // 基础字段
+  id          String  @id @default(cuid())
+  email       String  @unique
+  name        String? // 用户昵称，可空以支持OAuth注册流程
+  avatarUrl   String? // 头像URL
+  bio         String? @db.Text // 个人简介，支持长文本
+  socialLinks Json? // 社交链接 JSON 存储，如 {"github": "url", "website": "url"}
+
+  // 权限控制
+  role   Role       @default(USER)
+  status UserStatus @default(ACTIVE)
+
+  // 认证相关
+  passwordHash String? // 邮箱/密码认证的密码哈希，OAuth用户为null
+
+  // 审计字段
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastLoginAt DateTime? // 最后登录时间，用于用户活跃度分析
+
+  // 关联关系 - 用户创建的内容
+  posts      Post[] // 用户发布的博客文章
+  activities Activity[] // 用户发布的社交动态
+  series     Series[] // 用户创建的文章系列
+  comments   Comment[] // 用户发表的评论
+  likes      Like[] // 用户的点赞记录
+  bookmarks  Bookmark[] // 用户的收藏记录
+
+  // 关联关系 - 社交关系
+  followers Follow[] @relation("Following") // 关注这个用户的人
+  following Follow[] @relation("Follower") // 这个用户关注的人
+
+  // 数据库索引
+  @@map("users")
+}
+
+// ============================================================================
+// 博客模块相关模型 (Blog Module Models)
+// ============================================================================
+
+/// 博客文章模型 - 管理员发布的长篇内容
+model Post {
+  // 基础字段
+  id      String  @id @default(cuid())
+  slug    String  @unique // URL友好的唯一标识符
+  title   String // 文章标题
+  content String  @db.Text // 文章正文，支持Markdown
+  excerpt String? // 文章摘要，用于列表展示和SEO
+
+  // 发布控制
+  published Boolean @default(false) // 是否发布
+  isPinned  Boolean @default(false) // 是否置顶
+
+  // SEO 优化
+  canonicalUrl   String? // 规范URL，防止重复内容问题
+  seoTitle       String? // SEO标题，如为空则使用title
+  seoDescription String? // SEO描述，如为空则使用excerpt
+
+  // 统计数据
+  viewCount Int @default(0) // 浏览量
+
+  // 审计字段
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  publishedAt DateTime? // 发布时间，用于归档功能
+
+  // 作者关联
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId String
+
+  // 系列关联
+  series   Series? @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+  seriesId String?
+
+  // 封面图片
+  coverImage String? // 文章封面图片URL
+
+  // 关联关系
+  tags      PostTag[] // 多对多：文章标签关联
+  comments  Comment[] // 一对多：文章评论
+  likes     Like[] // 一对多：文章点赞
+  bookmarks Bookmark[] // 一对多：文章收藏
+
+  // 数据库索引
+  @@index([authorId]) // 按作者查询
+  @@index([published, publishedAt(sort: Desc)]) // 已发布文章按时间排序
+  @@index([seriesId]) // 按系列查询
+  @@map("posts")
+}
+
+/// 文章系列模型 - 将相关文章组织成系列
+model Series {
+  // 基础字段
+  id          String  @id @default(cuid())
+  title       String // 系列标题
+  slug        String  @unique // URL友好标识符
+  description String? @db.Text // 系列描述
+  coverUrl    String? // 系列封面图
+
+  // 排序控制
+  sortOrder Int @default(0) // 系列排序权重
+
+  // 审计字段
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 作者关联
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId String
+
+  // 关联关系
+  posts Post[] // 一对多：系列包含的文章
+
+  // 数据库索引
+  @@index([authorId]) // 按作者查询
+  @@map("series")
+}
+
+/// 标签模型 - 文章分类和检索
+model Tag {
+  // 基础字段
+  id          String  @id @default(cuid())
+  name        String  @unique // 标签名称
+  slug        String  @unique // URL友好标识符
+  description String? // 标签描述
+  color       String? // 标签颜色，用于前端展示
+
+  // 统计字段
+  postsCount Int @default(0) // 使用该标签的文章数量
+
+  // 审计字段
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 关联关系
+  posts PostTag[] // 多对多：标签关联的文章
+
+  // 数据库索引
+  @@index([postsCount(sort: Desc)]) // 按使用频率排序
+  @@map("tags")
+}
+
+/// 文章标签关联表 - Post 和 Tag 的多对多关系
+model PostTag {
+  // 外键关联
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId String
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  tagId  String
+
+  // 审计字段
+  createdAt DateTime @default(now())
+
+  // 复合主键
+  @@id([postId, tagId])
+  @@map("post_tags")
+}
+
+// ============================================================================
+// 社交动态模块相关模型 (Activity Module Models)
+// ============================================================================
+
+/// 社交动态模型 - 用户发布的短内容
+model Activity {
+  // 基础字段
+  id        String @id @default(cuid())
+  content   String @db.Text // 动态内容
+  imageUrls Json? // 图片URLs的JSON数组，如 ["url1", "url2"]
+
+  // 控制字段
+  isPinned Boolean @default(false) // 用户是否在个人主页置顶
+
+  // 审计字段
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 作者关联
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId String
+
+  // 关联关系
+  comments Comment[] // 一对多：动态评论
+  likes    Like[] // 一对多：动态点赞
+
+  // 数据库索引
+  @@index([authorId]) // 按作者查询
+  @@index([createdAt(sort: Desc)]) // 按时间倒序，用于信息流
+  @@map("activities")
+}
+
+// ============================================================================
+// 通用交互模型 (Universal Interaction Models)
+// ============================================================================
+
+/// 通用评论模型 - 支持文章和动态的评论，支持嵌套回复
+model Comment {
+  // 基础字段
+  id      String @id @default(cuid())
+  content String @db.Text // 评论内容
+
+  // 审计字段
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 作者关联
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId String
+
+  // 多态关联 - 评论目标（文章或动态）
+  postId     String?
+  activityId String?
+  post       Post?     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  activity   Activity? @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  // 嵌套回复关联
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: NoAction)
+  parentId String?
+  replies  Comment[] @relation("CommentReplies")
+
+  // 数据库索引和约束
+  @@index([postId]) // 文章评论查询
+  @@index([activityId]) // 动态评论查询
+  @@index([authorId]) // 用户评论查询
+  @@index([parentId]) // 回复查询
+  @@index([createdAt(sort: Desc)]) // 时间排序
+  @@map("comments")
+}
+
+/// 通用点赞模型 - 支持文章和动态的点赞
+model Like {
+  // 基础字段
+  id String @id @default(cuid())
+
+  // 审计字段
+  createdAt DateTime @default(now())
+
+  // 作者关联
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId String
+
+  // 多态关联 - 点赞目标（文章或动态）
+  postId     String?
+  activityId String?
+  post       Post?     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  activity   Activity? @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  // 唯一性约束 - 防止重复点赞
+  @@unique([authorId, postId])
+  @@unique([authorId, activityId])
+  @@index([postId]) // 文章点赞查询
+  @@index([activityId]) // 动态点赞查询
+  @@index([authorId]) // 用户点赞记录查询
+  @@map("likes")
+}
+
+// ============================================================================
+// 用户功能模型 (User Feature Models)
+// ============================================================================
+
+/// 收藏模型 - 用户收藏文章功能
+model Bookmark {
+  // 基础字段
+  id String @id @default(cuid())
+
+  // 审计字段
+  createdAt DateTime @default(now())
+
+  // 用户关联
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  // 文章关联
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId String
+
+  // 唯一性约束 - 防止重复收藏
+  @@unique([userId, postId])
+  @@index([userId]) // 用户收藏列表查询
+  @@index([postId]) // 文章收藏统计查询
+  @@map("bookmarks")
+}
+
+/// 关注关系模型 - 用户之间的关注关系
+model Follow {
+  // 关注关系
+  followerId  String // 关注者ID
+  followingId String // 被关注者ID
+
+  // 关联关系
+  follower  User @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  // 审计字段
+  createdAt DateTime @default(now())
+
+  // 复合主键
+  @@id([followerId, followingId])
+  @@index([followerId]) // 查询某用户关注的所有人
+  @@index([followingId]) // 查询某用户的所有粉丝
+  @@map("follows")
+}

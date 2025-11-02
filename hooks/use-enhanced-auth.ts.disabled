@@ -1,0 +1,743 @@
+/**
+ * 增强版认证 Hook
+ * 集成错误处理、性能监控、用户体验优化等功能
+ */
+
+'use client'
+
+import * as React from 'react'
+import { useRouter } from 'next/navigation'
+import { createClientSupabaseClient } from '@/lib/supabase'
+import { performanceMonitor, MetricType } from '@/lib/performance-monitor'
+import { auditLogger, AuditEventType } from '@/lib/audit-log'
+import { ErrorHandler, AuthError, AuthErrorType } from '@/lib/error-handler'
+import { sessionManager, retryManager } from '@/lib/user-experience'
+import { useEnhancedToast } from './use-toast'
+import type { User } from '@supabase/supabase-js'
+
+/**
+ * 用户状态接口
+ */
+interface UserState {
+  user: User | null
+  profile: any | null
+  loading: boolean
+  error: string | null
+  isAuthenticated: boolean
+  isAdmin: boolean
+  isActive: boolean
+  permissions: UserPermissions
+}
+
+/**
+ * 用户权限接口
+ */
+interface UserPermissions {
+  canCreatePost: boolean
+  canManageUsers: boolean
+  canManagePosts: boolean
+  canAccessAdmin: boolean
+  canComment: boolean
+  canLike: boolean
+  canFollow: boolean
+}
+
+/**
+ * 认证操作接口
+ */
+interface AuthActions {
+  signIn: (email: string, password: string, rememberMe?: boolean) => Promise<{ success: boolean; error?: string }>
+  signUp: (email: string, password: string, userData?: any) => Promise<{ success: boolean; error?: string }>
+  signOut: () => Promise<{ success: boolean; error?: string }>
+  signInWithGitHub: (redirectTo?: string) => Promise<{ success: boolean; error?: string }>
+  refreshSession: () => Promise<{ success: boolean; error?: string }>
+  resetPassword: (email: string) => Promise<{ success: boolean; error?: string }>
+  updateProfile: (updates: any) => Promise<{ success: boolean; error?: string }>
+  checkPermission: (resource: string) => boolean
+  requireAuth: () => Promise<boolean>
+  requireAdmin: () => Promise<boolean>
+}
+
+/**
+ * Hook 配置选项
+ */
+interface UseEnhancedAuthOptions {
+  enablePerformanceMonitoring?: boolean
+  enableAuditLogging?: boolean
+  enableNetworkRetry?: boolean
+  autoRefresh?: boolean
+  persistSession?: boolean
+}
+
+/**
+ * 默认权限
+ */
+const DEFAULT_PERMISSIONS: UserPermissions = {
+  canCreatePost: false,
+  canManageUsers: false,
+  canManagePosts: false,
+  canAccessAdmin: false,
+  canComment: false,
+  canLike: false,
+  canFollow: false
+}
+
+/**
+ * 增强版认证 Hook
+ */
+export function useEnhancedAuth(options: UseEnhancedAuthOptions = {}): UserState & AuthActions {
+  const {
+    enablePerformanceMonitoring = true,
+    enableAuditLogging = true,
+    enableNetworkRetry = true,
+    autoRefresh = true,
+    persistSession = true
+  } = options
+  
+  const router = useRouter()
+  const toast = useEnhancedToast()
+  const supabase = createClientSupabaseClient()
+  
+  // 状态管理
+  const [state, setState] = React.useState<UserState>({
+    user: null,
+    profile: null,
+    loading: true,
+    error: null,
+    isAuthenticated: false,
+    isAdmin: false,
+    isActive: false,
+    permissions: DEFAULT_PERMISSIONS
+  })
+  
+  /**
+   * 性能监控装饰器
+   */
+  const withMonitoring = React.useCallback(
+    <T extends any[], R>(
+      operation: (...args: T) => Promise<R>,
+      metricType: MetricType
+    ) => {
+      if (!enablePerformanceMonitoring) {
+        return operation
+      }
+      
+      return async (...args: T): Promise<R> => {
+        const timerId = `auth_${metricType}_${Date.now()}`
+        performanceMonitor.startTimer(timerId, { operation: metricType })
+        
+        try {
+          const result = await operation(...args)
+          performanceMonitor.endTimer(timerId, metricType, { success: true })
+          return result
+        } catch (error) {
+          performanceMonitor.endTimer(timerId, metricType, { 
+            success: false,
+            error: error instanceof Error ? error.message : String(error)
+          })
+          throw error
+        }
+      }
+    },
+    [enablePerformanceMonitoring]
+  )
+  
+  /**
+   * 审计日志记录
+   */
+  const logAuditEvent = React.useCallback(
+    async (eventType: AuditEventType, details: any, success: boolean = true) => {
+      if (!enableAuditLogging) {
+        return
+      }
+      
+      try {
+        await auditLogger.logEvent({
+          eventType,
+          action: eventType,
+          details,
+          success,
+          userId: state.user?.id
+        })
+      } catch (error) {
+        console.error('审计日志记录失败:', error)
+      }
+    },
+    [enableAuditLogging, state.user?.id]
+  )
+  
+  /**
+   * 计算用户权限
+   */
+  const calculatePermissions = React.useCallback((user: User | null, profile: any): UserPermissions => {
+    if (!user || !profile) {
+      return DEFAULT_PERMISSIONS
+    }
+    
+    const isAdmin = profile.role === 'ADMIN'
+    const isActive = profile.status === 'ACTIVE'
+    
+    return {
+      canCreatePost: isAdmin && isActive,
+      canManageUsers: isAdmin && isActive,
+      canManagePosts: isAdmin && isActive,
+      canAccessAdmin: isAdmin && isActive,
+      canComment: isActive,
+      canLike: isActive,
+      canFollow: isActive
+    }
+  }, [])
+  
+  /**
+   * 更新用户状态
+   */
+  const updateUserState = React.useCallback((user: User | null, profile: any = null) => {
+    const permissions = calculatePermissions(user, profile)
+    
+    setState(prev => ({
+      ...prev,
+      user,
+      profile,
+      loading: false,
+      error: null,
+      isAuthenticated: !!user,
+      isAdmin: profile?.role === 'ADMIN' && profile?.status === 'ACTIVE',
+      isActive: profile?.status === 'ACTIVE',
+      permissions
+    }))
+  }, [calculatePermissions])
+  
+  /**
+   * 加载用户信息
+   */
+  const loadUser = React.useCallback(
+    withMonitoring(async () => {
+      try {
+        setState(prev => ({ ...prev, loading: true, error: null }))
+        
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (sessionError) {
+          throw new AuthError(AuthErrorType.SESSION_EXPIRED, sessionError.message)
+        }
+        
+        if (!session?.user) {
+          updateUserState(null)
+          return
+        }
+        
+        // 从数据库获取用户详细信息
+        const response = await fetch('/api/auth/user', {
+          method: 'GET',
+          credentials: 'include'
+        })
+        
+        if (!response.ok) {
+          if (response.status === 401) {
+            throw new AuthError(AuthErrorType.SESSION_EXPIRED)
+          }
+          throw new AuthError(AuthErrorType.USER_NOT_FOUND)
+        }
+        
+        const { user: profile } = await response.json()
+        updateUserState(session.user, profile)
+        
+      } catch (error) {
+        const authError = error instanceof AuthError ? error : ErrorHandler.classifyError(error)
+        setState(prev => ({
+          ...prev,
+          loading: false,
+          error: authError.userMessage,
+          user: null,
+          profile: null,
+          isAuthenticated: false,
+          isAdmin: false,
+          isActive: false,
+          permissions: DEFAULT_PERMISSIONS
+        }))
+        
+        await logAuditEvent(AuditEventType.SYSTEM_ERROR, {
+          operation: 'loadUser',
+          error: authError.message
+        }, false)
+      }
+    }, MetricType.AUTH_SESSION_CHECK_TIME),
+    [supabase, updateUserState, withMonitoring, logAuditEvent]
+  )
+  
+  /**
+   * 邮箱密码登录
+   */
+  const signIn = React.useCallback(
+    withMonitoring(async (email: string, password: string, rememberMe = false) => {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        })
+        
+        if (error) {
+          throw new AuthError(AuthErrorType.INVALID_CREDENTIALS, error.message)
+        }
+        
+        if (persistSession && rememberMe) {
+          sessionManager.setRememberMe(true)
+        }
+        
+        // 广播登录事件
+        sessionManager.broadcastUserLogin({
+          id: data.user.id,
+          email: data.user.email!,
+          name: data.user.user_metadata?.full_name
+        })
+        
+        await logAuditEvent(AuditEventType.USER_LOGIN, {
+          email,
+          method: 'EMAIL_PASSWORD'
+        })
+        
+        toast.authStatusChange('login', {
+          name: data.user.user_metadata?.full_name,
+          email: data.user.email!
+        })
+        
+        await loadUser()
+        
+        return { success: true }
+        
+      } catch (error) {
+        const authError = error instanceof AuthError ? error : ErrorHandler.classifyError(error)
+        
+        await logAuditEvent(AuditEventType.LOGIN_FAILED, {
+          email,
+          method: 'EMAIL_PASSWORD',
+          error: authError.message
+        }, false)
+        
+        await toast.handleAuthError(authError)
+        
+        return { 
+          success: false, 
+          error: authError.userMessage 
+        }
+      }
+    }, MetricType.AUTH_LOGIN_TIME),
+    [supabase, withMonitoring, logAuditEvent, toast, loadUser, persistSession, sessionManager]
+  )
+  
+  /**
+   * 用户注册
+   */
+  const signUp = React.useCallback(
+    withMonitoring(async (email: string, password: string, userData: any = {}) => {
+      try {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: userData
+          }
+        })
+        
+        if (error) {
+          if (error.message.includes('already registered')) {
+            throw new AuthError(AuthErrorType.EMAIL_ALREADY_REGISTERED, error.message)
+          }
+          throw new AuthError(AuthErrorType.REGISTRATION_FAILED, error.message)
+        }
+        
+        await logAuditEvent(AuditEventType.USER_REGISTERED, {
+          email,
+          userData
+        })
+        
+        toast.success('注册成功', '请检查您的邮箱以完成验证')
+        
+        return { success: true }
+        
+      } catch (error) {
+        const authError = error instanceof AuthError ? error : ErrorHandler.classifyError(error)
+        
+        await logAuditEvent(AuditEventType.SYSTEM_ERROR, {
+          operation: 'signUp',
+          email,
+          error: authError.message
+        }, false)
+        
+        await toast.handleAuthError(authError)
+        
+        return { 
+          success: false, 
+          error: authError.userMessage 
+        }
+      }
+    }, MetricType.AUTH_LOGIN_TIME),
+    [supabase, withMonitoring, logAuditEvent, toast]
+  )
+  
+  /**
+   * 登出
+   */
+  const signOut = React.useCallback(
+    withMonitoring(async () => {
+      try {
+        const currentUser = state.user
+        
+        const { error } = await supabase.auth.signOut()
+        
+        if (error) {
+          throw new AuthError(AuthErrorType.UNKNOWN_ERROR, error.message)
+        }
+        
+        // 广播登出事件
+        sessionManager.broadcastUserLogout()
+        
+        await logAuditEvent(AuditEventType.USER_LOGOUT, {
+          userId: currentUser?.id,
+          email: currentUser?.email
+        })
+        
+        toast.authStatusChange('logout')
+        
+        updateUserState(null)
+        
+        // 清除路由缓存并重定向
+        router.refresh()
+        router.push('/')
+        
+        return { success: true }
+        
+      } catch (error) {
+        const authError = error instanceof AuthError ? error : ErrorHandler.classifyError(error)
+        
+        await toast.handleAuthError(authError)
+        
+        return { 
+          success: false, 
+          error: authError.userMessage 
+        }
+      }
+    }, MetricType.AUTH_LOGOUT_TIME),
+    [supabase, state.user, withMonitoring, logAuditEvent, toast, sessionManager, updateUserState, router]
+  )
+  
+  /**
+   * GitHub OAuth 登录
+   */
+  const signInWithGitHub = React.useCallback(
+    withMonitoring(async (redirectTo?: string) => {
+      try {
+        let redirectURL = `${window.location.origin}/auth/callback`
+        if (redirectTo) {
+          redirectURL += `?redirect=${encodeURIComponent(redirectTo)}`
+        }
+        
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'github',
+          options: {
+            redirectTo: redirectURL
+          }
+        })
+        
+        if (error) {
+          throw new AuthError(AuthErrorType.GITHUB_AUTH_FAILED, error.message)
+        }
+        
+        await logAuditEvent(AuditEventType.OAUTH_LOGIN_START, {
+          provider: 'github',
+          redirectTo
+        })
+        
+        return { success: true }
+        
+      } catch (error) {
+        const authError = error instanceof AuthError ? error : ErrorHandler.classifyError(error)
+        
+        await logAuditEvent(AuditEventType.OAUTH_LOGIN_FAILED, {
+          provider: 'github',
+          error: authError.message
+        }, false)
+        
+        await toast.handleAuthError(authError)
+        
+        return { 
+          success: false, 
+          error: authError.userMessage 
+        }
+      }
+    }, MetricType.OAUTH_CALLBACK_TIME),
+    [supabase, withMonitoring, logAuditEvent, toast]
+  )
+  
+  /**
+   * 刷新会话
+   */
+  const refreshSession = React.useCallback(
+    withMonitoring(async () => {
+      try {
+        const { data, error } = await supabase.auth.refreshSession()
+        
+        if (error) {
+          throw new AuthError(AuthErrorType.SESSION_EXPIRED, error.message)
+        }
+        
+        await logAuditEvent(AuditEventType.USER_LOGIN, {
+          method: 'SESSION_REFRESH'
+        })
+        
+        await loadUser()
+        
+        return { success: true }
+        
+      } catch (error) {
+        const authError = error instanceof AuthError ? error : ErrorHandler.classifyError(error)
+        
+        await toast.handleAuthError(authError)
+        
+        return { 
+          success: false, 
+          error: authError.userMessage 
+        }
+      }
+    }, MetricType.AUTH_TOKEN_VALIDATION_TIME),
+    [supabase, withMonitoring, logAuditEvent, toast, loadUser]
+  )
+  
+  /**
+   * 重置密码
+   */
+  const resetPassword = React.useCallback(
+    withMonitoring(async (email: string) => {
+      try {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/auth/reset-password`
+        })
+        
+        if (error) {
+          throw new AuthError(AuthErrorType.UNKNOWN_ERROR, error.message)
+        }
+        
+        toast.success('重置链接已发送', '请检查您的邮箱')
+        
+        return { success: true }
+        
+      } catch (error) {
+        const authError = error instanceof AuthError ? error : ErrorHandler.classifyError(error)
+        
+        await toast.handleAuthError(authError)
+        
+        return { 
+          success: false, 
+          error: authError.userMessage 
+        }
+      }
+    }, MetricType.AUTH_LOGIN_TIME),
+    [supabase, withMonitoring, toast]
+  )
+  
+  /**
+   * 更新用户资料
+   */
+  const updateProfile = React.useCallback(
+    withMonitoring(async (updates: any) => {
+      try {
+        const response = await fetch('/api/auth/profile', {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include',
+          body: JSON.stringify(updates)
+        })
+        
+        if (!response.ok) {
+          throw new AuthError(AuthErrorType.UNKNOWN_ERROR, '更新资料失败')
+        }
+        
+        await logAuditEvent(AuditEventType.USER_PROFILE_UPDATED, {
+          updates: Object.keys(updates)
+        })
+        
+        toast.confirmSuccess('更新资料')
+        
+        await loadUser()
+        
+        return { success: true }
+        
+      } catch (error) {
+        const authError = error instanceof AuthError ? error : ErrorHandler.classifyError(error)
+        
+        await toast.handleAuthError(authError)
+        
+        return { 
+          success: false, 
+          error: authError.userMessage 
+        }
+      }
+    }, MetricType.DB_USER_UPDATE_TIME),
+    [withMonitoring, logAuditEvent, toast, loadUser]
+  )
+  
+  /**
+   * 检查权限
+   */
+  const checkPermission = React.useCallback((resource: string): boolean => {
+    // 实现权限检查逻辑
+    if (!state.isAuthenticated || !state.isActive) {
+      return false
+    }
+    
+    if (state.isAdmin) {
+      return true
+    }
+    
+    // 根据资源类型检查权限
+    if (resource.startsWith('admin:')) {
+      return state.permissions.canAccessAdmin
+    }
+    
+    if (resource.startsWith('post:')) {
+      return state.permissions.canManagePosts
+    }
+    
+    return false
+  }, [state])
+  
+  /**
+   * 要求用户认证
+   */
+  const requireAuth = React.useCallback(async (): Promise<boolean> => {
+    if (state.isAuthenticated && state.isActive) {
+      return true
+    }
+    
+    await logAuditEvent(AuditEventType.UNAUTHORIZED_ACCESS, {
+      resource: 'authentication_required',
+      currentPath: window.location.pathname
+    }, false)
+    
+    toast.permission('insufficient', '需要登录')
+    router.push('/login')
+    
+    return false
+  }, [state, logAuditEvent, toast, router])
+  
+  /**
+   * 要求管理员权限
+   */
+  const requireAdmin = React.useCallback(async (): Promise<boolean> => {
+    if (state.isAdmin) {
+      return true
+    }
+    
+    if (!state.isAuthenticated) {
+      await requireAuth()
+      return false
+    }
+    
+    await logAuditEvent(AuditEventType.UNAUTHORIZED_ACCESS, {
+      resource: 'admin_access_required',
+      currentPath: window.location.pathname,
+      userId: state.user?.id
+    }, false)
+    
+    toast.permission('insufficient', '需要管理员权限')
+    router.push('/')
+    
+    return false
+  }, [state, requireAuth, logAuditEvent, toast, router])
+  
+  /**
+   * 初始化和认证状态监听
+   */
+  React.useEffect(() => {
+    // 初始化会话管理器
+    if (persistSession) {
+      sessionManager.initialize()
+    }
+    
+    // 初始加载用户信息
+    loadUser()
+    
+    // 监听认证状态变化
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('认证状态变化:', event, session?.user?.email)
+        
+        if (event === 'SIGNED_IN' && session?.user) {
+          await loadUser()
+        } else if (event === 'SIGNED_OUT') {
+          updateUserState(null)
+        } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+          await loadUser()
+        }
+      }
+    )
+    
+    // 监听跨标签页认证状态变化
+    const handleAuthStateChange = (event: CustomEvent) => {
+      const { type } = event.detail
+      
+      if (type === 'logout' || type === 'session-expired') {
+        updateUserState(null)
+        if (type === 'session-expired') {
+          toast.warning('登录已过期', '请重新登录')
+        }
+      } else if (type === 'login') {
+        loadUser()
+      }
+    }
+    
+    window.addEventListener('auth-state-change', handleAuthStateChange as EventListener)
+    
+    return () => {
+      subscription.unsubscribe()
+      window.removeEventListener('auth-state-change', handleAuthStateChange as EventListener)
+      
+      if (persistSession) {
+        sessionManager.destroy()
+      }
+    }
+  }, [supabase, loadUser, updateUserState, persistSession, toast])
+  
+  /**
+   * 自动会话刷新
+   */
+  React.useEffect(() => {
+    if (!autoRefresh || !state.isAuthenticated) {
+      return
+    }
+    
+    // 每10分钟检查一次会话状态
+    const interval = setInterval(async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (session) {
+        const expiresAt = new Date(session.expires_at! * 1000)
+        const now = new Date()
+        const timeUntilExpiry = expiresAt.getTime() - now.getTime()
+        
+        // 如果会话将在5分钟内过期，刷新会话
+        if (timeUntilExpiry < 5 * 60 * 1000) {
+          await refreshSession()
+        }
+      }
+    }, 10 * 60 * 1000)
+    
+    return () => clearInterval(interval)
+  }, [autoRefresh, state.isAuthenticated, supabase, refreshSession])
+  
+  return {
+    ...state,
+    signIn,
+    signUp,
+    signOut,
+    signInWithGitHub,
+    refreshSession,
+    resetPassword,
+    updateProfile,
+    checkPermission,
+    requireAuth,
+    requireAdmin
+  }
+}

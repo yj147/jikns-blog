@@ -1,0 +1,87 @@
+version: "3.8"
+
+services:
+  # E2E 测试专用容器
+  playwright-tests:
+    image: mcr.microsoft.com/playwright:v1.55.0-focal
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - /workspace/node_modules
+    environment:
+      - NODE_ENV=test
+      - CI=true
+      - DISPLAY=:99
+    networks:
+      - e2e-network
+    depends_on:
+      - test-app
+    command: >
+      bash -c "
+        echo '🚀 启动 E2E 测试环境...' &&
+        npm install -g pnpm &&
+        pnpm install &&
+        echo '⏳ 等待应用启动...' &&
+        sleep 15 &&
+        echo '🧪 开始执行 E2E 测试...' &&
+        pnpm playwright test --reporter=line
+      "
+
+  # 测试目标应用
+  test-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.e2e
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=test
+      - NEXT_PUBLIC_SUPABASE_URL=http://supabase:54321
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=test-anon-key
+      - DATABASE_URL=postgresql://postgres:postgres@supabase-db:5432/postgres
+    networks:
+      - e2e-network
+    depends_on:
+      - supabase-db
+    command: >
+      bash -c "
+        echo '🚀 启动测试应用服务器...' &&
+        npm install -g pnpm &&
+        pnpm install &&
+        pnpm build &&
+        pnpm start
+      "
+
+  # 测试数据库
+  supabase-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    networks:
+      - e2e-network
+    volumes:
+      - postgres-e2e-data:/var/lib/postgresql/data
+
+  # X11 显示服务器（用于 GUI 测试）
+  xvfb:
+    image: theasp/novnc:latest
+    environment:
+      - DISPLAY_WIDTH=1280
+      - DISPLAY_HEIGHT=720
+      - RUN_XTERM=no
+    ports:
+      - "8080:8080"
+    networks:
+      - e2e-network
+
+networks:
+  e2e-network:
+    driver: bridge
+
+volumes:
+  postgres-e2e-data:
+    driver: local

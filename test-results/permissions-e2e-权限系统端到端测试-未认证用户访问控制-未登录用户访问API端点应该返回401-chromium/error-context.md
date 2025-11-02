@@ -1,0 +1,138 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+    - generic [ref=e2]:
+        - banner [ref=e3]:
+            - generic [ref=e4]:
+                - link "现代博客" [ref=e5] [cursor=pointer]:
+                    - /url: /
+                    - img [ref=e7] [cursor=pointer]
+                    - generic [ref=e12] [cursor=pointer]: 现代博客
+                - navigation [ref=e13]:
+                    - link "首页" [ref=e15] [cursor=pointer]:
+                        - /url: /
+                        - img [ref=e17] [cursor=pointer]
+                        - generic [ref=e20] [cursor=pointer]: 首页
+                    - link "博客" [ref=e23] [cursor=pointer]:
+                        - /url: /blog
+                        - img [ref=e25] [cursor=pointer]
+                        - generic [ref=e27] [cursor=pointer]: 博客
+                    - link "动态" [ref=e29] [cursor=pointer]:
+                        - /url: /feed
+                        - img [ref=e31] [cursor=pointer]
+                        - generic [ref=e36] [cursor=pointer]: 动态
+                    - link "搜索" [ref=e38] [cursor=pointer]:
+                        - /url: /search
+                        - img [ref=e40] [cursor=pointer]
+                        - generic [ref=e43] [cursor=pointer]: 搜索
+                - generic [ref=e44]:
+                    - link "登录" [ref=e45] [cursor=pointer]:
+                        - /url: /login
+                        - button "登录" [ref=e46]
+                    - link "注册" [ref=e47] [cursor=pointer]:
+                        - /url: /register
+                        - button "注册" [ref=e48]
+        - generic [ref=e53]:
+            - heading "现代化博客与 社交平台" [level=1] [ref=e55]:
+                - text: 现代化博客与
+                - generic [ref=e56]: 社交平台
+            - paragraph [ref=e57]: 探索精彩内容，分享生活动态，与志同道合的朋友建立连接
+            - generic [ref=e58]:
+                - link "浏览博客" [ref=e60] [cursor=pointer]:
+                    - /url: /blog
+                    - img
+                    - generic [ref=e62] [cursor=pointer]: 浏览博客
+                - link "查看动态" [ref=e64] [cursor=pointer]:
+                    - /url: /feed
+                    - img
+                    - generic [ref=e66] [cursor=pointer]: 查看动态
+            - img [ref=e68]
+            - img [ref=e75]
+        - generic [ref=e78]:
+            - heading "平台特色" [level=2] [ref=e79]
+            - generic [ref=e80]:
+                - generic [ref=e83]:
+                    - img [ref=e86]
+                    - generic [ref=e88]: 精品博客
+                    - generic [ref=e89]: 高质量的原创内容，深度思考与专业见解
+                - generic [ref=e92]:
+                    - img [ref=e95]
+                    - generic [ref=e100]: 社交动态
+                    - generic [ref=e101]: 分享生活点滴，与朋友保持实时互动
+                - generic [ref=e104]:
+                    - img [ref=e107]
+                    - generic [ref=e110]: 智能推荐
+                    - generic [ref=e111]: 基于兴趣的个性化内容推荐系统
+        - generic [ref=e113]:
+            - heading "体验开发流程" [level=2] [ref=e114]
+            - paragraph [ref=e115]: 观看现代化开发工作流程的实时演示，或切换到交互模式亲自体验命令行操作
+            - generic [ref=e117]:
+                - generic [ref=e118]:
+                    - generic [ref=e123]: Terminal
+                    - button "Interactive Mode" [ref=e124]
+                - generic [ref=e127]:
+                    - generic [ref=e128]: $
+                    - generic [ref=e129]: np
+        - generic [ref=e132]:
+            - generic [ref=e133]:
+                - heading "最新内容" [level=2] [ref=e134]
+                - link "查看全部" [ref=e136] [cursor=pointer]:
+                    - /url: /blog
+                    - text: 查看全部
+                    - generic [ref=e137] [cursor=pointer]:
+                        - img
+            - generic [ref=e138]:
+                - generic [ref=e140]:
+                    - generic [ref=e141]:
+                        - generic [ref=e142]:
+                            - img [ref=e145]
+                            - generic [ref=e146]: 作者 1
+                            - generic [ref=e148]: 技术
+                        - generic [ref=e149]: 现代Web开发的最佳实践与思考
+                        - generic [ref=e150]: 探讨现代Web开发中的关键技术栈选择、性能优化策略以及用户体验设计原则...
+                    - generic [ref=e152]:
+                        - generic [ref=e153]: 2024年1月11日
+                        - generic [ref=e154]:
+                            - generic [ref=e155]:
+                                - img [ref=e156]
+                                - text: "25"
+                            - generic [ref=e158]: 120 阅读
+                - generic [ref=e160]:
+                    - generic [ref=e161]:
+                        - generic [ref=e162]:
+                            - img [ref=e165]
+                            - generic [ref=e166]: 作者 2
+                            - generic [ref=e168]: 设计
+                        - generic [ref=e169]: AI时代的设计思维转变
+                        - generic [ref=e170]: 人工智能正在重塑设计行业，从自动化工具到智能辅助设计...
+                    - generic [ref=e172]:
+                        - generic [ref=e173]: 2024年1月12日
+                        - generic [ref=e174]:
+                            - generic [ref=e175]:
+                                - img [ref=e176]
+                                - text: "30"
+                            - generic [ref=e178]: 140 阅读
+                - generic [ref=e180]:
+                    - generic [ref=e181]:
+                        - generic [ref=e182]:
+                            - img [ref=e185]
+                            - generic [ref=e186]: 作者 3
+                            - generic [ref=e188]: 开源
+                        - generic [ref=e189]: 构建可持续的开源项目
+                        - generic [ref=e190]: 开源项目的成功不仅在于代码质量，更在于社区建设和长期维护...
+                    - generic [ref=e192]:
+                        - generic [ref=e193]: 2024年1月13日
+                        - generic [ref=e194]:
+                            - generic [ref=e195]:
+                                - img [ref=e196]
+                                - text: "35"
+                            - generic [ref=e198]: 160 阅读
+        - contentinfo [ref=e199]:
+            - paragraph [ref=e201]: © 2024 现代博客平台. 保留所有权利.
+    - region "Notifications (F8)":
+        - list
+    - button "Open Next.js Dev Tools" [ref=e207] [cursor=pointer]:
+        - img [ref=e208] [cursor=pointer]
+    - alert [ref=e211]
+```

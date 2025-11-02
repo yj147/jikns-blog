@@ -1,0 +1,375 @@
+"use client"
+
+// 增强版 Toast Hook - 支持认证错误处理和用户反馈
+import * as React from "react"
+
+import type {
+  ToastActionElement,
+  ToastProps,
+} from "@/components/ui/toast"
+import { ErrorHandler, AuthError, AuthErrorType } from "@/lib/error-handler"
+
+const TOAST_LIMIT = 3 // 增加同时显示的 toast 数量
+const TOAST_REMOVE_DELAY = 5000 // 5秒后自动移除
+
+type ToasterToast = ToastProps & {
+  id: string
+  title?: React.ReactNode
+  description?: React.ReactNode
+  action?: ToastActionElement
+}
+
+const actionTypes = {
+  ADD_TOAST: "ADD_TOAST",
+  UPDATE_TOAST: "UPDATE_TOAST",
+  DISMISS_TOAST: "DISMISS_TOAST",
+  REMOVE_TOAST: "REMOVE_TOAST",
+} as const
+
+let count = 0
+
+function genId() {
+  count = (count + 1) % Number.MAX_SAFE_INTEGER
+  return count.toString()
+}
+
+type ActionType = typeof actionTypes
+
+type Action =
+  | {
+      type: ActionType["ADD_TOAST"]
+      toast: ToasterToast
+    }
+  | {
+      type: ActionType["UPDATE_TOAST"]
+      toast: Partial<ToasterToast>
+    }
+  | {
+      type: ActionType["DISMISS_TOAST"]
+      toastId?: ToasterToast["id"]
+    }
+  | {
+      type: ActionType["REMOVE_TOAST"]
+      toastId?: ToasterToast["id"]
+    }
+
+interface State {
+  toasts: ToasterToast[]
+}
+
+const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
+
+const addToRemoveQueue = (toastId: string) => {
+  if (toastTimeouts.has(toastId)) {
+    return
+  }
+
+  const timeout = setTimeout(() => {
+    toastTimeouts.delete(toastId)
+    dispatch({
+      type: "REMOVE_TOAST",
+      toastId: toastId,
+    })
+  }, TOAST_REMOVE_DELAY)
+
+  toastTimeouts.set(toastId, timeout)
+}
+
+export const reducer = (state: State, action: Action): State => {
+  switch (action.type) {
+    case "ADD_TOAST":
+      return {
+        ...state,
+        toasts: [action.toast, ...state.toasts].slice(0, TOAST_LIMIT),
+      }
+
+    case "UPDATE_TOAST":
+      return {
+        ...state,
+        toasts: state.toasts.map((t) =>
+          t.id === action.toast.id ? { ...t, ...action.toast } : t
+        ),
+      }
+
+    case "DISMISS_TOAST": {
+      const { toastId } = action
+
+      // ! Side effects ! - This could be extracted into a dismissToast() action,
+      // but I'll keep it here for simplicity
+      if (toastId) {
+        addToRemoveQueue(toastId)
+      } else {
+        state.toasts.forEach((toast) => {
+          addToRemoveQueue(toast.id)
+        })
+      }
+
+      return {
+        ...state,
+        toasts: state.toasts.map((t) =>
+          t.id === toastId || toastId === undefined
+            ? {
+                ...t,
+                open: false,
+              }
+            : t
+        ),
+      }
+    }
+    case "REMOVE_TOAST":
+      if (action.toastId === undefined) {
+        return {
+          ...state,
+          toasts: [],
+        }
+      }
+      return {
+        ...state,
+        toasts: state.toasts.filter((t) => t.id !== action.toastId),
+      }
+  }
+}
+
+const listeners: Array<(state: State) => void> = []
+
+let memoryState: State = { toasts: [] }
+
+function dispatch(action: Action) {
+  memoryState = reducer(memoryState, action)
+  listeners.forEach((listener) => {
+    listener(memoryState)
+  })
+}
+
+type Toast = Omit<ToasterToast, "id">
+
+function toast({ ...props }: Toast) {
+  const id = genId()
+
+  const update = (props: ToasterToast) =>
+    dispatch({
+      type: "UPDATE_TOAST",
+      toast: { ...props, id },
+    })
+  const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
+
+  dispatch({
+    type: "ADD_TOAST",
+    toast: {
+      ...props,
+      id,
+      open: true,
+      onOpenChange: (open) => {
+        if (!open) dismiss()
+      },
+    },
+  })
+
+  return {
+    id: id,
+    dismiss,
+    update,
+  }
+}
+
+function useToast() {
+  const [state, setState] = React.useState<State>(memoryState)
+
+  React.useEffect(() => {
+    listeners.push(setState)
+    return () => {
+      const index = listeners.indexOf(setState)
+      if (index > -1) {
+        listeners.splice(index, 1)
+      }
+    }
+  }, [state])
+
+  return {
+    ...state,
+    toast,
+    dismiss: (toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }),
+  }
+}
+
+/**
+ * 增强版 useToast Hook - 支持认证错误处理
+ */
+function useEnhancedToast() {
+  const baseToast = useToast()
+  
+  return {
+    ...baseToast,
+    
+    /**
+     * 显示成功消息
+     */
+    success: (message: string, description?: string) => {
+      return baseToast.toast({
+        title: message,
+        description,
+        variant: "default",
+        className: "border-green-200 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-900/10 dark:text-green-100"
+      })
+    },
+    
+    /**
+     * 显示错误消息
+     */
+    error: (message: string, description?: string, action?: ToastActionElement) => {
+      return baseToast.toast({
+        title: message,
+        description,
+        variant: "destructive",
+        action
+      })
+    },
+    
+    /**
+     * 显示警告消息
+     */
+    warning: (message: string, description?: string) => {
+      return baseToast.toast({
+        title: message,
+        description,
+        variant: "default",
+        className: "border-yellow-200 bg-yellow-50 text-yellow-900 dark:border-yellow-800 dark:bg-yellow-900/10 dark:text-yellow-100"
+      })
+    },
+    
+    /**
+     * 显示信息消息
+     */
+    info: (message: string, description?: string) => {
+      return baseToast.toast({
+        title: message,
+        description,
+        variant: "default",
+        className: "border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-800 dark:bg-blue-900/10 dark:text-blue-100"
+      })
+    },
+    
+    /**
+     * 显示加载状态
+     */
+    loading: (message: string = "加载中...") => {
+      return baseToast.toast({
+        title: message,
+        description: "正在处理请求...",
+        duration: Infinity, // 不自动关闭
+      })
+    },
+    
+    /**
+     * 处理认证错误并显示相应的 toast
+     */
+    handleAuthError: async (error: any) => {
+      const errorInfo = await ErrorHandler.handleError(error)
+      
+      // 根据错误类型显示不同的操作建议
+      let action: ToastActionElement | undefined
+      
+      if (errorInfo.type === AuthErrorType.SESSION_EXPIRED || 
+          errorInfo.type === AuthErrorType.TOKEN_INVALID) {
+        action = (
+          <button 
+            onClick={() => window.location.href = '/login'}
+            className="bg-white text-red-600 hover:bg-red-50 px-3 py-1 rounded text-sm font-medium"
+          >
+            重新登录
+          </button>
+        ) as any
+      } else if (errorInfo.type === AuthErrorType.INSUFFICIENT_PERMISSIONS) {
+        action = (
+          <button 
+            onClick={() => window.location.href = '/'}
+            className="bg-white text-red-600 hover:bg-red-50 px-3 py-1 rounded text-sm font-medium"
+          >
+            返回首页
+          </button>
+        ) as any
+      }
+      
+      return baseToast.toast({
+        title: "操作失败",
+        description: errorInfo.userMessage,
+        variant: "destructive",
+        action,
+        duration: 8000 // 错误消息显示时间更长
+      })
+    },
+    
+    /**
+     * 显示操作成功的确认消息
+     */
+    confirmSuccess: (action: string, details?: string) => {
+      return baseToast.toast({
+        title: `${action}成功`,
+        description: details,
+        variant: "default",
+        className: "border-green-200 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-900/10 dark:text-green-100"
+      })
+    },
+    
+    /**
+     * 显示认证状态变更通知
+     */
+    authStatusChange: (status: 'login' | 'logout', userInfo?: { name?: string; email?: string }) => {
+      if (status === 'login') {
+        return baseToast.toast({
+          title: "登录成功",
+          description: userInfo?.name ? `欢迎回来，${userInfo.name}` : "欢迎回来",
+          variant: "default",
+          className: "border-green-200 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-900/10 dark:text-green-100"
+        })
+      } else {
+        return baseToast.toast({
+          title: "已退出登录",
+          description: "感谢您的使用，再见",
+          variant: "default"
+        })
+      }
+    },
+    
+    /**
+     * 显示网络状态通知
+     */
+    networkStatus: (status: 'offline' | 'online' | 'slow') => {
+      const messages = {
+        offline: { title: "网络连接中断", description: "请检查您的网络连接", className: "border-red-200 bg-red-50 text-red-900" },
+        online: { title: "网络连接已恢复", description: "您现在可以正常使用了", className: "border-green-200 bg-green-50 text-green-900" },
+        slow: { title: "网络连接缓慢", description: "当前网络质量较差，请耐心等待", className: "border-yellow-200 bg-yellow-50 text-yellow-900" }
+      }
+      
+      const config = messages[status]
+      return baseToast.toast({
+        title: config.title,
+        description: config.description,
+        variant: "default",
+        className: `${config.className} dark:border-opacity-20 dark:bg-opacity-10`
+      })
+    },
+    
+    /**
+     * 显示权限相关通知
+     */
+    permission: (type: 'granted' | 'revoked' | 'insufficient', resource?: string) => {
+      const messages = {
+        granted: { title: "权限已授予", description: resource ? `您现在可以访问 ${resource}` : "权限变更已生效" },
+        revoked: { title: "权限已撤销", description: resource ? `您无法再访问 ${resource}` : "权限变更已生效" },
+        insufficient: { title: "权限不足", description: resource ? `您没有访问 ${resource} 的权限` : "请联系管理员获取相关权限" }
+      }
+      
+      const config = messages[type]
+      const variant = type === 'insufficient' ? 'destructive' : 'default'
+      
+      return baseToast.toast({
+        title: config.title,
+        description: config.description,
+        variant
+      })
+    }
+  }
+}
+
+export { useToast, useEnhancedToast, toast }

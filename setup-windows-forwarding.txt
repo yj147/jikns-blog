@@ -1,0 +1,25 @@
+# 在Windows PowerShell (管理员) 中直接运行以下命令
+
+# 第一步：获取WSL2 IP并设置端口转发
+$wslIp = bash -c "hostname -I | awk '{print \$1}'"
+$wslIp = $wslIp.Trim()
+Write-Host "WSL2 IP: $wslIp"
+
+# 清理现有规则
+netsh interface portproxy delete v4tov4 listenport=3000 listenaddress=127.0.0.1
+netsh interface portproxy delete v4tov4 listenport=54321 listenaddress=127.0.0.1
+netsh interface portproxy delete v4tov4 listenport=54323 listenaddress=127.0.0.1
+
+# 设置新的端口转发
+netsh interface portproxy add v4tov4 listenport=3000 listenaddress=127.0.0.1 connectport=3000 connectaddress=$wslIp
+netsh interface portproxy add v4tov4 listenport=54321 listenaddress=127.0.0.1 connectport=54321 connectaddress=$wslIp
+netsh interface portproxy add v4tov4 listenport=54323 listenaddress=127.0.0.1 connectport=54323 connectaddress=$wslIp
+
+# 配置防火墙
+New-NetFirewallRule -DisplayName "WSL2-3000" -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow -Force
+New-NetFirewallRule -DisplayName "WSL2-54321" -Direction Inbound -Protocol TCP -LocalPort 54321 -Action Allow -Force
+New-NetFirewallRule -DisplayName "WSL2-54323" -Direction Inbound -Protocol TCP -LocalPort 54323 -Action Allow -Force
+
+# 显示结果
+netsh interface portproxy show all
+Write-Host "端口转发设置完成！现在可以使用 localhost:3000 访问了！"

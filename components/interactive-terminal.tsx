@@ -1,0 +1,256 @@
+"use client"
+
+import type React from "react"
+
+import { useState, useEffect } from "react"
+import { motion, AnimatePresence } from "framer-motion"
+import { Button } from "@/components/ui/button"
+
+const commands = [
+  {
+    command: "npm create next-app@latest my-blog",
+    output: [
+      "✔ Would you like to use TypeScript? … Yes",
+      "✔ Would you like to use ESLint? … Yes",
+      "✔ Would you like to use Tailwind CSS? … Yes",
+      "✔ Would you like to use `src/` directory? … No",
+      "✔ Would you like to use App Router? … Yes",
+      "Creating a new Next.js app in /my-blog...",
+      "",
+      "Success! Created my-blog at /my-blog",
+    ],
+  },
+  {
+    command: "cd my-blog && npm run dev",
+    output: [
+      "  ▲ Next.js 14.2.25",
+      "  - Local:        http://localhost:3000",
+      "  - Environments: .env.local",
+      "",
+      "✓ Ready in 2.1s",
+    ],
+  },
+  {
+    command: 'git add . && git commit -m "Initial commit"',
+    output: [
+      "[main (root-commit) a1b2c3d] Initial commit",
+      " 23 files changed, 1847 insertions(+)",
+      " create mode 100644 README.md",
+      " create mode 100644 package.json",
+      " create mode 100644 next.config.js",
+    ],
+  },
+]
+
+export function InteractiveTerminal() {
+  const [currentCommandIndex, setCurrentCommandIndex] = useState(0)
+  const [displayedCommand, setDisplayedCommand] = useState("")
+  const [displayedOutput, setDisplayedOutput] = useState<string[]>([])
+  const [isTyping, setIsTyping] = useState(false)
+  const [showCursor, setShowCursor] = useState(true)
+  const [isInteractive, setIsInteractive] = useState(false)
+  const [userInput, setUserInput] = useState("")
+
+  // Cursor blinking effect
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setShowCursor((prev) => !prev)
+    }, 500)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Auto-play terminal commands
+  useEffect(() => {
+    if (isInteractive) return
+
+    const currentCommand = commands[currentCommandIndex]
+    if (!currentCommand) return
+
+    setIsTyping(true)
+    setDisplayedCommand("")
+    setDisplayedOutput([])
+
+    // Type command
+    let commandIndex = 0
+    const typeCommand = () => {
+      if (commandIndex < currentCommand.command.length) {
+        setDisplayedCommand(currentCommand.command.slice(0, commandIndex + 1))
+        commandIndex++
+        setTimeout(typeCommand, 50 + Math.random() * 50)
+      } else {
+        // Show output after command is typed
+        setTimeout(() => {
+          let outputIndex = 0
+          const showOutput = () => {
+            if (outputIndex < currentCommand.output.length) {
+              setDisplayedOutput((prev) => [...prev, currentCommand.output[outputIndex]])
+              outputIndex++
+              setTimeout(showOutput, 200 + Math.random() * 300)
+            } else {
+              setIsTyping(false)
+              // Move to next command after delay
+              setTimeout(() => {
+                setCurrentCommandIndex((prev) => (prev + 1) % commands.length)
+              }, 2000)
+            }
+          }
+          showOutput()
+        }, 500)
+      }
+    }
+    typeCommand()
+  }, [currentCommandIndex, isInteractive])
+
+  const handleInteractiveMode = () => {
+    setIsInteractive(true)
+    setDisplayedCommand("")
+    setDisplayedOutput([
+      "Welcome to interactive mode! Try typing some commands:",
+      "Available: help, about, skills, contact",
+    ])
+  }
+
+  const handleUserCommand = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      const command = userInput.toLowerCase().trim()
+      setDisplayedOutput((prev) => [...prev, `$ ${userInput}`, ...getCommandResponse(command)])
+      setUserInput("")
+    }
+  }
+
+  const getCommandResponse = (command: string): string[] => {
+    switch (command) {
+      case "help":
+        return [
+          "Available commands:",
+          "- about: Learn about this platform",
+          "- skills: View tech stack",
+          "- contact: Get in touch",
+          "- clear: Clear terminal",
+        ]
+      case "about":
+        return [
+          "现代博客平台 - 双核驱动的内容与社交体验",
+          "Built with Next.js, React, TypeScript, and modern web technologies",
+        ]
+      case "skills":
+        return [
+          "Tech Stack:",
+          "- Frontend: Next.js 14, React 19, TypeScript",
+          "- Styling: Tailwind CSS, shadcn/ui, Magic UI",
+          "- Animation: Framer Motion",
+          "- Backend: Supabase, Prisma",
+        ]
+      case "contact":
+        return [
+          "Get in touch:",
+          "- Email: hello@modernblog.com",
+          "- GitHub: github.com/modernblog",
+          "- Twitter: @modernblog",
+        ]
+      case "clear":
+        setDisplayedOutput([])
+        return []
+      default:
+        return [`Command not found: ${command}`, "Type 'help' for available commands"]
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6 }}
+      className="mx-auto w-full max-w-4xl"
+    >
+      <div className="overflow-hidden rounded-lg border border-gray-700 bg-gray-900 shadow-2xl">
+        {/* Terminal Header */}
+        <div className="flex items-center justify-between border-b border-gray-700 bg-gray-800 px-4 py-3">
+          <div className="flex items-center space-x-2">
+            <div className="h-3 w-3 rounded-full bg-red-500"></div>
+            <div className="h-3 w-3 rounded-full bg-yellow-500"></div>
+            <div className="h-3 w-3 rounded-full bg-green-500"></div>
+          </div>
+          <div className="font-mono text-sm text-gray-400">Terminal</div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleInteractiveMode}
+            className="text-xs text-gray-400 hover:text-white"
+          >
+            Interactive Mode
+          </Button>
+        </div>
+
+        {/* Terminal Content */}
+        <div className="max-h-[500px] min-h-[400px] overflow-y-auto p-6 font-mono text-sm">
+          <AnimatePresence mode="wait">
+            {!isInteractive ? (
+              <motion.div
+                key="auto-mode"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                {/* Current Command */}
+                <div className="mb-2 flex items-center text-green-400">
+                  <span className="mr-2 text-blue-400">$</span>
+                  <span>{displayedCommand}</span>
+                  {isTyping && showCursor && (
+                    <span className="ml-1 inline-block h-5 w-2 bg-green-400"></span>
+                  )}
+                </div>
+
+                {/* Command Output */}
+                <div className="mb-4 text-gray-300">
+                  {displayedOutput.map((line, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.3 }}
+                      className="mb-1"
+                    >
+                      {line}
+                    </motion.div>
+                  ))}
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="interactive-mode"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                {/* Interactive Output */}
+                <div className="mb-4 text-gray-300">
+                  {displayedOutput.map((line, index) => (
+                    <div key={index} className="mb-1">
+                      {line}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Interactive Input */}
+                <div className="flex items-center text-green-400">
+                  <span className="mr-2 text-blue-400">$</span>
+                  <input
+                    type="text"
+                    value={userInput}
+                    onChange={(e) => setUserInput(e.target.value)}
+                    onKeyDown={handleUserCommand}
+                    className="flex-1 bg-transparent text-green-400 outline-none"
+                    placeholder="Type a command..."
+                    autoFocus
+                  />
+                  {showCursor && <span className="ml-1 inline-block h-5 w-2 bg-green-400"></span>}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+    </motion.div>
+  )
+}

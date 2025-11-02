@@ -1,0 +1,167 @@
+
+> jikns-blog@0.1.0 dev /home/jikns/Projects/jikns_blog
+> next dev -H 0.0.0.0
+
+   ▲ Next.js 15.5.0
+   - Local:        http://localhost:3000
+   - Network:      http://0.0.0.0:3000
+   - Environments: .env.local, .env
+
+ ✓ Starting...
+ ✓ Ready in 1494ms
+ ○ Compiling /middleware ...
+ ✓ Compiled /middleware in 737ms (186 modules)
+ ○ Compiling /api/security-demo ...
+ ✓ Compiled /api/security-demo in 978ms (302 modules)
+ GET /api/security-demo?q=test 200 in 1091ms
+🚨 安全事件 [HIGH]: csrf_validation_failed {
+  type: 'csrf_validation_failed',
+  severity: 'high',
+  description: 'CSRF 令牌验证失败',
+  request: {
+  method: 'POST',
+  url: 'http://0.0.0.0:3000/api/security-demo',
+  headers: {
+  accept: '*/*',
+  content-length: '76',
+  content-type: 'application/json',
+  host: 'localhost:3000',
+  user-agent: 'curl/8.5.0',
+  x-forwarded-for: '127.0.0.1',
+  x-forwarded-host: 'localhost:3000',
+  x-forwarded-port: '3000',
+  x-forwarded-proto: 'http'
+},
+  ip: '127.0.0.1',
+  userAgent: 'curl/8.5.0'
+},
+  timestamp: 2025-08-25T11:34:51.174Z,
+  metadata: { pathname: '/api/security-demo', method: 'POST' }
+}
+🚨 安全事件 [HIGH]: csrf_validation_failed {
+  type: 'csrf_validation_failed',
+  severity: 'high',
+  description: 'CSRF 令牌验证失败',
+  request: {
+  method: 'POST',
+  url: 'http://0.0.0.0:3000/api/logs/errors',
+  headers: {
+  accept: '*/*',
+  content-length: '38',
+  content-type: 'application/json',
+  host: 'localhost:3000',
+  user-agent: 'curl/8.5.0',
+  x-forwarded-for: '127.0.0.1',
+  x-forwarded-host: 'localhost:3000',
+  x-forwarded-port: '3000',
+  x-forwarded-proto: 'http'
+},
+  ip: '127.0.0.1',
+  userAgent: 'curl/8.5.0'
+},
+  timestamp: 2025-08-25T11:34:59.175Z,
+  metadata: { pathname: '/api/logs/errors', method: 'POST' }
+}
+ ○ Compiling /api/health ...
+ ✓ Compiled /api/health in 805ms (398 modules)
+prisma:query SELECT 1 as test
+prisma:query 
+      SELECT version() as version
+    
+prisma:query 
+      SELECT tablename 
+      FROM pg_tables 
+      WHERE schemaname = 'public'
+      ORDER BY tablename
+    
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."users"."id" FROM "public"."users" WHERE 1=1 OFFSET $1) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."users"."id" FROM "public"."users" WHERE "public"."users"."role" = CAST($1::text AS "public"."Role") OFFSET $2) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."users"."id" FROM "public"."users" WHERE 1=1 OFFSET $1) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."users"."id" FROM "public"."users" WHERE "public"."users"."role" = CAST($1::text AS "public"."Role") OFFSET $2) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."series"."id" FROM "public"."series" WHERE 1=1 OFFSET $1) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."tags"."id" FROM "public"."tags" WHERE 1=1 OFFSET $1) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."posts"."id" FROM "public"."posts" WHERE 1=1 OFFSET $1) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."activities"."id" FROM "public"."activities" WHERE 1=1 OFFSET $1) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."posts"."id" FROM "public"."posts" WHERE "public"."posts"."published" = $1 OFFSET $2) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."comments"."id" FROM "public"."comments" WHERE 1=1 OFFSET $1) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."follows"."followerId", "public"."follows"."followingId" FROM "public"."follows" WHERE 1=1 OFFSET $1) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."bookmarks"."id" FROM "public"."bookmarks" WHERE 1=1 OFFSET $1) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."likes"."id" FROM "public"."likes" WHERE 1=1 OFFSET $1) AS "sub"
+ GET /api/health 200 in 1059ms
+prisma:query SELECT 1 as test
+prisma:query 
+      SELECT version() as version
+    
+prisma:query 
+      SELECT tablename 
+      FROM pg_tables 
+      WHERE schemaname = 'public'
+      ORDER BY tablename
+    
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."users"."id" FROM "public"."users" WHERE 1=1 OFFSET $1) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."users"."id" FROM "public"."users" WHERE "public"."users"."role" = CAST($1::text AS "public"."Role") OFFSET $2) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."users"."id" FROM "public"."users" WHERE 1=1 OFFSET $1) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."users"."id" FROM "public"."users" WHERE "public"."users"."role" = CAST($1::text AS "public"."Role") OFFSET $2) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."bookmarks"."id" FROM "public"."bookmarks" WHERE 1=1 OFFSET $1) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."series"."id" FROM "public"."series" WHERE 1=1 OFFSET $1) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."follows"."followerId", "public"."follows"."followingId" FROM "public"."follows" WHERE 1=1 OFFSET $1) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."likes"."id" FROM "public"."likes" WHERE 1=1 OFFSET $1) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."comments"."id" FROM "public"."comments" WHERE 1=1 OFFSET $1) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."posts"."id" FROM "public"."posts" WHERE "public"."posts"."published" = $1 OFFSET $2) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."activities"."id" FROM "public"."activities" WHERE 1=1 OFFSET $1) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."tags"."id" FROM "public"."tags" WHERE 1=1 OFFSET $1) AS "sub"
+prisma:query SELECT COUNT(*) AS "_count._all" FROM (SELECT "public"."posts"."id" FROM "public"."posts" WHERE 1=1 OFFSET $1) AS "sub"
+ GET /api/health 200 in 116ms
+ ○ Compiling / ...
+ ✓ Compiled / in 5.8s (1946 modules)
+ HEAD / 200 in 6261ms
+ ✓ Compiled /api/security-demo in 173ms (1091 modules)
+ GET /api/security-demo?q=<script>alert('test')</script> 200 in 223ms
+ GET / 200 in 323ms
+ GET / 200 in 119ms
+ GET / 200 in 73ms
+ ✓ Compiled in 488ms (1815 modules)
+ GET / 200 in 103ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ GET / 200 in 186ms
+ ✓ Compiled in 377ms (1815 modules)
+ GET / 200 in 87ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ GET / 200 in 181ms
+ℹ️ 安全事件 [LOW]: token_expired {
+  type: 'token_expired',
+  severity: 'low',
+  description: 'JWT令牌已过期',
+  request: {
+  method: 'GET',
+  url: 'http://0.0.0.0:3000/api/user',
+  headers: {
+  accept: '*/*',
+  authorization: 'Bearer fake-token',
+  host: 'localhost:3000',
+  user-agent: 'curl/8.5.0',
+  x-forwarded-for: '127.0.0.1',
+  x-forwarded-host: 'localhost:3000',
+  x-forwarded-port: '3000',
+  x-forwarded-proto: 'http'
+},
+  ip: '127.0.0.1',
+  userAgent: 'curl/8.5.0'
+},
+  timestamp: 2025-08-25T11:41:48.206Z,
+  metadata: { reason: '无效的访问令牌' }
+}
+ GET / 200 in 101ms
+ ✓ Compiled in 598ms (1815 modules)
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ GET / 200 in 71ms
+ GET / 200 in 162ms
+ GET / 200 in 74ms
+ GET / 200 in 67ms
+ GET / 200 in 60ms
+ GET / 200 in 95ms
+ GET / 200 in 164ms
+ GET / 200 in 83ms
+ GET / 200 in 93ms
+ ELIFECYCLE  Command failed.
+[?25h

@@ -1,0 +1,56 @@
+_format_version: "3.0"
+
+consumers:
+  - username: anon
+    keyauth_credentials:
+      - key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+
+services:
+  - name: auth
+    url: http://auth:9999
+    routes:
+      - name: auth-all
+        paths:
+          - "/auth/v1"
+        strip_path: true
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+          headers:
+            - "*"
+          credentials: true
+
+  - name: rest
+    url: http://rest:3000
+    routes:
+      - name: rest-all
+        paths:
+          - "/rest"
+        strip_path: true
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+          headers:
+            - "*"
+          credentials: true
+      - name: key-auth
+        config:
+          hide_credentials: true

@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+  <head>
+    <title>清除认证会话</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  </head>
+  <body>
+    <h1>清除 Supabase 认证会话</h1>
+    <button id="clearAuth">清除会话</button>
+    <div id="result"></div>
+
+    <script>
+      const { createClient } = supabase
+      const client = createClient(
+        "http://localhost:54321",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0"
+      )
+
+      document.getElementById("clearAuth").addEventListener("click", async () => {
+        const result = document.getElementById("result")
+        result.innerHTML = "正在清除会话..."
+
+        try {
+          // 登出用户
+          await client.auth.signOut()
+
+          // 清除所有本地存储
+          localStorage.clear()
+          sessionStorage.clear()
+
+          // 清除所有 cookies
+          document.cookie.split(";").forEach(function (c) {
+            document.cookie = c
+              .replace(/^ +/, "")
+              .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/")
+          })
+
+          result.innerHTML = "✅ 会话已清除！请关闭此页面并重新测试登录。"
+          result.style.color = "green"
+        } catch (error) {
+          result.innerHTML = "❌ 清除失败: " + error.message
+          result.style.color = "red"
+        }
+      })
+    </script>
+  </body>
+</html>
