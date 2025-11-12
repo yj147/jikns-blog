@@ -5,6 +5,7 @@
 
 import { prisma } from "./prisma"
 import { getCurrentUser } from "./auth"
+import { logger } from "./utils/logger"
 
 /**
  * 审计事件类型
@@ -57,6 +58,7 @@ export interface AuditLogEntry {
   userEmail?: string
   ipAddress?: string
   userAgent?: string
+  requestId?: string
   action: string
   resource?: string
   details?: Record<string, any>
@@ -112,6 +114,7 @@ export class AuditLogger {
     userAgent?: string
     sessionId?: string
     traceId?: string
+    requestId?: string
   }): Promise<void> {
     try {
       // 获取当前用户信息
@@ -130,6 +133,7 @@ export class AuditLogger {
         userEmail: currentUser?.email,
         ipAddress: params.ipAddress,
         userAgent: params.userAgent,
+        requestId: params.requestId,
         action: params.action,
         resource: params.resource,
         details: params.details,
@@ -147,7 +151,11 @@ export class AuditLogger {
       // 异步处理队列
       this.processQueue()
     } catch (error) {
-      console.error("审计日志记录失败:", error)
+      logger.error(
+        "审计日志记录失败",
+        { action: params.action, eventType: params.eventType },
+        error
+      )
     }
   }
 
@@ -322,7 +330,7 @@ export class AuditLogger {
         await this.writeBatchToDatabase(batch)
       }
     } catch (error) {
-      console.error("审计日志批量写入失败:", error)
+      logger.error("审计日志批量写入失败", {}, error)
       // 将失败的日志重新加入队列（可选）
     } finally {
       this.isProcessing = false
@@ -346,7 +354,7 @@ export class AuditLogger {
       // 由于当前项目可能还没有 AuditLog 表，我们先将日志写入文件
       await this.writeToFile(entries)
     } catch (error) {
-      console.error("审计日志数据库写入失败:", error)
+      logger.error("审计日志数据库写入失败", {}, error)
       // 备用方案：写入文件
       await this.writeToFile(entries)
     }
@@ -370,7 +378,7 @@ export class AuditLogger {
       const logLines = entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n"
       await fs.appendFile(logFile, logLines, "utf8")
     } catch (error) {
-      console.error("审计日志文件写入失败:", error)
+      logger.error("审计日志文件写入失败", {}, error)
     }
   }
 
@@ -391,7 +399,7 @@ export class AuditLogger {
       // 在实际实现中，需要根据 Prisma schema 中的 AuditLog 模型进行查询
       return []
     } catch (error) {
-      console.error("查询审计日志失败:", error)
+      logger.error("查询审计日志失败", {}, error)
       return []
     }
   }
@@ -419,7 +427,7 @@ export class AuditLogger {
         suspiciousActivities: 0,
       }
     } catch (error) {
-      console.error("获取用户活动统计失败:", error)
+      logger.error("获取用户活动统计失败", { userId }, error)
       return {
         totalEvents: 0,
         loginCount: 0,
@@ -440,7 +448,7 @@ export class AuditLogger {
       // 这里应该删除数据库中的旧记录
       // 同时清理文件日志
     } catch (error) {
-      console.error("清理旧审计日志失败:", error)
+      logger.error("清理旧审计日志失败", { daysToKeep }, error)
     }
   }
 }

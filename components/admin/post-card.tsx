@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { formatDistanceToNow } from "date-fns"
@@ -40,6 +40,7 @@ import {
   ThumbsUp,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { getOptimizedImageUrl } from "@/lib/images/optimizer"
 
 // Post 数据类型定义
 export interface Post {
@@ -76,6 +77,7 @@ export interface PostCardProps {
   onTogglePin?: (post: Post) => Promise<void>
   onTogglePublish?: (post: Post) => Promise<void>
   variant?: "admin" | "public" | "compact"
+  index?: number
   className?: string
 }
 
@@ -86,6 +88,7 @@ export function PostCard({
   onTogglePin,
   onTogglePublish,
   variant = "admin",
+  index = 0,
   className,
 }: PostCardProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
@@ -139,6 +142,14 @@ export function PostCard({
     return text.substring(0, maxLength) + "..."
   }
 
+  const coverImageUrl = useMemo(
+    () =>
+      post.coverImage
+        ? getOptimizedImageUrl(post.coverImage, { width: 1280, height: 720, quality: 80 })
+        : undefined,
+    [post.coverImage]
+  )
+
   // 公共展示模式
   if (variant === "public") {
     return (
@@ -146,11 +157,14 @@ export function PostCard({
         {post.coverImage && (
           <div className="relative h-48 w-full overflow-hidden rounded-t-lg">
             <Image
-              src={post.coverImage}
+              src={coverImageUrl ?? post.coverImage}
               alt={post.title}
               fill
               className="object-cover"
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              loading={index === 0 ? "eager" : "lazy"}
+              priority={index === 0}
+              fetchPriority={index === 0 ? "high" : undefined}
             />
             {post.isPinned && (
               <Badge className="absolute left-2 top-2 bg-red-500 hover:bg-red-600">
@@ -332,11 +346,15 @@ export function PostCard({
         {post.coverImage && (
           <div className="relative h-48 w-full overflow-hidden rounded-t-lg">
             <Image
-              src={post.coverImage}
+              src={coverImageUrl ?? post.coverImage}
               alt={post.title}
               fill
               className="object-cover"
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              loading={index === 0 ? "eager" : "lazy"}
+              priority={index === 0}
+              fetchPriority={index === 0 ? "high" : undefined}
+              quality={80}
             />
           </div>
         )}

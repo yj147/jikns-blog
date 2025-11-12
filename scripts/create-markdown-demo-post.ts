@@ -1,7 +1,7 @@
 /**
  * 创建 Markdown 渲染测试文章的脚本
  */
-import { PrismaClient } from "@prisma/client"
+import { PrismaClient } from "@/lib/generated/prisma"
 
 const prisma = new PrismaClient()
 

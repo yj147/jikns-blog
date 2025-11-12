@@ -8,6 +8,7 @@ import { withApiAuth, createSuccessResponse, createErrorResponse } from "@/lib/a
 import { prisma } from "@/lib/prisma"
 import { XSSProtection } from "@/lib/security"
 import type { User } from "@/lib/generated/prisma"
+import { logger } from "@/lib/utils/logger"
 
 /**
  * 获取所有文章列表（管理员视图）
@@ -108,7 +109,7 @@ async function getPostsHandler(request: NextRequest, admin: User) {
       admin
     )
   } catch (error) {
-    console.error("获取文章列表失败:", error)
+    logger.error("获取文章列表失败", { module: "api/admin/posts", adminId: admin.id }, error)
     return createErrorResponse("获取文章列表失败", "GET_POSTS_FAILED", 500)
   }
 }
@@ -119,8 +120,23 @@ async function getPostsHandler(request: NextRequest, admin: User) {
 async function createPostHandler(request: NextRequest, admin: User) {
   try {
     const body = await request.json()
-    const { title, content, excerpt, slug, published, seriesId, tags, seoTitle, seoDescription } =
-      body
+
+    // 需要重新赋值的字段（XSS 清理、slug 生成等）
+    let { title, content, excerpt, slug, seoTitle, seoDescription } = body as {
+      title?: string | null
+      content?: string | null
+      excerpt?: string | null
+      slug?: string | null
+      seoTitle?: string | null
+      seoDescription?: string | null
+    }
+
+    // 不需要重新赋值的字段
+    const { published, seriesId, tags } = body as {
+      published?: boolean
+      seriesId?: string | null
+      tags?: string[]
+    }
 
     // 验证必需字段
     if (!title || !content) {
@@ -219,7 +235,7 @@ async function createPostHandler(request: NextRequest, admin: User) {
 
     return createSuccessResponse(post, admin)
   } catch (error) {
-    console.error("创建文章失败:", error)
+    logger.error("创建文章失败", { module: "api/admin/posts", adminId: admin.id }, error)
     return createErrorResponse("创建文章失败", "CREATE_POST_FAILED", 500)
   }
 }
@@ -280,7 +296,7 @@ async function updatePostStatusHandler(request: NextRequest, admin: User) {
       admin
     )
   } catch (error) {
-    console.error("更新文章状态失败:", error)
+    logger.error("更新文章状态失败", { module: "api/admin/posts", adminId: admin.id }, error)
     return createErrorResponse("更新文章状态失败", "UPDATE_POST_STATUS_FAILED", 500)
   }
 }
@@ -334,7 +350,7 @@ async function deletePostHandler(request: NextRequest, admin: User) {
       admin
     )
   } catch (error) {
-    console.error("删除文章失败:", error)
+    logger.error("删除文章失败", { module: "api/admin/posts", adminId: admin.id }, error)
     return createErrorResponse("删除文章失败", "DELETE_POST_FAILED", 500)
   }
 }

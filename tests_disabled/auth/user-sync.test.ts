@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import { cleanTestDatabase, getTestDatabase } from "../config/test-database"
 import { createTestUser, createGitHubTestUser, authAssertions } from "../helpers/auth-test-helpers"
-import type { User } from "@prisma/client"
+import type { User } from "@/lib/generated/prisma"
 
 // 用户同步服务接口
 interface UserSyncService {

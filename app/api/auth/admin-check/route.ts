@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/auth"
 import { RateLimiter } from "@/lib/security"
+import { authLogger } from "@/lib/utils/logger"
 
 export async function GET(request: NextRequest) {
   const clientIP =
@@ -14,7 +15,7 @@ export async function GET(request: NextRequest) {
   try {
     // 速率限制检查 - 每个IP每分钟最多20次管理员检查
     if (!RateLimiter.checkRateLimit(`admin-check:${clientIP}`, 20, 60 * 1000)) {
-      console.warn(`管理员权限检查速率限制触发，IP: ${clientIP}`)
+      authLogger.warn("管理员权限检查触发速率限制", { clientIP })
       return NextResponse.json(
         {
           success: false,
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "未知错误"
 
-    console.warn("管理员权限验证失败:", errorMessage)
+    authLogger.warn("管理员权限验证失败", { error: errorMessage })
 
     // 根据错误类型返回适当的响应
     if (errorMessage.includes("未登录") || errorMessage.includes("用户未登录")) {
@@ -87,7 +88,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 其他服务器错误
-    console.error("管理员权限检查API异常:", error)
+    authLogger.error("管理员权限检查 API 异常", { clientIP }, error)
     return NextResponse.json(
       {
         success: false,

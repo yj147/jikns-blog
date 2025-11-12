@@ -1,0 +1,308 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - heading "动态" [level=1] [ref=e5]
+      - paragraph [ref=e6]: 分享你的想法，与大家交流互动
+    - generic [ref=e7]:
+      - generic [ref=e8]:
+        - generic [ref=e9]:
+          - generic [ref=e10]:
+            - generic [ref=e11]: 排序方式：
+            - combobox "排序方式：" [ref=e12]:
+              - generic:
+                - generic:
+                  - img
+                  - text: 最新
+              - img
+          - generic [ref=e13]:
+            - img [ref=e14]
+            - textbox "搜索动态..." [ref=e17]
+        - generic [ref=e18]:
+          - button "过滤" [ref=e19]:
+            - img
+            - text: 过滤
+          - button "应用搜索" [ref=e20]
+          - button "刷新" [ref=e21]:
+            - img
+            - text: 刷新
+      - generic [ref=e23]: 共 10 条动态
+      - generic [ref=e24]:
+        - generic [ref=e26]:
+          - generic [ref=e27]:
+            - generic [ref=e29]: P
+            - generic [ref=e30]:
+              - generic [ref=e31]:
+                - generic [ref=e33]:
+                  - paragraph [ref=e34]: Page1 Author 1
+                  - paragraph [ref=e35]: "@author-p"
+                  - generic [ref=e36]: ·
+                  - paragraph [ref=e37]: 2025/11/11 04:30:37
+                - button [ref=e38]:
+                  - img
+              - paragraph [ref=e39]: Page1 Item 1
+          - generic [ref=e40]:
+            - generic [ref=e41]:
+              - button "0" [ref=e42]:
+                - img
+                - generic [ref=e43]: "0"
+              - button "0" [ref=e44]:
+                - img
+                - generic [ref=e45]: "0"
+              - button "分享" [ref=e46]:
+                - img
+                - text: 分享
+            - generic [ref=e47]:
+              - img [ref=e48]
+              - generic [ref=e51]: "0"
+        - generic [ref=e53]:
+          - generic [ref=e54]:
+            - generic [ref=e56]: P
+            - generic [ref=e57]:
+              - generic [ref=e58]:
+                - generic [ref=e60]:
+                  - paragraph [ref=e61]: Page1 Author 2
+                  - paragraph [ref=e62]: "@author-p"
+                  - generic [ref=e63]: ·
+                  - paragraph [ref=e64]: 2025/11/11 04:30:37
+                - button [ref=e65]:
+                  - img
+              - paragraph [ref=e66]: Page1 Item 2
+          - generic [ref=e67]:
+            - generic [ref=e68]:
+              - button "0" [ref=e69]:
+                - img
+                - generic [ref=e70]: "0"
+              - button "0" [ref=e71]:
+                - img
+                - generic [ref=e72]: "0"
+              - button "分享" [ref=e73]:
+                - img
+                - text: 分享
+            - generic [ref=e74]:
+              - img [ref=e75]
+              - generic [ref=e78]: "0"
+        - generic [ref=e80]:
+          - generic [ref=e81]:
+            - generic [ref=e83]: P
+            - generic [ref=e84]:
+              - generic [ref=e85]:
+                - generic [ref=e87]:
+                  - paragraph [ref=e88]: Page1 Author 3
+                  - paragraph [ref=e89]: "@author-p"
+                  - generic [ref=e90]: ·
+                  - paragraph [ref=e91]: 2025/11/11 04:30:37
+                - button [ref=e92]:
+                  - img
+              - paragraph [ref=e93]: Page1 Item 3
+          - generic [ref=e94]:
+            - generic [ref=e95]:
+              - button "0" [ref=e96]:
+                - img
+                - generic [ref=e97]: "0"
+              - button "0" [ref=e98]:
+                - img
+                - generic [ref=e99]: "0"
+              - button "分享" [ref=e100]:
+                - img
+                - text: 分享
+            - generic [ref=e101]:
+              - img [ref=e102]
+              - generic [ref=e105]: "0"
+        - generic [ref=e107]:
+          - generic [ref=e108]:
+            - generic [ref=e110]: P
+            - generic [ref=e111]:
+              - generic [ref=e112]:
+                - generic [ref=e114]:
+                  - paragraph [ref=e115]: Page1 Author 4
+                  - paragraph [ref=e116]: "@author-p"
+                  - generic [ref=e117]: ·
+                  - paragraph [ref=e118]: 2025/11/11 04:30:37
+                - button [ref=e119]:
+                  - img
+              - paragraph [ref=e120]: Page1 Item 4
+          - generic [ref=e121]:
+            - generic [ref=e122]:
+              - button "0" [ref=e123]:
+                - img
+                - generic [ref=e124]: "0"
+              - button "0" [ref=e125]:
+                - img
+                - generic [ref=e126]: "0"
+              - button "分享" [ref=e127]:
+                - img
+                - text: 分享
+            - generic [ref=e128]:
+              - img [ref=e129]
+              - generic [ref=e132]: "0"
+        - generic [ref=e134]:
+          - generic [ref=e135]:
+            - generic [ref=e137]: P
+            - generic [ref=e138]:
+              - generic [ref=e139]:
+                - generic [ref=e141]:
+                  - paragraph [ref=e142]: Page1 Author 5
+                  - paragraph [ref=e143]: "@author-p"
+                  - generic [ref=e144]: ·
+                  - paragraph [ref=e145]: 2025/11/11 04:30:37
+                - button [ref=e146]:
+                  - img
+              - paragraph [ref=e147]: Page1 Item 5
+          - generic [ref=e148]:
+            - generic [ref=e149]:
+              - button "0" [ref=e150]:
+                - img
+                - generic [ref=e151]: "0"
+              - button "0" [ref=e152]:
+                - img
+                - generic [ref=e153]: "0"
+              - button "分享" [ref=e154]:
+                - img
+                - text: 分享
+            - generic [ref=e155]:
+              - img [ref=e156]
+              - generic [ref=e159]: "0"
+        - generic [ref=e161]:
+          - generic [ref=e162]:
+            - generic [ref=e164]: P
+            - generic [ref=e165]:
+              - generic [ref=e166]:
+                - generic [ref=e168]:
+                  - paragraph [ref=e169]: Page1 Author 6
+                  - paragraph [ref=e170]: "@author-p"
+                  - generic [ref=e171]: ·
+                  - paragraph [ref=e172]: 2025/11/11 04:30:37
+                - button [ref=e173]:
+                  - img
+              - paragraph [ref=e174]: Page1 Item 6
+          - generic [ref=e175]:
+            - generic [ref=e176]:
+              - button "0" [ref=e177]:
+                - img
+                - generic [ref=e178]: "0"
+              - button "0" [ref=e179]:
+                - img
+                - generic [ref=e180]: "0"
+              - button "分享" [ref=e181]:
+                - img
+                - text: 分享
+            - generic [ref=e182]:
+              - img [ref=e183]
+              - generic [ref=e186]: "0"
+        - generic [ref=e188]:
+          - generic [ref=e189]:
+            - generic [ref=e191]: P
+            - generic [ref=e192]:
+              - generic [ref=e193]:
+                - generic [ref=e195]:
+                  - paragraph [ref=e196]: Page1 Author 7
+                  - paragraph [ref=e197]: "@author-p"
+                  - generic [ref=e198]: ·
+                  - paragraph [ref=e199]: 2025/11/11 04:30:37
+                - button [ref=e200]:
+                  - img
+              - paragraph [ref=e201]: Page1 Item 7
+          - generic [ref=e202]:
+            - generic [ref=e203]:
+              - button "0" [ref=e204]:
+                - img
+                - generic [ref=e205]: "0"
+              - button "0" [ref=e206]:
+                - img
+                - generic [ref=e207]: "0"
+              - button "分享" [ref=e208]:
+                - img
+                - text: 分享
+            - generic [ref=e209]:
+              - img [ref=e210]
+              - generic [ref=e213]: "0"
+        - generic [ref=e215]:
+          - generic [ref=e216]:
+            - generic [ref=e218]: P
+            - generic [ref=e219]:
+              - generic [ref=e220]:
+                - generic [ref=e222]:
+                  - paragraph [ref=e223]: Page1 Author 8
+                  - paragraph [ref=e224]: "@author-p"
+                  - generic [ref=e225]: ·
+                  - paragraph [ref=e226]: 2025/11/11 04:30:37
+                - button [ref=e227]:
+                  - img
+              - paragraph [ref=e228]: Page1 Item 8
+          - generic [ref=e229]:
+            - generic [ref=e230]:
+              - button "0" [ref=e231]:
+                - img
+                - generic [ref=e232]: "0"
+              - button "0" [ref=e233]:
+                - img
+                - generic [ref=e234]: "0"
+              - button "分享" [ref=e235]:
+                - img
+                - text: 分享
+            - generic [ref=e236]:
+              - img [ref=e237]
+              - generic [ref=e240]: "0"
+        - generic [ref=e242]:
+          - generic [ref=e243]:
+            - generic [ref=e245]: P
+            - generic [ref=e246]:
+              - generic [ref=e247]:
+                - generic [ref=e249]:
+                  - paragraph [ref=e250]: Page1 Author 9
+                  - paragraph [ref=e251]: "@author-p"
+                  - generic [ref=e252]: ·
+                  - paragraph [ref=e253]: 2025/11/11 04:30:37
+                - button [ref=e254]:
+                  - img
+              - paragraph [ref=e255]: Page1 Item 9
+          - generic [ref=e256]:
+            - generic [ref=e257]:
+              - button "0" [ref=e258]:
+                - img
+                - generic [ref=e259]: "0"
+              - button "0" [ref=e260]:
+                - img
+                - generic [ref=e261]: "0"
+              - button "分享" [ref=e262]:
+                - img
+                - text: 分享
+            - generic [ref=e263]:
+              - img [ref=e264]
+              - generic [ref=e267]: "0"
+        - generic [ref=e269]:
+          - generic [ref=e270]:
+            - generic [ref=e272]: P
+            - generic [ref=e273]:
+              - generic [ref=e274]:
+                - generic [ref=e276]:
+                  - paragraph [ref=e277]: Page1 Author 10
+                  - paragraph [ref=e278]: "@author-p"
+                  - generic [ref=e279]: ·
+                  - paragraph [ref=e280]: 2025/11/11 04:30:37
+                - button [ref=e281]:
+                  - img
+              - paragraph [ref=e282]: Page1 Item 10
+          - generic [ref=e283]:
+            - generic [ref=e284]:
+              - button "0" [ref=e285]:
+                - img
+                - generic [ref=e286]: "0"
+              - button "0" [ref=e287]:
+                - img
+                - generic [ref=e288]: "0"
+              - button "分享" [ref=e289]:
+                - img
+                - text: 分享
+            - generic [ref=e290]:
+              - img [ref=e291]
+              - generic [ref=e294]: "0"
+        - generic [ref=e296]: 滚动加载更多...
+        - button "加载更多" [ref=e298]
+  - region "Notifications (F8)":
+    - list
+  - alert [ref=e299]
+```

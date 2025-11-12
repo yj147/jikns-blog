@@ -1,0 +1,17 @@
+{
+  "4698843d-6c1e-4cd1-8fc8-abe827c1af84": {
+    "task_name": "phase-9-m1-api-1-t7-api-apiusersuseridfollowers-2-",
+    "objective": "完成 Phase 9 关注系统 M1 里程碑：实现三个补充 API 路由\n1. T7: 粉丝列表 API (/api/users/[userId]/followers)\n2. T8: 关注列表 API (/api/users/[userId]/following)  \n3. T9: 批量状态查询 API (/api/users/follow/status)\n\n要求：\n- 使用统一响应格式 (lib/api/unified-response.ts)\n- 调用 lib/interactions/follow.ts 服务层\n- 实现审计日志记录\n- 配置速率限制\n- 支持游标分页\n- 完整的错误处理\n- 单元测试覆盖率 ≥85%",
+    "created_at": "2025-10-09T02:44:53.118Z"
+  },
+  "ae26a452-6443-4303-8b49-44eda3b64dfb": {
+    "task_name": "phase-9e2efeature-flagfeedfollowingstrictrelease-n",
+    "objective": "完成Phase 9关注系统质量保障与上线准备工作，包括：补充E2E测试（关注流程的端到端测试）、添加Feature Flag灰度控制（feedFollowingStrict）、验证性能监控指标、更新设计文档实施状态、编写Release Note",
+    "created_at": "2025-10-09T03:10:31.837Z"
+  },
+  "a0970c3c-0ad8-4e35-b9a2-26e1e3bc12b3": {
+    "task_name": "phase-12-1-api-2-archiveyearmonth-3-4-5-seo-nextjs",
+    "objective": "实现 Phase 12 博客归档功能，包括：\n1. 创建归档 API 端点，支持按年月分组查询已发布文章\n2. 创建动态路由的归档页面 (/archive/[year]/[month])\n3. 开发时间轴导航和归档展示组件\n4. 集成到现有博客系统，在导航栏添加归档入口\n5. 确保性能优化和 SEO 支持\n\n技术栈: Next.js 15 + TypeScript + PostgreSQL + Prisma + shadcn/ui\n数据源: Post 表的 createdAt 和 publishedAt 字段\n要求: 只显示已发布文章，支持年月快速导航，响应时间<1秒",
+    "created_at": "2025-10-10T04:22:46.582Z"
+  }
+}

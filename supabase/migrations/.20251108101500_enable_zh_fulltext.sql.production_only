@@ -1,0 +1,55 @@
+-- Phase 11 / Hardening: 启用 CJK 友好的全文检索配置并重建 search_vector 列
+
+-- 1) 安装 zhparser 扩展并创建统一的 text search configuration
+CREATE EXTENSION IF NOT EXISTS zhparser;
+
+DROP TEXT SEARCH CONFIGURATION IF EXISTS public.zhsearch;
+CREATE TEXT SEARCH CONFIGURATION public.zhsearch (PARSER = zhparser);
+
+-- 允许中文、英文等混合内容；word/hword/hword_part 用于英文词元
+ALTER TEXT SEARCH CONFIGURATION public.zhsearch
+  ADD MAPPING FOR n, v, a, i, e, l WITH simple;
+
+ALTER TEXT SEARCH CONFIGURATION public.zhsearch
+  ADD MAPPING FOR word, hword, hword_part WITH simple;
+
+-- 2) 重建 posts.search_vector，使其使用 zhsearch 配置
+DROP INDEX IF EXISTS idx_posts_search_vector;
+DROP INDEX IF EXISTS posts_search_vector_idx;
+
+ALTER TABLE public.posts
+  DROP COLUMN IF EXISTS search_vector;
+
+ALTER TABLE public.posts
+  ADD COLUMN search_vector tsvector
+  GENERATED ALWAYS AS (
+    setweight(to_tsvector('public.zhsearch', coalesce(title, '')), 'A') ||
+    setweight(to_tsvector('public.zhsearch', coalesce(excerpt, '')), 'B') ||
+    setweight(to_tsvector('public.zhsearch', coalesce("seoDescription", '')), 'B') ||
+    setweight(to_tsvector('public.zhsearch', coalesce(content, '')), 'C')
+  ) STORED;
+
+CREATE INDEX idx_posts_search_vector
+  ON public.posts USING GIN (search_vector);
+
+CREATE INDEX posts_search_vector_idx
+  ON public.posts USING GIN (search_vector);
+
+-- 3) 重建 activities.search_vector，统一解析器
+DROP INDEX IF EXISTS activities_search_vector_idx;
+
+ALTER TABLE public.activities
+  DROP COLUMN IF EXISTS search_vector;
+
+ALTER TABLE public.activities
+  ADD COLUMN search_vector tsvector
+  GENERATED ALWAYS AS (
+    setweight(to_tsvector('public.zhsearch', coalesce(content, '')), 'A')
+  ) STORED;
+
+CREATE INDEX activities_search_vector_idx
+  ON public.activities USING GIN (search_vector);
+
+-- 4) 触发统计信息刷新
+ANALYZE public.posts;
+ANALYZE public.activities;

@@ -4,6 +4,7 @@
  */
 
 import { NextResponse } from "next/server"
+import { logger } from "./logger"
 
 /**
  * 错误类型枚举
@@ -437,17 +438,17 @@ export function logError(error: ApiError, context?: Record<string, any>): void {
   // 根据严重级别选择日志方法
   switch (error.severity) {
     case ErrorSeverity.CRITICAL:
-      console.error("🚨 CRITICAL ERROR:", logData)
+      logger.error("CRITICAL API 错误", logData)
       break
     case ErrorSeverity.HIGH:
-      console.error("❗ HIGH SEVERITY ERROR:", logData)
+      logger.error("高严重级别 API 错误", logData)
       break
     case ErrorSeverity.MEDIUM:
-      console.warn("⚠️  MEDIUM SEVERITY ERROR:", logData)
+      logger.warn("中等严重级别 API 错误", logData)
       break
     case ErrorSeverity.LOW:
     default:
-      console.info("ℹ️  ERROR:", logData)
+      logger.info("低严重级别 API 错误", logData)
       break
   }
 }

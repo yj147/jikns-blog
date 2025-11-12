@@ -4,8 +4,8 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { Navigation } from "@/components/navigation"
-import { PostForm, type PostFormData } from "@/components/admin/post-form"
+import dynamic from "next/dynamic"
+import type { PostFormData, PostFormProps } from "@/components/admin/post-form"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ArrowLeft, AlertCircle } from "lucide-react"
@@ -13,6 +13,20 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "sonner"
 import { getPost, updatePost } from "@/lib/actions/posts"
 import type { UpdatePostRequest } from "@/types/api"
+import { logger } from "@/lib/utils/logger"
+
+const PostForm = dynamic<PostFormProps>(
+  () => import("@/components/admin/post-form").then((mod) => mod.PostForm),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-48" />
+        <Skeleton className="h-[520px] w-full" />
+      </div>
+    ),
+  }
+)
 
 export default function EditPostPage() {
   const router = useRouter()
@@ -54,7 +68,7 @@ export default function EditPostPage() {
           setError(result.error?.message || "文章未找到")
         }
       } catch (err) {
-        console.error("获取文章数据失败:", err)
+        logger.error("获取文章数据失败", { module: "app/admin/blog/edit", postId: id }, err)
         setError("获取文章数据失败")
       } finally {
         setIsLoading(false)
@@ -102,7 +116,7 @@ export default function EditPostPage() {
         toast.error("更新文章失败: " + result.error?.message)
       }
     } catch (error) {
-      console.error("更新文章失败:", error)
+      logger.error("更新文章失败", { module: "app/admin/blog/edit", postId: id }, error)
       toast.error("更新文章失败，请重试")
     } finally {
       setIsSubmitting(false)
@@ -136,7 +150,7 @@ export default function EditPostPage() {
         toast.error("保存草稿失败: " + result.error?.message)
       }
     } catch (error) {
-      console.error("保存草稿失败:", error)
+      logger.error("保存草稿失败", { module: "app/admin/blog/edit", postId: id }, error)
       toast.error("保存草稿失败，请重试")
     }
   }
@@ -145,7 +159,6 @@ export default function EditPostPage() {
   if (error) {
     return (
       <div className="bg-background min-h-screen">
-        <Navigation />
 
         <div className="container mx-auto px-4 py-8">
           <div className="mb-8 flex items-center gap-4">
@@ -170,7 +183,6 @@ export default function EditPostPage() {
   if (isLoading || !initialData) {
     return (
       <div className="bg-background min-h-screen">
-        <Navigation />
 
         <div className="container mx-auto px-4 py-8">
           <div className="mb-8 flex items-center gap-4">
@@ -194,7 +206,6 @@ export default function EditPostPage() {
 
   return (
     <div className="bg-background min-h-screen">
-      <Navigation />
 
       <div className="container mx-auto px-4 py-8">
         {/* 头部导航 */}

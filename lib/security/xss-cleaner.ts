@@ -9,6 +9,7 @@ import type {
   SecurityValidationResult,
   XSSConfig,
 } from "./types"
+import { logger } from "../utils/logger"
 
 /**
  * 高级XSS清理器
@@ -93,7 +94,11 @@ export class AdvancedXSSCleaner {
     try {
       // 1. 长度检查
       if (opts.maxLength && cleaned.length > opts.maxLength) {
-        console.warn(`输入内容超过最大长度限制: ${cleaned.length} > ${opts.maxLength}`)
+        logger.warn("输入内容超过最大长度限制", {
+          module: "AdvancedXSSCleaner",
+          actualLength: cleaned.length,
+          maxLength: opts.maxLength,
+        })
         cleaned = cleaned.substring(0, opts.maxLength) + "..."
       }
 
@@ -131,13 +136,16 @@ export class AdvancedXSSCleaner {
       // 9. 最终验证
       const validation = this.validateCleanedContent(cleaned)
       if (!validation.isValid) {
-        console.warn("清理后的内容仍包含危险元素:", validation.errorMessage)
+        logger.warn("清理后的内容仍包含危险元素", {
+          module: "AdvancedXSSCleaner",
+          error: validation.errorMessage,
+        })
         return this.fallbackSanitization(input)
       }
 
       return cleaned
     } catch (error) {
-      console.error("XSS清理过程出错:", error)
+      logger.error("XSS 清理过程出错", { module: "AdvancedXSSCleaner" }, error)
       return this.fallbackSanitization(input)
     }
   }
@@ -427,7 +435,7 @@ export class InputSanitizer {
           return this.sanitizeText(input)
       }
     } catch (error) {
-      console.error("输入清理错误:", error)
+      logger.error("输入清理错误", { module: "InputSanitizer", type }, error)
       return null
     }
   }
@@ -522,4 +530,14 @@ export class InputSanitizer {
 
     return sanitized
   }
+}
+
+/**
+ * 兼容层：提供简单的文本清理函数
+ */
+export function cleanXSS(input: string): string {
+  if (typeof input !== "string") {
+    return ""
+  }
+  return InputSanitizer.sanitizeUserInput(input, "text") ?? ""
 }

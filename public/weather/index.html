@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>精美天气卡片</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="background-layer" aria-hidden="true"></div>
+    <main class="page-wrapper">
+      <section class="weather-card" aria-live="polite">
+        <header class="card-header">
+          <div class="search-bar">
+            <label class="sr-only" for="city-input">搜索城市</label>
+            <input
+              id="city-input"
+              type="text"
+              name="city"
+              placeholder="输入城市名称（例如：北京、San Francisco）"
+              autocomplete="off"
+            />
+            <button id="search-btn" type="button" aria-label="搜索城市">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                role="img"
+                aria-hidden="true"
+              >
+                <path
+                  fill="currentColor"
+                  d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.57-4.23A6.5 6.5 0 0 0 9.5 3 6.5 6.5 0 0 0 3 9.5 6.5 6.5 0 0 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"
+                />
+              </svg>
+            </button>
+          </div>
+          <p class="update-time">更新于 <span data-update-time>--</span></p>
+        </header>
+
+        <section class="current-weather">
+          <div class="temperature">
+            <span class="value" data-temp>--</span>
+            <span class="unit">°C</span>
+          </div>
+          <div class="weather-icon" data-icon></div>
+          <div class="weather-summary">
+            <h1 class="city-name" data-city>天气查询</h1>
+            <p class="description" data-description>请先搜索一个城市。</p>
+          </div>
+        </section>
+
+        <section class="metrics-grid">
+          <div class="metric">
+            <span class="label">体感温度</span>
+            <span class="value" data-feels>-- °C</span>
+          </div>
+          <div class="metric">
+            <span class="label">湿度</span>
+            <span class="value" data-humidity>-- %</span>
+          </div>
+          <div class="metric">
+            <span class="label">风速</span>
+            <span class="value" data-wind>-- m/s</span>
+          </div>
+          <div class="metric">
+            <span class="label">气压</span>
+            <span class="value" data-pressure>-- hPa</span>
+          </div>
+        </section>
+
+        <section class="forecast-section">
+          <header>
+            <h2>5 日天气预报</h2>
+            <p class="forecast-note">数据按每日中午时段预估</p>
+          </header>
+          <div class="forecast-grid" data-forecast>
+            <!-- forecast cards injected dynamically -->
+          </div>
+        </section>
+
+        <footer class="card-footer">
+          <p>
+            使用 OpenWeatherMap API · 温度单位：摄氏度 ·
+            <span class="api-note">请在 app.js 中配置你的 API Key</span>
+          </p>
+        </footer>
+      </section>
+    </main>
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>

@@ -5,6 +5,7 @@
 
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { logger } from "@/lib/utils/logger"
 
 export async function GET() {
   const startTime = Date.now()
@@ -63,7 +64,7 @@ export async function GET() {
       },
     })
   } catch (error) {
-    console.error("健康检查失败:", error)
+    logger.error("健康检查失败", { module: "api/health" }, error)
 
     return NextResponse.json(
       {

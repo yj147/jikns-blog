@@ -9,34 +9,52 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { createClient } from "@/lib/supabase"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
+import { ensureCsrfToken, getCsrfHeaders } from "@/lib/security/csrf-client"
+import { createClient } from "@/lib/supabase"
 
 // 表单验证 schema
 const emailAuthSchema = z
   .object({
     email: z.string().email("请输入有效的邮箱地址"),
-    password: z.string().min(6, "密码至少需要6位字符"),
+    password: z.string().min(6, "密码至少需要6位字符").max(128, "密码长度不能超过128字符"),
     confirmPassword: z.string().optional(),
   })
-  .refine(
-    (data) => {
-      // 注册模式下需要确认密码
-      if (data.confirmPassword !== undefined) {
-        return data.password === data.confirmPassword
-      }
-      return true
-    },
-    {
-      message: "两次输入的密码不匹配",
-      path: ["confirmPassword"],
+  .superRefine((data, ctx) => {
+    const isRegisterMode = data.confirmPassword !== undefined
+    if (!isRegisterMode) {
+      return
     }
-  )
+
+    if (data.password.length < 8) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["password"],
+        message: "密码至少需要8位字符",
+      })
+    }
+
+    if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(data.password)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["password"],
+        message: "密码必须包含大小写字母和数字",
+      })
+    }
+
+    if (data.confirmPassword !== undefined && data.password !== data.confirmPassword) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["confirmPassword"],
+        message: "两次输入的密码不匹配",
+      })
+    }
+  })
 
 type EmailAuthFormData = z.infer<typeof emailAuthSchema>
 
@@ -68,56 +86,97 @@ export function EmailAuthForm({ redirect = "/", mode = "login" }: EmailAuthFormP
 
     try {
       if (isLogin) {
-        // 登录逻辑
-        const { data: authData, error } = await supabase.auth.signInWithPassword({
-          email: data.email,
-          password: data.password,
-        })
-
-        if (error) {
-          setMessage({
-            type: "error",
-            text: getErrorMessage(error.message),
-          })
-        } else if (authData.user) {
-          setMessage({
-            type: "success",
-            text: "登录成功！正在跳转...",
-          })
-
-          // 延时跳转，让用户看到成功提示
-          setTimeout(() => {
-            router.push(redirect)
-            router.refresh()
-          }, 1000)
-        }
-      } else {
-        // 注册逻辑
-        const { data: authData, error } = await supabase.auth.signUp({
-          email: data.email,
-          password: data.password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/auth/callback${redirect !== "/" ? `?redirect=${encodeURIComponent(redirect)}` : ""}`,
+        const csrf = await ensureCsrfToken()
+        const response = await fetch("/api/auth/login", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...getCsrfHeaders(csrf),
           },
+          body: JSON.stringify({
+            email: data.email,
+            password: data.password,
+            redirectTo: redirect !== "/" ? redirect : undefined,
+          }),
         })
 
-        if (error) {
+        const result = await safeParseJson(response)
+
+        if (!response.ok || !result?.success) {
           setMessage({
             type: "error",
-            text: getErrorMessage(error.message),
+            text: extractApiError(result, "login_failed"),
           })
-        } else if (authData.user) {
-          setMessage({
-            type: "success",
-            text: "注册成功！请检查您的邮箱并点击确认链接。",
+          return
+        }
+
+        setMessage({
+          type: "success",
+          text: result.message || "登录成功！正在跳转...",
+        })
+
+        if (result.data?.session?.access_token && result.data?.session?.refresh_token) {
+          await supabase.auth.setSession({
+            access_token: result.data.session.access_token,
+            refresh_token: result.data.session.refresh_token,
           })
         }
+
+        setTimeout(() => {
+          router.push(result.data?.redirectTo || redirect)
+          router.refresh()
+        }, 1000)
+      } else {
+        const csrf = await ensureCsrfToken()
+        const response = await fetch("/api/auth/register", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...getCsrfHeaders(csrf),
+          },
+          body: JSON.stringify({
+            email: data.email,
+            password: data.password,
+            confirmPassword: data.confirmPassword,
+            redirectTo: redirect !== "/" ? redirect : undefined,
+          }),
+        })
+
+        const result = await safeParseJson(response)
+
+        if (!response.ok || !result?.success) {
+          setMessage({
+            type: "error",
+            text: extractApiError(result, "signup_failed"),
+          })
+          return
+        }
+
+        if (result.requiresEmailConfirmation) {
+          setMessage({
+            type: "success",
+            text: result.message || "注册成功！请检查您的邮箱并点击确认链接。",
+          })
+          return
+        }
+
+        setMessage({
+          type: "success",
+          text: result.message || "注册成功！正在跳转...",
+        })
+
+        setTimeout(() => {
+          router.push(result.data?.redirectTo || redirect)
+          router.refresh()
+        }, 1000)
       }
     } catch (error) {
       console.error("认证错误:", error)
       setMessage({
         type: "error",
-        text: "网络错误，请稍后重试",
+        text: getErrorMessage("NETWORK_ERROR"),
       })
     } finally {
       setLoading(false)
@@ -245,7 +304,57 @@ function getErrorMessage(error: string): string {
     "User already registered": "该邮箱已被注册",
     "Signup not allowed": "当前不允许注册新用户",
     "Email rate limit exceeded": "邮件发送频率过高，请稍后重试",
+    login_failed: "登录失败，请稍后重试",
+    invalid_credentials: "邮箱或密码错误",
+    email_not_confirmed: "邮箱未验证，请检查您的邮箱",
+    email_already_exists: "该邮箱已被注册",
+    signup_failed: "注册失败，请稍后重试",
+    weak_password: "密码不符合安全要求（需包含大小写字母和数字）",
+    rate_limit_exceeded: "操作过于频繁，请稍后再试",
+    network_error: "无法连接认证服务，请确认 Supabase 是否已启动",
+    NETWORK_ERROR: "无法连接认证服务，请确认 Supabase 是否已启动",
+    internal_server_error: "服务器异常，请稍后重试",
   }
 
-  return errorMessages[error] || `认证失败：${error}`
+  if (errorMessages[error]) {
+    return errorMessages[error]
+  }
+
+  const normalized = error?.toLowerCase?.()
+  if (normalized && errorMessages[normalized]) {
+    return errorMessages[normalized]
+  }
+
+  return error ? `认证失败：${error}` : "认证失败，请稍后重试"
+}
+
+async function safeParseJson(response: Response) {
+  try {
+    return await response.json()
+  } catch {
+    return null
+  }
+}
+
+function extractApiError(result: any, fallbackCode: string): string {
+  if (!result) {
+    return getErrorMessage("NETWORK_ERROR")
+  }
+
+  if (Array.isArray(result.details) && result.details.length > 0) {
+    const detailMessage = result.details[0]?.message
+    if (detailMessage) {
+      return detailMessage
+    }
+  }
+
+  if (typeof result.message === "string" && result.message.trim()) {
+    return result.message
+  }
+
+  if (typeof result.error === "string") {
+    return getErrorMessage(result.error)
+  }
+
+  return getErrorMessage(fallbackCode)
 }

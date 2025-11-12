@@ -7,6 +7,7 @@
 
 import { createClient } from "@/lib/supabase"
 import { requireAuth } from "@/lib/auth"
+import { logger } from "@/lib/utils/logger"
 
 // 定义 ApiResponse 类型（避免导入问题）
 interface ApiError {
@@ -139,7 +140,7 @@ async function uploadWithRetry(
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      console.log(`上传尝试 ${attempt}/${retries}: ${path}`)
+      logger.debug("执行图片上传尝试", { path, attempt, retries })
 
       const { data, error } = await supabase.storage.from(bucket).upload(path, file, {
         cacheControl: "3600",
@@ -148,12 +149,16 @@ async function uploadWithRetry(
 
       // 成功上传
       if (!error) {
-        console.log(`上传成功 (尝试 ${attempt}): ${path}`)
+        logger.info("图片上传成功", { path, attempt })
         return { data, error: null }
       }
 
       lastError = error
-      console.warn(`上传失败 (尝试 ${attempt}):`, error)
+      logger.warn("图片上传失败", {
+        path,
+        attempt,
+        error: error.message ?? String(error),
+      })
 
       // 检查是否为可重试的错误
       const isRetryableError =
@@ -168,30 +173,30 @@ async function uploadWithRetry(
 
       // 如果不是可重试的错误，直接返回
       if (!isRetryableError) {
-        console.error(`不可重试的错误:`, error)
+        logger.error("图片上传遇到不可重试错误", { path, attempt }, error)
         return { data: null, error }
       }
 
       // 如果不是最后一次尝试，等待后重试
       if (attempt < retries) {
         const waitTime = RETRY_DELAY * attempt // 递增等待时间
-        console.log(`等待 ${waitTime}ms 后重试...`)
+        logger.debug("等待后重试图片上传", { path, attempt, waitTime })
         await delay(waitTime)
       }
     } catch (err) {
       lastError = err
-      console.error(`上传异常 (尝试 ${attempt}):`, err)
+      logger.error("图片上传发生异常", { path, attempt }, err)
 
       // 如果不是最后一次尝试，等待后重试
       if (attempt < retries) {
         const waitTime = RETRY_DELAY * attempt
-        console.log(`等待 ${waitTime}ms 后重试...`)
+        logger.debug("等待后重试图片上传", { path, attempt, waitTime })
         await delay(waitTime)
       }
     }
   }
 
-  console.error(`所有重试都失败了，最后错误:`, lastError)
+  logger.error("图片上传所有重试均失败", { path, retries }, lastError)
   return { data: null, error: lastError }
 }
 
@@ -199,9 +204,11 @@ async function uploadWithRetry(
  * 上传图片到 Supabase Storage
  */
 export async function uploadImage(formData: FormData): Promise<ApiResponse<UploadImageResult>> {
+  let user: { id: string } | null = null
   try {
     // 验证用户认证
-    const user = await requireAuth()
+    const authenticatedUser = await requireAuth()
+    user = authenticatedUser
 
     const file = formData.get("file") as File
 
@@ -231,7 +238,7 @@ export async function uploadImage(formData: FormData): Promise<ApiResponse<Uploa
 
     // 生成唯一文件名
     const fileName = generateUniqueFileName(file.name)
-    const filePath = `${user.id}/${fileName}`
+    const filePath = `${authenticatedUser.id}/${fileName}`
 
     // 创建 Supabase 客户端
     const supabase = createClient()
@@ -245,7 +252,11 @@ export async function uploadImage(formData: FormData): Promise<ApiResponse<Uploa
     )
 
     if (uploadError) {
-      console.error("Supabase storage upload error:", uploadError)
+      logger.error(
+        "Supabase Storage 上传失败",
+        { path: filePath, userId: authenticatedUser.id },
+        uploadError
+      )
 
       // 根据错误类型返回更详细的错误信息
       let errorCode = "UPLOAD_FAILED"
@@ -310,7 +321,7 @@ export async function uploadImage(formData: FormData): Promise<ApiResponse<Uploa
       },
     }
   } catch (error) {
-    console.error("Upload image error:", error)
+    logger.error("上传图片操作失败", { userId: user?.id }, error)
 
     // 处理各种常见错误情况
     if (error instanceof Error) {
@@ -418,7 +429,7 @@ export async function deleteImage(
     const { error: deleteError } = await supabase.storage.from(UPLOAD_BUCKET).remove([filePath])
 
     if (deleteError) {
-      console.error("Supabase storage delete error:", deleteError)
+      logger.error("Supabase Storage 删除失败", { path: filePath }, deleteError)
       return {
         success: false,
         error: {
@@ -441,7 +452,7 @@ export async function deleteImage(
       },
     }
   } catch (error) {
-    console.error("Delete image error:", error)
+    logger.error("删除图片操作失败", { path: filePath }, error)
     return {
       success: false,
       error: {
@@ -564,7 +575,7 @@ export async function uploadMultipleImages(
       },
     }
   } catch (error) {
-    console.error("Upload multiple images error:", error)
+    logger.error("批量上传图片失败", {}, error)
     return {
       success: false,
       error: {
@@ -596,7 +607,7 @@ export async function getUserImages(): Promise<
     })
 
     if (error) {
-      console.error("List images error:", error)
+      logger.error("获取图片列表失败", { userId: user.id }, error)
       return {
         success: false,
         error: {
@@ -631,7 +642,7 @@ export async function getUserImages(): Promise<
       },
     }
   } catch (error) {
-    console.error("Get user images error:", error)
+    logger.error("获取用户图片失败", {}, error)
     return {
       success: false,
       error: {

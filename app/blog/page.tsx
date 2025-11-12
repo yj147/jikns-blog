@@ -6,12 +6,12 @@
 import { Suspense } from "react"
 import { Metadata } from "next"
 import { getPosts } from "@/lib/actions/posts"
-import { Navigation } from "@/components/navigation"
+import { getPopularTags } from "@/lib/actions/tags"
 import { BlogPostCard } from "@/components/blog/blog-post-card"
 import { BlogPagination } from "@/components/blog/blog-pagination"
 import { BlogSearchFilter } from "@/components/blog/blog-search-filter"
+import { TagFilter } from "@/components/blog/tag-filter"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 // motion 组件将在客户端组件中使用，服务器组件不导入
@@ -24,6 +24,7 @@ import {
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { ClientPagination } from "@/components/blog/client-pagination"
+import { logger } from "@/lib/utils/logger"
 
 // 页面参数接口
 interface BlogPageProps {
@@ -49,28 +50,28 @@ export async function generateMetadata({ searchParams }: BlogPageProps): Promise
   }
 }
 
-// 热门标签（后续可以从API获取）
-const popularTags = ["技术", "设计", "AI", "开源", "架构", "UX", "Web开发", "最佳实践"]
-
 // 博客列表页面主组件
 export default async function BlogPage({ searchParams }: BlogPageProps) {
   const params = await searchParams
   const { page, q, tag, sort } = parseSearchParams(new URLSearchParams(params as any))
 
-  // 获取博客文章数据
-  const result = await getPosts({
-    page,
-    limit: 10,
-    q: q || undefined,
-    tag: tag || undefined,
-    published: true,
-    orderBy: sort === "viewCount" ? "viewCount" : "publishedAt",
-    order: "desc",
-  })
+  // 获取博客文章数据与热门标签
+  const [result, popularTagsResult] = await Promise.all([
+    getPosts({
+      page,
+      limit: 10,
+      q: q || undefined,
+      tag: tag || undefined,
+      published: true,
+      orderBy: sort === "viewCount" ? "viewCount" : "publishedAt",
+      order: "desc",
+    }),
+    getPopularTags(12),
+  ])
 
   // 处理数据获取失败
   if (!result.success) {
-    console.error("获取博客文章失败:", result.error)
+    logger.error("获取博客文章失败", { module: "app/blog/page" }, result.error)
     // 可以显示错误页面或者空状态
   }
 
@@ -92,9 +93,10 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
     hasPrev: false,
   }
 
+  const popularTags = popularTagsResult.success ? (popularTagsResult.data?.tags ?? []) : undefined
+
   return (
     <div className="bg-background min-h-screen">
-      <Navigation />
 
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
@@ -111,7 +113,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
 
         {/* Search and Filter */}
         <Suspense fallback={<div className="bg-muted/50 mb-8 h-16 animate-pulse rounded-lg" />}>
-          <BlogSearchFilter className="mb-8" />
+          <BlogSearchFilter className="mb-8" popularTags={popularTags} />
         </Suspense>
 
         <div className="grid gap-8 lg:grid-cols-4">
@@ -160,27 +162,11 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
           {/* Sidebar */}
           <div className="lg:col-span-1">
             <div className="space-y-6">
-              {/* Popular Tags */}
-              <Card className="transition-shadow hover:shadow-lg">
-                <CardHeader>
-                  <CardTitle className="text-lg">热门标签</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    {popularTags.map((tag) => (
-                      <Link key={tag} href={`/blog?tag=${tag}`}>
-                        <Badge
-                          key={`badge-${tag}`}
-                          variant="outline"
-                          className="hover:bg-primary hover:text-primary-foreground cursor-pointer transition-colors"
-                        >
-                          {tag}
-                        </Badge>
-                      </Link>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+              <TagFilter
+                className="transition-shadow hover:shadow-lg"
+                limit={popularTags?.length ?? 12}
+                initialTags={popularTags}
+              />
 
               {/* Recent Posts */}
               <Card className="transition-shadow hover:shadow-lg">

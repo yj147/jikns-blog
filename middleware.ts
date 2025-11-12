@@ -48,7 +48,20 @@ const PATH_PERMISSIONS = {
   authenticated: ["/profile", "/settings", "/api/user"],
 
   // 公开路径（无需认证）
-  public: ["/", "/blog", "/search", "/login", "/register", "/auth", "/unauthorized"],
+  public: [
+    "/",
+    "/blog",
+    "/search",
+    "/archive",
+    "/login",
+    "/register",
+    "/auth",
+    "/unauthorized",
+    "/api/archive",
+    "/api/archive/*",
+    "/api/csrf-token",
+    "/api/auth",
+  ],
 } as const
 
 /**
@@ -157,6 +170,16 @@ function createUnauthorizedResponse(
   return NextResponse.redirect(unauthorizedUrl)
 }
 
+function isSupabaseSessionMissingError(error: any): boolean {
+  if (!error) return false
+  const message = (error.message || "").toLowerCase()
+  if (message.includes("auth session missing")) return true
+  if (error.name === "AuthSessionMissingError") return true
+  if (error.constructor && error.constructor.name === "AuthSessionMissingError") return true
+  if (error.__isAuthError && error.status === 400) return true
+  return false
+}
+
 /**
  * 获取错误消息
  */
@@ -195,6 +218,12 @@ export async function middleware(request: NextRequest) {
   const startTime = performance.now()
   const pathname = request.nextUrl.pathname
 
+  // Phase 1 任务 1.2：公开路径直接返回，避免不必要的 Supabase/Auth/审计逻辑
+  if (matchesPath(pathname, PATH_PERMISSIONS.public)) {
+    const response = NextResponse.next()
+    return setSecurityHeaders(response)
+  }
+
   try {
     // Phase 4 安全增强：创建安全上下文
     const securityContext = createSecurityContext(request)
@@ -220,12 +249,6 @@ export async function middleware(request: NextRequest) {
     // 安全检查已在 SecurityMiddleware.processSecurityChecks() 中完成
     // 移除重复的速率限制检查以避免双重消耗配额
 
-    // 检查是否为公开路径
-    if (matchesPath(pathname, PATH_PERMISSIONS.public)) {
-      const response = NextResponse.next()
-      return setSecurityHeaders(response)
-    }
-
     // 创建 Supabase 客户端
     const response = NextResponse.next()
     const supabase = createServerClient(
@@ -247,14 +270,26 @@ export async function middleware(request: NextRequest) {
     )
 
     // 获取经过验证的用户信息
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
+    let user: any = null
+    try {
+      const {
+        data: { user: fetchedUser },
+        error: userError,
+      } = await supabase.auth.getUser()
 
-    if (userError) {
-      console.error("中间件用户验证错误:", userError)
-      return createUnauthorizedResponse(request, "AUTHENTICATION_REQUIRED")
+      if (userError) {
+        if (!isSupabaseSessionMissingError(userError)) {
+          console.error("中间件用户验证错误:", userError)
+          return createUnauthorizedResponse(request, "AUTHENTICATION_REQUIRED")
+        }
+      } else {
+        user = fetchedUser
+      }
+    } catch (error) {
+      if (!isSupabaseSessionMissingError(error)) {
+        console.error("中间件用户验证异常:", error)
+        return createUnauthorizedResponse(request, "AUTHENTICATION_REQUIRED")
+      }
     }
 
     // 检查是否需要认证

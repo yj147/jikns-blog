@@ -3,13 +3,28 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Navigation } from "@/components/navigation"
-import { PostForm, type PostFormData } from "@/components/admin/post-form"
+import dynamic from "next/dynamic"
+import type { PostFormData, PostFormProps } from "@/components/admin/post-form"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { ArrowLeft } from "lucide-react"
 import { toast } from "sonner"
 import { createPost } from "@/lib/actions/posts"
+import { logger } from "@/lib/utils/logger"
 import type { CreatePostRequest } from "@/types/api"
+
+const PostForm = dynamic<PostFormProps>(
+  () => import("@/components/admin/post-form").then((mod) => mod.PostForm),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-48" />
+        <Skeleton className="h-[520px] w-full" />
+      </div>
+    ),
+  }
+)
 
 export default function CreatePostPage() {
   const router = useRouter()
@@ -49,7 +64,7 @@ export default function CreatePostPage() {
         toast.error("创建文章失败: " + result.error?.message)
       }
     } catch (error) {
-      console.error("创建文章失败:", error)
+      logger.error("创建文章失败", { module: "app/admin/blog/create", operation: "submit" }, error)
       toast.error("创建文章失败，请重试")
     } finally {
       setIsSubmitting(false)
@@ -81,14 +96,17 @@ export default function CreatePostPage() {
         toast.error("保存草稿失败: " + result.error?.message)
       }
     } catch (error) {
-      console.error("保存草稿失败:", error)
+      logger.error(
+        "保存草稿失败",
+        { module: "app/admin/blog/create", operation: "saveDraft" },
+        error
+      )
       toast.error("保存草稿失败，请重试")
     }
   }
 
   return (
     <div className="bg-background min-h-screen">
-      <Navigation />
 
       <div className="container mx-auto px-4 py-8">
         {/* 头部导航 */}

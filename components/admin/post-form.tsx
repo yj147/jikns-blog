@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import Image from "next/image"
+import { useState, useRef, useEffect, useMemo } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -10,17 +11,33 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Badge } from "@/components/ui/badge"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { MarkdownEditor, type MarkdownEditorRef } from "./markdown-editor"
+import { TagAutocomplete, type TagAutocompleteItem } from "./tag-autocomplete"
 import { Separator } from "@/components/ui/separator"
-import { Eye, Save, Send, X, Plus, Hash, Image as ImageIcon, Loader2, Trash2 } from "lucide-react"
+import { Eye, Save, Send, Image as ImageIcon, Loader2, Trash2 } from "lucide-react"
 import { uploadImage } from "@/lib/actions/upload"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { normalizeTagSlug } from "@/lib/utils/tag"
+import { getOptimizedImageUrl } from "@/lib/images/optimizer"
+import { compressImage } from "@/lib/upload/image-utils"
 
 // Post 表单验证 Schema
+function mapTagNamesToItems(tagNames: string[]): TagAutocompleteItem[] {
+  return tagNames.map((name, index) => {
+    const normalized = normalizeTagSlug(name)
+    const safeSlug = normalized || `tag-${index}`
+    return {
+      id: `existing-${safeSlug}-${index}`,
+      name,
+      slug: safeSlug,
+      color: null,
+    }
+  })
+}
+
 const postFormSchema = z.object({
   title: z.string().min(1, "标题不能为空").max(200, "标题最多200个字符"),
   slug: z.string().min(1, "URL路径不能为空").max(100, "URL路径最多100个字符"),
@@ -59,10 +76,12 @@ export function PostForm({
 }: PostFormProps) {
   const editorRef = useRef<MarkdownEditorRef>(null)
   const coverImageInputRef = useRef<HTMLInputElement>(null)
-  const [tags, setTags] = useState<string[]>(initialData?.tags || [])
-  const [tagInput, setTagInput] = useState("")
+  const [selectedTags, setSelectedTags] = useState<TagAutocompleteItem[]>(() =>
+    mapTagNamesToItems(initialData?.tags || [])
+  )
   const [activeTab, setActiveTab] = useState("basic")
   const [isUploadingCover, setIsUploadingCover] = useState(false)
+  const [coverPreviewError, setCoverPreviewError] = useState(false)
 
   // 表单配置
   const form = useForm<PostFormData>({
@@ -92,17 +111,64 @@ export function PostForm({
 
   // 获取当前表单值
   const formValues = watch()
+  const coverImageValue = formValues.coverImage
+  const optimizedCoverImage = useMemo(
+    () =>
+      coverImageValue
+        ? getOptimizedImageUrl(coverImageValue, {
+            width: 1600,
+            height: 900,
+            quality: 80,
+            format: "webp",
+          })
+        : undefined,
+    [coverImageValue]
+  )
+  const tagNames = useMemo(() => selectedTags.map((tag) => tag.name), [selectedTags])
+
+  const handleTagsChange = (tags: TagAutocompleteItem[]) => {
+    setSelectedTags(tags)
+    setValue(
+      "tags",
+      tags.map((tag) => tag.name),
+      { shouldDirty: true }
+    )
+  }
+
+  const initialTagsKey = useMemo(() => JSON.stringify(initialData?.tags ?? []), [initialData])
+
+  useEffect(() => {
+    let parsedTags: string[] = []
+    try {
+      const raw = JSON.parse(initialTagsKey)
+      if (Array.isArray(raw)) {
+        parsedTags = raw.filter((value): value is string => typeof value === "string")
+      }
+    } catch (error) {
+      parsedTags = []
+    }
+    const nextTags = mapTagNamesToItems(parsedTags)
+    setSelectedTags(nextTags)
+    setValue(
+      "tags",
+      nextTags.map((tag) => tag.name)
+    )
+  }, [initialTagsKey, setValue])
+
+  useEffect(() => {
+    setCoverPreviewError(false)
+  }, [coverImageValue])
 
   // 自动保存配置
   const { isSaving: isAutoSaving, lastSavedAt } = useAutoSave({
-    data: { ...formValues, tags, content: watch("content") },
+    data: { ...formValues, tags: tagNames, content: watch("content") },
     onSave: async (data) => {
       if (onSave && mode === "create") {
         const editorContent = editorRef.current?.getValue()
         if (editorContent !== undefined) {
           data.content = editorContent
         }
-        await onSave({ ...data, tags, isPublished: false })
+        await onSave({ ...data, tags: tagNames, isPublished: false })
       }
     },
     enabled: enableAutoSave && !!onSave && mode === "create",
@@ -129,30 +195,6 @@ export function PostForm({
     }
   }
 
-  // 标签管理
-  const addTag = () => {
-    const trimmedTag = tagInput.trim()
-    if (trimmedTag && !tags.includes(trimmedTag)) {
-      const newTags = [...tags, trimmedTag]
-      setTags(newTags)
-      setValue("tags", newTags)
-      setTagInput("")
-    }
-  }
-
-  const removeTag = (tagToRemove: string) => {
-    const newTags = tags.filter((tag) => tag !== tagToRemove)
-    setTags(newTags)
-    setValue("tags", newTags)
-  }
-
-  const handleTagInputKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.preventDefault()
-      addTag()
-    }
-  }
-
   // 处理封面图片上传
   const handleCoverImageUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return
@@ -175,8 +217,9 @@ export function PostForm({
     setIsUploadingCover(true)
 
     try {
+      const compressedFile = await compressImage(file, 1920, 1080, 0.8)
       const formData = new FormData()
-      formData.append("file", file)
+      formData.append("file", compressedFile)
 
       const response = await uploadImage(formData)
 
@@ -211,7 +254,7 @@ export function PostForm({
     }
 
     // 更新标签数据
-    data.tags = tags
+    data.tags = tagNames
 
     await onSubmit(data)
   }
@@ -223,7 +266,7 @@ export function PostForm({
     if (editorContent !== undefined) {
       data.content = editorContent
     }
-    data.tags = tags
+    data.tags = tagNames
     data.isPublished = false
 
     await onSave?.(data)
@@ -314,28 +357,29 @@ export function PostForm({
                   </div>
 
                   {/* 封面预览 */}
-                  {watch("coverImage") && (
+                  {coverImageValue && (
                     <div className="relative h-40 w-full overflow-hidden rounded-lg border">
-                      <img
-                        src={watch("coverImage")}
-                        alt="封面预览"
-                        className="h-full w-full object-cover"
-                        onError={(e) => {
-                          const img = e.target as HTMLImageElement
-                          img.style.display = "none"
-                          const parent = img.parentElement
-                          if (parent) {
-                            parent.innerHTML = `
-                              <div class="w-full h-full flex items-center justify-center bg-muted text-muted-foreground">
-                                <div class="text-center">
-                                  <ImageIcon class="w-8 h-8 mx-auto mb-2 opacity-50" />
-                                  <div class="text-sm">图片加载失败</div>
-                                </div>
-                              </div>
-                            `
-                          }
-                        }}
-                      />
+                      {coverPreviewError ? (
+                        <div className="bg-muted text-muted-foreground flex h-full w-full items-center justify-center">
+                          <div className="text-center">
+                            <ImageIcon className="mx-auto mb-2 h-8 w-8 opacity-50" />
+                            <div className="text-sm">图片加载失败</div>
+                          </div>
+                        </div>
+                      ) : (
+                        <Image
+                          src={optimizedCoverImage ?? coverImageValue}
+                          alt="封面预览"
+                          fill
+                          sizes="(max-width: 768px) 100vw, 400px"
+                          className="object-cover"
+                          onError={() => setCoverPreviewError(true)}
+                          loading="eager"
+                          priority={true}
+                          fetchPriority="high"
+                          quality={80}
+                        />
+                      )}
                     </div>
                   )}
 
@@ -357,35 +401,12 @@ export function PostForm({
               {/* 标签 */}
               <div className="space-y-2">
                 <Label>标签</Label>
-                <div className="mb-2 flex gap-2">
-                  <Input
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={handleTagInputKeyDown}
-                    placeholder="输入标签后按回车添加"
-                    className="flex-1"
-                  />
-                  <Button type="button" onClick={addTag} size="sm" variant="outline">
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {tags.map((tag) => (
-                    <Badge key={tag} variant="secondary" className="flex items-center gap-1">
-                      <Hash className="h-3 w-3" />
-                      {tag}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="ml-1 h-auto p-0"
-                        onClick={() => removeTag(tag)}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </Badge>
-                  ))}
-                </div>
+                <TagAutocomplete
+                  selectedTags={selectedTags}
+                  onTagsChange={handleTagsChange}
+                  placeholder="搜索或创建标签..."
+                />
+                {errors.tags && <p className="text-sm text-red-500">{errors.tags.message}</p>}
               </div>
 
               <Separator />

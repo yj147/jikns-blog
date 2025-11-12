@@ -19,6 +19,7 @@ import {
   setSecurityHeaders,
   validateRequestOrigin,
 } from "@/lib/security"
+import { logger } from "../utils/logger"
 
 /**
  * 安全中间件类
@@ -35,7 +36,7 @@ export class SecurityMiddleware {
         sameSite: "strict",
         maxAge: 60 * 60 * 24, // 24小时
       },
-      skipPaths: ["/api/auth/callback", "/api/health", "/api/webhooks", "/api/dev"],
+      skipPaths: ["/api/auth/callback", "/api/health", "/api/webhooks", "/api/dev", "/api/csrf-token"],
     },
     xss: {
       allowedTags: [
@@ -118,7 +119,7 @@ export class SecurityMiddleware {
 
       return null // 所有检查通过
     } catch (error) {
-      console.error("安全中间件处理错误:", error)
+      logger.error("安全中间件处理错误", { pathname }, error)
       this.logSecurityEvent("suspicious_activity", "high", request, {
         error: error instanceof Error ? error.message : "未知错误",
         context,
@@ -364,7 +365,7 @@ export class SecurityMiddleware {
     // 跳过Next.js Server Actions - 它们有自己的安全机制
     const nextAction = request.headers.get("next-action")
     if (nextAction) {
-      console.log("跳过Server Action的CSRF验证:", pathname, nextAction)
+      logger.debug("跳过 Server Action 的 CSRF 验证", { pathname, nextAction })
       return false
     }
 
@@ -372,7 +373,7 @@ export class SecurityMiddleware {
     if (process.env.NODE_ENV === "development") {
       // 开发环境跳过管理员页面的CSRF验证，因为有其他安全层保护
       if (pathname.startsWith("/admin")) {
-        console.log("开发环境跳过管理员页面CSRF验证:", pathname)
+        logger.debug("开发环境跳过管理员页面 CSRF 验证", { pathname })
         return false
       }
     }
@@ -407,7 +408,7 @@ export class SecurityMiddleware {
 
     // 在生产环境中，这里应该发送到日志系统
     if (severity === "critical" || severity === "high") {
-      console.warn(`🚨 安全事件 [${severity.toUpperCase()}]: ${type}`, event)
+      logger.warn("安全事件", { severity, type, event })
     } else {
     }
 
@@ -481,18 +482,35 @@ export function validateSecurityHeaders(request: NextRequest): SecurityValidatio
 
   // 检查可疑的用户代理
   const userAgent = request.headers.get("user-agent") || ""
-  const suspiciousPatterns = [
-    /bot|crawler|spider/i,
-    /curl|wget|python|java/i,
-    /scanner|hack|exploit/i,
+
+  // 白名单：测试工具和开发工具
+  const whitelistPatterns = [
+    /playwright/i,
+    /puppeteer/i,
+    /selenium/i,
+    /cypress/i,
+    /test/i,
+    /jest/i,
+    /vitest/i,
   ]
 
-  const isSuspicious = suspiciousPatterns.some((pattern) => pattern.test(userAgent))
-  if (isSuspicious && process.env.NODE_ENV === "production") {
-    return {
-      isValid: false,
-      errorCode: "SUSPICIOUS_USER_AGENT",
-      errorMessage: "检测到可疑的用户代理",
+  // 检查是否在白名单中
+  const isWhitelisted = whitelistPatterns.some((pattern) => pattern.test(userAgent))
+
+  if (!isWhitelisted) {
+    const suspiciousPatterns = [
+      /bot|crawler|spider/i,
+      /curl|wget|python|java/i,
+      /scanner|hack|exploit/i,
+    ]
+
+    const isSuspicious = suspiciousPatterns.some((pattern) => pattern.test(userAgent))
+    if (isSuspicious && process.env.NODE_ENV === "production") {
+      return {
+        isValid: false,
+        errorCode: "SUSPICIOUS_USER_AGENT",
+        errorMessage: "检测到可疑的用户代理",
+      }
     }
   }
 

@@ -4,6 +4,7 @@
  */
 
 import { AppError, ErrorContext } from "@/types/error"
+import { logger } from "@/lib/utils/logger"
 
 interface LogOptions {
   console?: boolean
@@ -85,7 +86,10 @@ class ErrorLogger {
     } catch (error) {
       // 如果发送失败，将日志重新放回队列
       this.logQueue.unshift(...batch)
-      console.warn("日志上传失败，将在稍后重试:", error)
+      logger.warn("日志上传失败，将在稍后重试", {
+        batchSize: batch.length,
+        error: error instanceof Error ? error.message : String(error),
+      })
       this.scheduleRetry()
     }
   }
@@ -136,27 +140,27 @@ class ErrorLogger {
 
     switch (error.severity) {
       case "critical":
-        console.error(prefix, error.userMessage, error)
+        logger.error(prefix, { message: error.userMessage, error })
         break
       case "high":
-        console.error(prefix, error.userMessage, error)
+        logger.error(prefix, { message: error.userMessage, error })
         break
       case "medium":
-        console.warn(prefix, error.userMessage, error)
+        logger.warn(prefix, { message: error.userMessage, error })
         break
       case "low":
+        logger.info(prefix, { message: error.userMessage })
         break
       default:
+        logger.debug(prefix, { message: error.userMessage })
     }
 
     // 输出详细信息（仅在开发环境）
     if (includeStackTrace && process.env.NODE_ENV === "development") {
-      console.group("错误详情:")
-      if (error.details) {
-      }
-      if (error.stackTrace) {
-      }
-      console.groupEnd()
+      logger.debug("错误详情", {
+        details: error.details,
+        stackTrace: error.stackTrace,
+      })
     }
   }
 

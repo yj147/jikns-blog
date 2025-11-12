@@ -1,22 +1,18 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { GeistSans } from "geist/font/sans"
-import { Manrope } from "next/font/google"
+import { geistSans, manrope } from "./fonts"
 import { AuthProvider } from "./providers/auth-provider"
 import { Toaster } from "@/components/ui/toaster"
 // import { Toaster as SonnerToaster } from "sonner"
 import { AuthStateListener } from "@/components/auth-state-listener"
 import ErrorBoundary from "@/components/error-boundary"
+import { CSRFToken } from "@/components/security/csrf-token"
+import NavigationServer from "@/components/navigation-server"
+import { ThemeProvider } from "@/components/theme-provider"
 import "./globals.css"
 
 // 导入 EventEmitter 优化配置
 import "@/lib/event-emitter-config"
-
-const manrope = Manrope({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-manrope",
-})
 
 export const metadata: Metadata = {
   title: "现代博客平台",
@@ -30,16 +26,23 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="zh-CN" className={`${GeistSans.className} ${manrope.variable} antialiased`}>
+    <html
+      lang="zh-CN"
+      className={`${geistSans.variable} ${geistSans.className} ${manrope.variable} antialiased`}
+    >
       <body className="bg-background min-h-screen font-sans antialiased">
-        <ErrorBoundary>
-          <AuthProvider>
-            <AuthStateListener />
-            {children}
-          </AuthProvider>
-        </ErrorBoundary>
-        {/* Toast 通知系统 */}
-        <Toaster />
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <ErrorBoundary>
+            <AuthProvider>
+              <AuthStateListener />
+              <CSRFToken hidden />
+              <NavigationServer />
+              <main>{children}</main>
+            </AuthProvider>
+          </ErrorBoundary>
+          {/* Toast 通知系统 */}
+          <Toaster />
+        </ThemeProvider>
         {/* Sonner Toast - 待安装完成后启用
         <SonnerToaster 
           position="top-right"

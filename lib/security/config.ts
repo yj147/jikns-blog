@@ -4,6 +4,7 @@
  */
 
 import type { SecurityConfig, CSRFConfig, XSSConfig, JWTConfig } from "./types"
+import { logger } from "../utils/logger"
 
 /**
  * 环境变量验证
@@ -14,7 +15,7 @@ function validateEnvironment() {
   const missing = required.filter((env) => !process.env[env])
 
   if (missing.length > 0) {
-    console.warn(`缺少必需的环境变量: ${missing.join(", ")}`)
+    logger.warn("缺少必需的环境变量", { missing })
   }
 
   return missing.length === 0
@@ -41,6 +42,7 @@ export const defaultSecurityConfig: SecurityConfig = {
       "/api/health",
       "/api/webhooks",
       "/auth/callback",
+      "/api/csrf-token",
     ],
   },
 
@@ -349,7 +351,7 @@ function generateFallbackSecret(type: string): string {
     throw new Error(`生产环境必须设置JWT密钥: JWT_${type.toUpperCase()}_SECRET`)
   }
 
-  console.warn(`⚠️ 使用默认JWT密钥 (${type})，生产环境请设置环境变量`)
+  logger.warn("使用默认 JWT 密钥", { type })
   return `default-${type}-secret-${process.env.NODE_ENV || "development"}-change-in-production`
 }
 
@@ -414,7 +416,7 @@ export function initializeSecurityConfig(): SecurityConfig {
     if (process.env.NODE_ENV === "production") {
       throw new Error(`安全配置无效: ${validation.errors.join(", ")}`)
     } else {
-      console.warn("⚠️ 安全配置警告:", validation.errors.join(", "))
+      logger.warn("安全配置警告", { errors: validation.errors })
     }
   }
   return config

@@ -13,8 +13,8 @@ export const TEST_ENV = {
   NEXT_PUBLIC_SITE_URL: "http://localhost:3000",
   NODE_ENV: "test",
 
-  // 数据库配置
-  DATABASE_URL: "postgresql://test:test@localhost:54322/test",
+  // 数据库配置 - 连接到 Supabase 本地实例
+  DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
 
   // GitHub OAuth (测试用)
   GITHUB_CLIENT_ID: "test-github-client-id",

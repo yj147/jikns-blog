@@ -1,0 +1,95 @@
+name: Quality Check
+
+# 在所有分支的 Push 和 Pull Request 上运行
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+    branches: ["main", "develop"]
+
+# 并发控制：同一分支只运行一个质量检查
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-check:
+    name: "代码质量检查"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: "📥 检出代码"
+        uses: actions/checkout@v4
+
+      - name: "⚙️ 设置 Node.js 环境"
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: "📦 安装 pnpm"
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      - name: "📂 获取 pnpm 缓存目录"
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: "🗄️ 设置 pnpm 缓存"
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: "📥 安装依赖"
+        run: pnpm install --frozen-lockfile
+
+      - name: "🔍 ESLint 代码规范检查"
+        run: pnpm lint:check --max-warnings 1000
+
+      - name: "🎯 TypeScript 类型检查"
+        run: pnpm type-check
+
+      - name: "🎨 Prettier 格式检查"
+        run: pnpm format:check
+
+      - name: "🧪 关键测试用例"
+        run: pnpm test:critical
+        timeout-minutes: 5
+
+      - name: "📊 测试覆盖率报告"
+        run: |
+          pnpm test:coverage --reporter=json --reporter=text-summary > coverage-summary.txt || true
+          if [ -f coverage-summary.txt ]; then
+            echo "## 测试覆盖率报告" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -10 coverage-summary.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: "✅ 质量检查完成"
+        if: success()
+        run: |
+          echo "## ✅ 代码质量检查通过" >> $GITHUB_STEP_SUMMARY
+          echo "- ESLint: ✅ 通过" >> $GITHUB_STEP_SUMMARY
+          echo "- TypeScript: ✅ 通过" >> $GITHUB_STEP_SUMMARY
+          echo "- Prettier: ✅ 通过" >> $GITHUB_STEP_SUMMARY
+          echo "- 关键测试: ✅ 通过" >> $GITHUB_STEP_SUMMARY
+
+      - name: "❌ 质量检查失败"
+        if: failure()
+        run: |
+          echo "## ❌ 代码质量检查失败" >> $GITHUB_STEP_SUMMARY
+          echo "请修复上述问题后重新提交" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔧 修复建议:" >> $GITHUB_STEP_SUMMARY
+          echo "- 运行 \`pnpm lint --fix\` 修复 ESLint 问题" >> $GITHUB_STEP_SUMMARY
+          echo "- 运行 \`pnpm format\` 修复格式问题" >> $GITHUB_STEP_SUMMARY
+          echo "- 运行 \`pnpm type-check\` 检查类型错误" >> $GITHUB_STEP_SUMMARY
+          echo "- 运行 \`pnpm test:critical\` 查看测试失败详情" >> $GITHUB_STEP_SUMMARY

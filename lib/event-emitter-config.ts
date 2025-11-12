@@ -4,6 +4,7 @@
  */
 
 import { EventEmitter } from "events"
+import { logger } from "@/lib/utils/logger"
 
 // 全局配置 EventEmitter 最大监听器数量
 EventEmitter.defaultMaxListeners = 50
@@ -49,13 +50,15 @@ export function configureEventEmitters() {
 // 用于调试的辅助函数
 export function debugEventListeners() {
   if (process.env.NODE_ENV === "development") {
-    console.log("Current EventEmitter defaultMaxListeners:", EventEmitter.defaultMaxListeners)
-    console.log("Current process maxListeners:", process.getMaxListeners())
-    console.log("Process listeners count:", {
-      beforeExit: process.listenerCount("beforeExit"),
-      exit: process.listenerCount("exit"),
-      SIGINT: process.listenerCount("SIGINT"),
-      SIGTERM: process.listenerCount("SIGTERM"),
+    logger.debug("EventEmitter 调试信息", {
+      defaultMaxListeners: EventEmitter.defaultMaxListeners,
+      processMaxListeners: process.getMaxListeners(),
+      listeners: {
+        beforeExit: process.listenerCount("beforeExit"),
+        exit: process.listenerCount("exit"),
+        SIGINT: process.listenerCount("SIGINT"),
+        SIGTERM: process.listenerCount("SIGTERM"),
+      },
     })
   }
 }

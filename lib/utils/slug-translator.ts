@@ -2,6 +2,8 @@
  * 智能 Slug 生成器 - 支持中文自动翻译成英文
  */
 
+import { logger } from "./logger"
+
 const translate = require("@vitalets/google-translate-api")
 
 /**
@@ -25,7 +27,10 @@ async function translateToEnglish(text: string): Promise<string> {
     const result = await translate(text, { to: "en" })
     return result.text
   } catch (error) {
-    console.error("翻译失败，使用原文:", error)
+    logger.warn("翻译失败，使用原文", {
+      module: "slug-translator",
+      error: error instanceof Error ? error.message : String(error),
+    })
     // 翻译失败时返回原文
     return text
   }

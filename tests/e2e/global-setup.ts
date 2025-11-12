@@ -14,7 +14,9 @@ async function globalSetup(config: FullConfig) {
   try {
     // 1. 检查开发服务器是否正常运行
     console.log("📡 检查开发服务器连接...")
-    await page.goto(config.webServer?.url || "http://localhost:3000")
+    const baseUrl =
+      process.env.PLAYWRIGHT_BASE_URL || config.webServer?.url || "http://localhost:3000"
+    await page.goto(baseUrl)
     await page.waitForLoadState("networkidle")
     console.log("✅ 开发服务器连接正常")
 

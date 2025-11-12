@@ -66,6 +66,7 @@
     "node_modules",
     "tests_disabled/**/*",
     "tests/**/*",
+    "tests.backup*/**/*",
     ".next",
     "dist",
     "build"

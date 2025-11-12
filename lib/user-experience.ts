@@ -6,6 +6,7 @@
 import { createClientSupabaseClient } from "./supabase"
 import { performanceMonitor } from "./performance-monitor"
 import { auditLogger } from "./audit-log"
+import { logger } from "./utils/logger"
 
 /**
  * 用户会话管理器
@@ -40,7 +41,7 @@ export class SessionManager {
       // 初始化页面可见性检查
       this.initializeVisibilityCheck()
     } catch (error) {
-      console.error("会话管理器初始化失败:", error)
+      logger.error("会话管理器初始化失败", { module: "SessionManager" }, error)
     }
   }
 
@@ -288,7 +289,7 @@ export class SessionManager {
       } = await supabase.auth.getSession()
 
       if (error) {
-        console.error("会话检查失败:", error)
+        logger.error("会话检查失败", { module: "SessionManager" }, error)
         return
       }
 
@@ -308,7 +309,7 @@ export class SessionManager {
         await this.refreshSession()
       }
     } catch (error) {
-      console.error("会话状态检查异常:", error)
+      logger.error("会话状态检查异常", { module: "SessionManager" }, error)
     }
   }
 
@@ -321,7 +322,7 @@ export class SessionManager {
       const { data, error } = await supabase.auth.refreshSession()
 
       if (error) {
-        console.error("会话刷新失败:", error)
+        logger.error("会话刷新失败", { module: "SessionManager" }, error)
         this.handleSessionExpired()
         return
       }
@@ -331,7 +332,7 @@ export class SessionManager {
         details: { refreshedAt: new Date().toISOString() },
       })
     } catch (error) {
-      console.error("会话刷新异常:", error)
+      logger.error("会话刷新异常", { module: "SessionManager" }, error)
     }
   }
 
@@ -558,7 +559,7 @@ export class StorageManager {
 
       localStorage.setItem(key, valueToStore)
     } catch (error) {
-      console.error("存储失败:", error)
+      logger.error("存储失败", { module: "ClientStorage", key }, error)
     }
   }
 
@@ -581,7 +582,7 @@ export class StorageManager {
         try {
           value = atob(value)
         } catch (error) {
-          console.error("解密失败:", error)
+          logger.error("解密失败", { module: "ClientStorage", key }, error)
           return defaultValue
         }
       }
@@ -593,7 +594,7 @@ export class StorageManager {
         return value as T
       }
     } catch (error) {
-      console.error("读取存储失败:", error)
+      logger.error("读取存储失败", { module: "ClientStorage", key }, error)
       return defaultValue
     }
   }
@@ -607,7 +608,7 @@ export class StorageManager {
         localStorage.removeItem(key)
       }
     } catch (error) {
-      console.error("移除存储失败:", error)
+      logger.error("移除存储失败", { module: "ClientStorage", key }, error)
     }
   }
 
@@ -637,7 +638,7 @@ export class StorageManager {
         localStorage.setItem(key, value)
       })
     } catch (error) {
-      console.error("清除存储失败:", error)
+      logger.error("清除存储失败", { module: "ClientStorage", preserveKeys }, error)
     }
   }
 }

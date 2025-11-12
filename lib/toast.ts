@@ -4,6 +4,7 @@
  */
 
 import { toast } from "sonner"
+import { logger } from "./utils/logger"
 
 export type ToastType = "success" | "error" | "warning" | "info" | "loading"
 
@@ -263,7 +264,7 @@ export const notifications = {
 
 // API错误处理辅助函数
 export function handleApiError(error: any, context?: string) {
-  console.error(`API Error${context ? ` (${context})` : ""}:`, error)
+  logger.error("API Error", { context }, error)
 
   if (error.code) {
     switch (error.code) {

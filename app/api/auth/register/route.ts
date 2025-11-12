@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createRouteHandlerClient } from "@/lib/supabase"
 import { XSSProtection, RateLimiter } from "@/lib/security"
 import { z } from "zod"
+import { authLogger } from "@/lib/utils/logger"
 
 // 注册请求验证 Schema
 const RegisterSchema = z
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
   try {
     // 速率限制检查 - 每个IP每小时最多注册3次
     if (!RateLimiter.checkRateLimit(`register:${clientIP}`, 3, 60 * 60 * 1000)) {
-      console.warn(`注册速率限制触发，IP: ${clientIP}`)
+      authLogger.warn("注册速率限制触发", { clientIP })
       return NextResponse.json(
         {
           success: false,
@@ -61,7 +62,9 @@ export async function POST(request: NextRequest) {
     // 验证数据格式
     const validationResult = RegisterSchema.safeParse(cleanedBody)
     if (!validationResult.success) {
-      console.warn("注册数据验证失败:", validationResult.error.errors)
+      authLogger.warn("注册数据验证失败", {
+        errors: validationResult.error.errors,
+      })
       return NextResponse.json(
         {
           success: false,
@@ -96,11 +99,15 @@ export async function POST(request: NextRequest) {
     })
 
     if (signUpError) {
-      console.error("Supabase 注册失败:", {
-        email,
-        error: signUpError.message,
-        status: signUpError.status,
-      })
+      authLogger.error(
+        "Supabase 注册失败",
+        {
+          email,
+          status: signUpError.status,
+          module: "api/auth/register",
+        },
+        signUpError
+      )
 
       // 根据错误类型返回适当的错误信息
       let errorMessage = "注册失败"
@@ -131,7 +138,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!data.user) {
-      console.error("注册响应中缺少用户数据")
+      authLogger.error("注册响应中缺少用户数据", { email })
       return NextResponse.json(
         {
           success: false,
@@ -185,7 +192,7 @@ export async function POST(request: NextRequest) {
         { status: 201 }
       )
     } catch (error) {
-      console.error("注册后处理异常:", error)
+      authLogger.error("注册后处理异常", { userId: data.user?.id }, error)
 
       return NextResponse.json(
         {
@@ -204,7 +211,7 @@ export async function POST(request: NextRequest) {
       )
     }
   } catch (error) {
-    console.error("注册API异常:", error)
+    authLogger.error("注册 API 异常", { module: "api/auth/register", clientIP }, error)
 
     return NextResponse.json(
       {

@@ -8,6 +8,7 @@ import type { SecurityValidationResult, SecurityContext } from "./types"
 import { SecurityMiddleware, createSecurityContext } from "./middleware"
 import { AdvancedXSSCleaner, ContentValidator, InputSanitizer } from "./xss-cleaner"
 import { JWTSecurity } from "./jwt-security"
+import { logger } from "@/lib/utils/logger"
 
 /**
  * API 安全配置选项
@@ -111,7 +112,7 @@ export function withApiSecurity(handler: ApiHandler, options: ApiSecurityOptions
       const duration = endTime - startTime
 
       if (duration > 1000) {
-        console.warn(`API响应时间过长: ${request.url} - ${duration.toFixed(2)}ms`)
+        logger.warn("API 响应时间过长", { url: request.url, duration: duration.toFixed(2) })
       }
 
       // 9. 添加安全响应头
@@ -121,7 +122,7 @@ export function withApiSecurity(handler: ApiHandler, options: ApiSecurityOptions
 
       return response
     } catch (error) {
-      console.error("API安全装饰器错误:", error)
+      logger.error("API 安全装饰器错误", { url: request.url }, error)
       return createErrorResponse(500, "INTERNAL_ERROR", "服务器内部错误")
     }
   }
@@ -189,7 +190,7 @@ async function sanitizeRequestBody(request: NextRequest): Promise<boolean> {
       // 验证JSON结构安全性
       const validation = ContentValidator.validateContent(body)
       if (!validation.isValid) {
-        console.warn("请求体包含危险内容:", validation.errorMessage)
+        logger.warn("请求体包含危险内容", { error: validation.errorMessage })
         return false
       }
 
@@ -216,7 +217,7 @@ async function sanitizeRequestBody(request: NextRequest): Promise<boolean> {
 
     return true
   } catch (error) {
-    console.error("请求体清理错误:", error)
+    logger.error("请求体清理错误", {}, error)
     return false
   }
 }
@@ -355,7 +356,7 @@ export function withServerActionSecurity<T extends any[], R>(
 
       return action(...args)
     } catch (error) {
-      console.error("Server Action安全装饰器错误:", error)
+      logger.error("Server Action 安全装饰器错误", {}, error)
       throw error
     }
   }

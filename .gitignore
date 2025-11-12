@@ -27,3 +27,25 @@ yarn-error.log*
 next-env.d.ts
 /lib/generated/prisma
 SuperClaude_Framework/
+
+# logs and temporary files
+*.log
+*.txt
+!setup-windows-forwarding.txt
+.tmp-*.log
+
+# lighthouse reports
+lighthouse-*.json
+
+# test results
+/test-results/
+/playwright-report/
+
+# performance reports
+/perf-results/
+
+# monitoring data
+/monitoring-data/
+
+# Windows lighthouse artifacts (should not be in WSL)
+C:\\Users\\

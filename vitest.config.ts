@@ -24,10 +24,16 @@ export default defineConfig({
       "tests/security/phase4-basic.test.ts",
       "tests/unit/utils-basic.test.ts",
       "tests/unit/utils.test.ts",
+      "tests/unit/activity-tags.test.ts",
+      "tests/unit/search-tokenizer.test.ts",
+      "tests/unit/prisma-token-extension.test.ts",
       "tests/middleware/auth-middleware.test.ts",
       "tests/api/posts-crud.test.ts",
+      "tests/actions/**/*.test.ts",
+      "tests/api/**/*.test.ts",
+      "tests/repos/**/*.test.ts",
       "tests/components/**/*.test.{ts,tsx}",
-      "tests/integration/**/*.test.ts",
+      "tests/integration/**/*.test.{ts,tsx}",
     ],
 
     // 排除不稳定的测试文件

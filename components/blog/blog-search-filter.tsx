@@ -19,6 +19,7 @@ import {
 import { Search, Filter, X, SortAsc, SortDesc } from "lucide-react"
 import { motion } from "framer-motion"
 import { useDebounce } from "@/hooks/use-debounce"
+import { TagFilter, type PopularTag } from "@/components/blog/tag-filter"
 import {
   createBlogListUrl,
   sanitizeSearchQuery,
@@ -27,6 +28,7 @@ import {
 
 interface BlogSearchFilterProps {
   className?: string
+  popularTags?: PopularTag[]
 }
 
 // 排序选项
@@ -39,12 +41,10 @@ const sortOptions = [
   { value: "title", label: "标题 Z-A", order: "desc" },
 ]
 
-// 热门标签（这里可以从API获取）
-const popularTags = ["技术", "设计", "AI", "开源", "架构", "UX", "Web开发", "最佳实践"]
-
-export function BlogSearchFilter({ className = "" }: BlogSearchFilterProps) {
+export function BlogSearchFilter({ className = "", popularTags }: BlogSearchFilterProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const paramsKey = searchParams.toString()
 
   // 状态管理
   const [query, setQuery] = useState(searchParams.get("q") || "")
@@ -84,13 +84,14 @@ export function BlogSearchFilter({ className = "" }: BlogSearchFilterProps) {
 
   // 处理标签筛选
   const handleTagFilter = useCallback(
-    (tag: string) => {
-      setSelectedTag(tag)
+    (tag: string | null) => {
+      const normalizedTag = tag ?? ""
+      setSelectedTag(normalizedTag)
       const [sortBy, sortOrder] = selectedSort.split("-")
 
       const url = createBlogListUrl({
         q: query,
-        tag: tag,
+        tag: normalizedTag || undefined,
         sort: sortBy,
         order: sortOrder,
         page: 1,
@@ -127,6 +128,12 @@ export function BlogSearchFilter({ className = "" }: BlogSearchFilterProps) {
     setSelectedSort("publishedAt-desc")
     router.push("/blog")
   }, [router])
+
+  // URL 标签变化时同步状态，兼容侧边栏筛选
+  useEffect(() => {
+    const tagParam = searchParams.get("tag") || ""
+    setSelectedTag(tagParam)
+  }, [paramsKey, searchParams])
 
   // 响应防抖查询变化
   useEffect(() => {
@@ -220,36 +227,13 @@ export function BlogSearchFilter({ className = "" }: BlogSearchFilterProps) {
         <div className="space-y-4 pt-2">
           {/* 标签筛选 */}
           <div>
-            <h4 className="mb-2 text-sm font-medium">热门标签</h4>
-            <div className="flex flex-wrap gap-2">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => handleTagFilter("")}
-                className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                  !selectedTag
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-background hover:bg-muted"
-                }`}
-              >
-                全部
-              </motion.button>
-              {popularTags.map((tag) => (
-                <motion.button
-                  key={tag}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => handleTagFilter(tag)}
-                  className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                    selectedTag === tag
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background hover:bg-muted"
-                  }`}
-                >
-                  {tag}
-                </motion.button>
-              ))}
-            </div>
+            <TagFilter
+              className="bg-background border border-dashed shadow-none"
+              limit={popularTags?.length ?? 10}
+              initialTags={popularTags}
+              selectedTag={selectedTag || null}
+              onTagChange={handleTagFilter}
+            />
           </div>
         </div>
       </motion.div>
@@ -266,7 +250,9 @@ export function BlogSearchFilter({ className = "" }: BlogSearchFilterProps) {
             <span className="text-muted-foreground">活动筛选:</span>
             {query && (
               <span className="bg-primary/10 text-primary rounded px-2 py-1 text-xs">
-                搜索: "{query}"
+                搜索:&nbsp;&quot;
+                {query}
+                &quot;
               </span>
             )}
             {selectedTag && (

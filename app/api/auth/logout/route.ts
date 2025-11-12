@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { createRouteHandlerClient } from "@/lib/supabase"
+import { authLogger } from "@/lib/utils/logger"
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,10 +20,14 @@ export async function POST(request: NextRequest) {
     const { error } = await supabase.auth.signOut()
 
     if (error) {
-      console.error("Supabase 登出失败:", {
-        email: userEmail,
-        error: error.message,
-      })
+      authLogger.error(
+        "Supabase 登出失败",
+        {
+          email: userEmail,
+          module: "api/auth/logout",
+        },
+        error
+      )
 
       return NextResponse.json(
         {
@@ -51,7 +56,7 @@ export async function POST(request: NextRequest) {
       }
     )
   } catch (error) {
-    console.error("登出API异常:", error)
+    authLogger.error("登出 API 异常", { module: "api/auth/logout" }, error)
 
     return NextResponse.json(
       {

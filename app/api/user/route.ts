@@ -6,6 +6,7 @@
 import { createRouteHandlerClient } from "@/lib/supabase"
 import { prisma } from "@/lib/prisma"
 import { NextResponse } from "next/server"
+import { authLogger } from "@/lib/utils/logger"
 
 export async function GET() {
   try {
@@ -45,8 +46,14 @@ export async function GET() {
 
       // 如果用户不存在，自动创建用户记录（适用于首次OAuth登录）
       if (!user) {
-        console.log("用户不存在，自动创建用户记录:", authUser.id, "邮箱:", authUser.email)
-        console.log("用户元数据:", JSON.stringify(authUser.user_metadata, null, 2))
+        authLogger.info("用户不存在，自动创建用户记录", {
+          userId: authUser.id,
+          email: authUser.email,
+        })
+        authLogger.debug("用户元数据", {
+          userId: authUser.id,
+          metadata: authUser.user_metadata,
+        })
         user = await prisma.user.create({
           data: {
             id: authUser.id,
@@ -70,10 +77,10 @@ export async function GET() {
             lastLoginAt: true,
           },
         })
-        console.log("用户创建成功:", user.id)
+        authLogger.info("用户创建成功", { userId: user.id })
       }
     } catch (dbErrorCaught) {
-      console.error("数据库操作失败:", dbErrorCaught)
+      authLogger.error("获取用户信息时数据库操作失败", { userId: authUser.id }, dbErrorCaught)
       dbError = dbErrorCaught
 
       // 如果数据库连接失败，使用 Supabase 认证信息作为回退
@@ -89,7 +96,7 @@ export async function GET() {
         createdAt: new Date(),
         lastLoginAt: new Date(),
       }
-      console.warn("使用认证信息作为回退用户数据")
+      authLogger.warn("使用认证信息作为回退用户数据", { userId: authUser.id })
     }
 
     // 组合认证信息和业务信息
@@ -114,7 +121,7 @@ export async function GET() {
 
     return NextResponse.json({ user: userResponse })
   } catch (error) {
-    console.error("获取用户信息失败:", error)
+    authLogger.error("获取用户信息失败", {}, error)
     return NextResponse.json({ error: "服务器错误" }, { status: 500 })
   }
 }

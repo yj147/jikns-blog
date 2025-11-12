@@ -20,7 +20,8 @@
         "*.spec.tsx"
       ],
       "rules": {
-        "no-console": "off"
+        "no-console": "off",
+        "@next/next/no-img-element": "off"
       }
     }
   ]

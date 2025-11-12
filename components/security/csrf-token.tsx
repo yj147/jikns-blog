@@ -6,7 +6,12 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { CSRFProtection } from "@/lib/security"
+import {
+  ensureCsrfToken,
+  getStoredCsrfToken,
+  getCsrfHeaders as buildCsrfHeaders,
+  secureFetch as fetchWithCsrf,
+} from "@/lib/security/csrf-client"
 
 interface CSRFTokenProps {
   /**
@@ -27,26 +32,20 @@ export function CSRFToken({ hidden = true, className }: CSRFTokenProps) {
   const [token, setToken] = useState<string>("")
 
   useEffect(() => {
-    // 生成并设置 CSRF 令牌
-    const csrfToken = CSRFProtection.generateToken()
-    setToken(csrfToken)
+    let mounted = true
 
-    // 设置到头部以供 fetch 请求使用
-    if (typeof window !== "undefined") {
-      // 保存到 sessionStorage 供其他组件使用
-      sessionStorage.setItem("csrf-token", csrfToken)
+    ensureCsrfToken()
+      .then((csrf) => {
+        if (mounted) {
+          setToken(csrf)
+        }
+      })
+      .catch((error) => {
+        console.error("CSRF 令牌初始化失败:", error)
+      })
 
-      // 设置默认的 fetch 头部
-      const originalFetch = window.fetch
-      window.fetch = function (url, options = {}) {
-        return originalFetch(url, {
-          ...options,
-          headers: {
-            ...options.headers,
-            "X-CSRF-Token": csrfToken,
-          },
-        })
-      }
+    return () => {
+      mounted = false
     }
   }, [])
 
@@ -72,17 +71,24 @@ export function useCSRFToken() {
   const [token, setToken] = useState<string>("")
 
   useEffect(() => {
-    // 从 sessionStorage 获取令牌
-    if (typeof window !== "undefined") {
-      const storedToken = sessionStorage.getItem("csrf-token")
-      if (storedToken) {
-        setToken(storedToken)
-      } else {
-        // 生成新令牌
-        const newToken = CSRFProtection.generateToken()
-        sessionStorage.setItem("csrf-token", newToken)
-        setToken(newToken)
-      }
+    let mounted = true
+
+    const existing = getStoredCsrfToken()
+    if (existing) {
+      setToken(existing)
+      return
+    }
+
+    ensureCsrfToken()
+      .then((csrf) => {
+        if (mounted) setToken(csrf)
+      })
+      .catch((error) => {
+        console.error("获取 CSRF 令牌失败:", error)
+      })
+
+    return () => {
+      mounted = false
     }
   }, [])
 
@@ -92,32 +98,9 @@ export function useCSRFToken() {
 /**
  * 获取包含 CSRF 令牌的请求头
  */
-export function getCSRFHeaders(): HeadersInit {
-  let token = ""
-
-  if (typeof window !== "undefined") {
-    token = sessionStorage.getItem("csrf-token") || ""
-  }
-
-  return {
-    "X-CSRF-Token": token,
-  }
-}
+export const getCSRFHeaders = buildCsrfHeaders
 
 /**
  * 增强的 fetch 函数，自动添加 CSRF 令牌
  */
-export async function secureFetch(
-  url: RequestInfo | URL,
-  options: RequestInit = {}
-): Promise<Response> {
-  const csrfHeaders = getCSRFHeaders()
-
-  return fetch(url, {
-    ...options,
-    headers: {
-      ...options.headers,
-      ...csrfHeaders,
-    },
-  })
-}
+export const secureFetch = fetchWithCsrf

@@ -9,6 +9,7 @@ import { syncUserFromAuth, validateRedirectUrl } from "@/lib/auth"
 import { revalidateUserProfile } from "@/lib/actions/auth"
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
+import { authLogger } from "@/lib/utils/logger"
 
 // 防止重复处理授权码的简单缓存
 const processedCodes = new Set<string>()
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
   // 处理 OAuth 认证错误
   if (error) {
     const errorMsg = errorDescription || error
-    console.error("OAuth 认证错误:", { error, error_description: errorMsg })
+    authLogger.error("OAuth 认证错误", { error, error_description: errorMsg })
     return NextResponse.redirect(
       new URL(`/login?error=oauth_error&message=${encodeURIComponent(errorMsg)}`, requestUrl.origin)
     )
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest) {
       } = await supabase.auth.exchangeCodeForSession(code)
 
       if (exchangeError) {
-        console.error("授权码交换失败:", exchangeError)
+        authLogger.error("授权码交换失败", {}, exchangeError)
 
         // 特殊处理常见错误
         let errorMessage = "exchange_failed"
@@ -81,7 +82,7 @@ export async function GET(request: NextRequest) {
 
       if (session?.user) {
         // 用户认证成功，记录登录事件
-        console.log("用户认证成功:", {
+        authLogger.info("用户认证成功", {
           userId: session.user.id,
           email: session.user.email,
           provider: session.user.app_metadata?.provider,
@@ -98,7 +99,13 @@ export async function GET(request: NextRequest) {
           try {
             await revalidateUserProfile()
           } catch (revalidateError) {
-            console.warn("缓存刷新失败，但不影响登录:", revalidateError)
+            authLogger.warn("缓存刷新失败，但不影响登录", {
+              userId: session.user.id,
+              error:
+                revalidateError instanceof Error
+                  ? revalidateError.message
+                  : String(revalidateError),
+            })
           }
 
           // 验证重定向 URL 安全性
@@ -106,7 +113,7 @@ export async function GET(request: NextRequest) {
 
           return NextResponse.redirect(new URL(finalRedirect, requestUrl.origin))
         } catch (syncError) {
-          console.error("用户数据同步失败:", syncError)
+          authLogger.error("用户数据同步失败", { userId: session.user.id }, syncError)
 
           // 同步失败但认证成功，允许登录但显示警告
           const warningRedirect = validateRedirectUrl(redirectPath) ? redirectPath : "/"
@@ -115,11 +122,11 @@ export async function GET(request: NextRequest) {
           )
         }
       } else {
-        console.error("授权码交换成功但会话中没有用户信息")
+        authLogger.error("授权码交换成功但会话中没有用户信息")
         return NextResponse.redirect(new URL("/login?error=no_user_data", requestUrl.origin))
       }
     } catch (error) {
-      console.error("认证回调处理异常:", error)
+      authLogger.error("认证回调处理异常", {}, error)
       return NextResponse.redirect(
         new URL(
           `/login?error=callback_error&message=${encodeURIComponent(String(error))}`,
@@ -130,6 +137,6 @@ export async function GET(request: NextRequest) {
   }
 
   // 没有授权码或错误参数，可能是直接访问回调 URL
-  console.warn("认证回调缺少必要参数 (code 或 error)")
+  authLogger.warn("认证回调缺少必要参数 (code 或 error)")
   return NextResponse.redirect(new URL("/login?error=missing_callback_params", requestUrl.origin))
 }

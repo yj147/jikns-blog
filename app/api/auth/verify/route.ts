@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getCurrentUser, getAuthenticatedUser } from "@/lib/auth"
 import { RateLimiter } from "@/lib/security"
+import { authLogger } from "@/lib/utils/logger"
 
 export async function GET(request: NextRequest) {
   const clientIP =
@@ -14,7 +15,7 @@ export async function GET(request: NextRequest) {
   try {
     // 速率限制检查 - 每个IP每分钟最多50次验证请求
     if (!RateLimiter.checkRateLimit(`verify:${clientIP}`, 50, 60 * 1000)) {
-      console.warn(`会话验证速率限制触发，IP: ${clientIP}`)
+      authLogger.warn("会话验证速率限制触发", { clientIP })
       return NextResponse.json(
         {
           success: false,
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
     const { user: authUser, error: userError } = await getAuthenticatedUser()
 
     if (userError) {
-      console.error("获取认证用户失败:", userError)
+      authLogger.error("获取认证用户失败", { clientIP }, userError)
       return NextResponse.json(
         {
           success: false,
@@ -56,7 +57,10 @@ export async function GET(request: NextRequest) {
     const user = await getCurrentUser()
 
     if (!user) {
-      console.warn("认证用户存在但数据库中没有用户记录:", authUser.email)
+      authLogger.warn("认证用户存在但数据库中没有用户记录", {
+        email: authUser.email,
+        userId: authUser.id,
+      })
       return NextResponse.json(
         {
           success: false,
@@ -70,7 +74,7 @@ export async function GET(request: NextRequest) {
 
     // 检查用户状态
     if (user.status !== "ACTIVE") {
-      console.warn(`用户账户被封禁: ${user.email}`)
+      authLogger.warn("用户账户被封禁", { email: user.email, userId: user.id })
       return NextResponse.json(
         {
           success: false,
@@ -109,7 +113,7 @@ export async function GET(request: NextRequest) {
       { status: 200 }
     )
   } catch (error) {
-    console.error("会话验证API异常:", error)
+    authLogger.error("会话验证 API 异常", { clientIP }, error)
 
     return NextResponse.json(
       {

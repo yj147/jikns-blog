@@ -5,6 +5,8 @@
 
 import { getCurrentUser, getAuthenticatedUser } from "./auth"
 import type { User } from "./generated/prisma"
+import { AuthErrors, isAuthError } from "@/lib/error-handling/auth-error"
+import { logger } from "./utils/logger"
 
 // 权限缓存类型定义
 interface PermissionCacheEntry {
@@ -67,13 +69,13 @@ export async function requireAuth(): Promise<User> {
   const user = await getCachedUser()
 
   if (!user) {
-    throw new Error("用户未登录")
+    throw AuthErrors.unauthorized()
   }
 
   if (user.status !== "ACTIVE") {
     // 清除被封禁用户的缓存
     clearPermissionCache(user.id)
-    throw new Error("账户已被封禁")
+    throw AuthErrors.accountBanned({ userId: user.id })
   }
 
   return user
@@ -87,17 +89,17 @@ export async function requireAdmin(): Promise<User> {
   const user = await getCachedUser()
 
   if (!user) {
-    throw new Error("未登录用户")
-  }
-
-  if (user.role !== "ADMIN") {
-    throw new Error("需要管理员权限")
+    throw AuthErrors.unauthorized()
   }
 
   if (user.status !== "ACTIVE") {
     // 清除被封禁管理员的缓存
     clearPermissionCache(user.id)
-    throw new Error("账户已被封禁")
+    throw AuthErrors.accountBanned({ userId: user.id })
+  }
+
+  if (user.role !== "ADMIN") {
+    throw AuthErrors.forbidden("需要管理员权限", { userId: user.id })
   }
 
   return user
@@ -172,7 +174,7 @@ export async function canAccessResource(resource: string): Promise<boolean> {
     // 普通用户可以访问非管理员资源
     return !isAdminResource(resource)
   } catch (error) {
-    console.error("资源访问检查失败:", error)
+    logger.error("资源访问检查失败", { resource }, error)
     return false
   }
 }
@@ -317,6 +319,29 @@ export async function validateApiPermissions(
       return { success: true, user }
     }
   } catch (error) {
+    if (isAuthError(error)) {
+      if (error.code === "UNAUTHORIZED") {
+        return {
+          success: false,
+          error: createPermissionError("AUTHENTICATION_REQUIRED"),
+        }
+      }
+
+      if (error.code === "FORBIDDEN") {
+        return {
+          success: false,
+          error: createPermissionError("INSUFFICIENT_PERMISSIONS"),
+        }
+      }
+
+      if (error.code === "ACCOUNT_BANNED") {
+        return {
+          success: false,
+          error: createPermissionError("ACCOUNT_BANNED"),
+        }
+      }
+    }
+
     const message = (error as Error).message
 
     if (message === "用户未登录" || message === "未登录用户") {

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { validateApiPermissions } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
+import { authLogger } from "@/lib/utils/logger"
 
 /**
  * 获取当前用户资料
@@ -62,7 +63,7 @@ export async function GET(request: NextRequest) {
       message: "用户资料获取成功",
     })
   } catch (error) {
-    console.error("获取用户资料失败:", error)
+    authLogger.error("获取用户资料失败", { module: "api/user/profile", userId: user?.id }, error)
     return NextResponse.json(
       {
         error: "获取用户资料失败",
@@ -208,7 +209,7 @@ export async function PUT(request: NextRequest) {
       message: "用户资料更新成功",
     })
   } catch (error) {
-    console.error("更新用户资料失败:", error)
+    authLogger.error("更新用户资料失败", { module: "api/user/profile", userId: user?.id }, error)
     return NextResponse.json(
       {
         error: "更新用户资料失败",

@@ -6,9 +6,9 @@
 "use client"
 
 import { createContext, useContext, useEffect, useState } from "react"
-import { createClient } from "@/lib/supabase"
+import { logger } from "@/lib/utils/logger"
 import { useRouter } from "next/navigation"
-import type { User as SupabaseUser, Session } from "@supabase/supabase-js"
+import type { User as SupabaseUser, Session, SupabaseClient } from "@supabase/supabase-js"
 import type { User as DatabaseUser } from "@/lib/generated/prisma"
 
 interface AuthContextType {
@@ -17,6 +17,7 @@ interface AuthContextType {
   loading: boolean
   isLoading: boolean
   isAdmin: boolean
+  supabase: SupabaseClient | null
   signOut: () => Promise<void>
 }
 
@@ -26,9 +27,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<DatabaseUser | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  const [supabase, setSupabase] = useState<SupabaseClient | null>(null)
   const router = useRouter()
 
-  const supabase = createClient()
+  useEffect(() => {
+    let isMounted = true
+
+    const initSupabase = async () => {
+      try {
+        const { createClient } = await import("@/lib/supabase")
+        if (!isMounted) return
+        setSupabase(createClient())
+      } catch (error) {
+        logger.error("Supabase 客户端初始化失败", { module: "AuthProvider.init" }, error)
+        if (isMounted) {
+          setSupabase(null)
+          setLoading(false)
+        }
+      }
+    }
+
+    initSupabase()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const isAdmin = user?.role === "ADMIN" && user?.status === "ACTIVE"
 
@@ -46,19 +70,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { user: data } = await response.json()
         return data
       } else {
-        // API 返回错误状态，但不是网络错误
-        console.warn("用户未认证或API返回错误:", response.status)
+        logger.warn("用户未认证或 API 返回错误", {
+          module: "AuthProvider.fetchUserProfile",
+          status: response.status,
+        })
         return null
       }
     } catch (error) {
-      console.error("获取用户资料失败:", error)
+      logger.error("获取用户资料失败", { module: "AuthProvider.fetchUserProfile" }, error)
       return null
     }
   }
 
   useEffect(() => {
+    if (!supabase) return
+
+    let isMounted = true
+    let subscription: { unsubscribe: () => void } | null = null
+
     // 获取初始会话状态
     const getInitialSession = async () => {
+      setLoading(true)
       try {
         const {
           data: { session },
@@ -66,7 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } = await supabase.auth.getSession()
 
         if (error) {
-          console.error("获取初始会话失败:", error)
+          logger.error("获取初始会话失败", { module: "AuthProvider.getInitialSession" }, error)
         } else {
           setSession(session)
           if (session?.user) {
@@ -77,47 +109,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } catch (error) {
-        console.error("初始会话查询异常:", error)
+        logger.error("初始会话查询异常", { module: "AuthProvider.getInitialSession" }, error)
       } finally {
-        setLoading(false)
+        if (isMounted) {
+          setLoading(false)
+        }
       }
     }
 
     getInitialSession()
 
     // 监听认证状态变化
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setSession(session)
-      if (session?.user) {
-        const dbUser = await fetchUserProfile(session.user)
+    const { data } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
+      if (!isMounted) return
+
+      setSession(nextSession)
+      if (nextSession?.user) {
+        const dbUser = await fetchUserProfile(nextSession.user)
         setUser(dbUser)
       } else {
         setUser(null)
       }
       setLoading(false)
 
-      // 根据认证状态变化刷新路由
-      if (event === "SIGNED_IN") {
-        router.refresh()
-      } else if (event === "SIGNED_OUT") {
+      if (event === "SIGNED_IN" || event === "SIGNED_OUT") {
         router.refresh()
       }
     })
+    subscription = data.subscription
 
     return () => {
-      subscription.unsubscribe()
+      isMounted = false
+      subscription?.unsubscribe()
     }
-  }, [supabase.auth, router])
+  }, [router, supabase])
 
   const signOut = async () => {
+    if (!supabase) return
     try {
       setLoading(true)
       const { error } = await supabase.auth.signOut()
 
       if (error) {
-        console.error("登出错误:", error)
+        logger.error("登出错误", { module: "AuthProvider.signOut" }, error)
         throw error
       }
 
@@ -125,7 +159,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       router.push("/")
       router.refresh()
     } catch (error) {
-      console.error("登出异常:", error)
+      logger.error("登出异常", { module: "AuthProvider.signOut" }, error)
       throw error
     } finally {
       setLoading(false)
@@ -138,6 +172,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loading,
     isLoading: loading, // 兼容现有组件
     isAdmin,
+    supabase,
     signOut,
   }
 

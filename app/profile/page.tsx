@@ -1,4 +1,3 @@
-import { Navigation } from "@/components/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -6,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { getCurrentUser } from "@/lib/actions/auth"
+import { logger } from "@/lib/utils/logger"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import {
@@ -79,11 +79,14 @@ export default async function ProfilePage() {
       socialLinks = user.socialLinks as any
     }
   } catch (e) {
-    console.warn("解析社交链接失败:", e)
+    logger.warn("解析社交链接失败", {
+      module: "ProfilePage",
+      userId: user.id,
+      error: e instanceof Error ? e.message : String(e),
+    })
   }
   return (
     <div className="bg-background min-h-screen">
-      <Navigation />
 
       <div className="container mx-auto px-4 py-8">
         <div className="grid gap-8 lg:grid-cols-4">

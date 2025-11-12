@@ -12,6 +12,8 @@ const mockDatabase = {
   users: new Map<string, TestUser>(),
   posts: new Map<string, any>(),
   comments: new Map<string, any>(),
+  activities: new Map<string, any>(),
+  tags: new Map<string, any>(),
 }
 
 // 初始化测试用户数据
@@ -322,12 +324,114 @@ const mockCommentOperations = {
 }
 
 /**
+ * Mock Activity 模型操作
+ */
+const mockActivityOperations = {
+  findMany: createMockPrismaMethod(async ({ where = {}, take, skip }: any = {}) => {
+    let activities = [...mockDatabase.activities.values()]
+
+    // 应用筛选条件
+    if (where.deletedAt !== undefined) {
+      activities = activities.filter((activity: any) => activity.deletedAt === where.deletedAt)
+    }
+    if (where.authorId) {
+      activities = activities.filter((activity: any) => activity.authorId === where.authorId)
+    }
+
+    // 应用分页
+    if (skip) {
+      activities = activities.slice(skip)
+    }
+    if (take) {
+      activities = activities.slice(0, take)
+    }
+
+    return activities
+  }),
+
+  count: createMockPrismaMethod(async ({ where = {} }: any = {}) => {
+    let activities = [...mockDatabase.activities.values()]
+
+    if (where.deletedAt !== undefined) {
+      activities = activities.filter((activity: any) => activity.deletedAt === where.deletedAt)
+    }
+
+    return activities.length
+  }),
+}
+
+/**
+ * Mock Tag 模型操作
+ */
+const mockTagOperations = {
+  findMany: createMockPrismaMethod(async ({ where = {}, take, skip }: any = {}) => {
+    let tags = [...mockDatabase.tags.values()]
+
+    // 应用筛选条件
+    if (where.OR) {
+      tags = tags.filter((tag: any) => {
+        return where.OR.some((condition: any) => {
+          if (condition.name) {
+            return tag.name.includes(condition.name.contains || condition.name)
+          }
+          if (condition.description) {
+            return tag.description?.includes(
+              condition.description.contains || condition.description
+            )
+          }
+          return false
+        })
+      })
+    }
+
+    // 应用分页
+    if (skip) {
+      tags = tags.slice(skip)
+    }
+    if (take) {
+      tags = tags.slice(0, take)
+    }
+
+    return tags
+  }),
+
+  count: createMockPrismaMethod(async ({ where = {} }: any = {}) => {
+    let tags = [...mockDatabase.tags.values()]
+
+    if (where.OR) {
+      tags = tags.filter((tag: any) => {
+        return where.OR.some((condition: any) => {
+          if (condition.name) {
+            return tag.name.includes(condition.name.contains || condition.name)
+          }
+          if (condition.description) {
+            return tag.description?.includes(
+              condition.description.contains || condition.description
+            )
+          }
+          return false
+        })
+      })
+    }
+
+    return tags.length
+  }),
+}
+
+/**
  * Mock Prisma 客户端
  */
 export const mockPrisma = {
   user: mockUserOperations,
+  users: mockUserOperations,
   post: mockPostOperations,
+  posts: mockPostOperations,
   comment: mockCommentOperations,
+  comments: mockCommentOperations,
+  activity: mockActivityOperations,
+  activities: mockActivityOperations,
+  tag: mockTagOperations,
+  tags: mockTagOperations,
 
   // 事务支持
   $transaction: vi.fn(async (operations: any[]) => {
@@ -364,6 +468,8 @@ export function resetPrismaMocks() {
   mockDatabase.users.clear()
   mockDatabase.posts.clear()
   mockDatabase.comments.clear()
+  mockDatabase.activities.clear()
+  mockDatabase.tags.clear()
 
   // 重新初始化测试用户
   Object.values(TEST_USERS).forEach((user) => {

@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Navigation } from "@/components/navigation"
 import { PostList } from "@/components/admin/post-list"
 import { type Post } from "@/components/admin/post-card"
 import {
@@ -13,6 +12,7 @@ import {
   unpublishPost,
 } from "@/lib/actions/posts"
 import { toast } from "sonner"
+import { logger } from "@/lib/utils/logger"
 
 // Mock posts data - 将来会被实际 API 调用替换
 const mockPosts: Post[] = [
@@ -141,7 +141,7 @@ export default function AdminBlogPage() {
           setPosts(mockPosts)
         }
       } catch (error) {
-        console.error("获取文章列表出错:", error)
+        logger.error("获取文章列表出错", { module: "app/admin/blog/page" }, error)
         toast.error("获取文章列表失败")
         // 使用 mock 数据作为后备
         setPosts(mockPosts)
@@ -170,7 +170,7 @@ export default function AdminBlogPage() {
         toast.error("删除文章失败: " + result.error?.message)
       }
     } catch (error) {
-      console.error("删除文章失败:", error)
+      logger.error("删除文章失败", { module: "app/admin/blog/page", postId: post.id }, error)
       toast.error("删除文章失败")
     }
   }
@@ -191,7 +191,7 @@ export default function AdminBlogPage() {
         toast.error("切换置顶状态失败: " + result.error?.message)
       }
     } catch (error) {
-      console.error("切换置顶状态失败:", error)
+      logger.error("切换置顶状态失败", { module: "app/admin/blog/page", postId: post.id }, error)
       toast.error("切换置顶状态失败")
     }
   }
@@ -210,7 +210,7 @@ export default function AdminBlogPage() {
         toast.error("切换发布状态失败: " + result.error?.message)
       }
     } catch (error) {
-      console.error("切换发布状态失败:", error)
+      logger.error("切换发布状态失败", { module: "app/admin/blog/page", postId: post.id }, error)
       toast.error("切换发布状态失败")
     }
   }
@@ -222,7 +222,6 @@ export default function AdminBlogPage() {
 
   return (
     <div className="bg-background min-h-screen">
-      <Navigation />
 
       <div className="container mx-auto px-4 py-8">
         <PostList

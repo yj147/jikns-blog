@@ -68,13 +68,15 @@ USING (
 );
 
 -- 4. 确保 RLS 已启用
-ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
-ALTER TABLE storage.buckets ENABLE ROW LEVEL SECURITY;
+-- 注意：在 Supabase 本地环境中，storage.objects 和 storage.buckets 的 RLS 由系统管理
+-- 以下语句在本地环境中会导致权限错误，因此注释掉
+-- ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE storage.buckets ENABLE ROW LEVEL SECURITY;
 
 -- 5. 创建 bucket 访问策略
-CREATE POLICY IF NOT EXISTS "Enable public read access on post-images bucket"
+CREATE POLICY "Enable public read access on post-images bucket"
 ON storage.buckets
-FOR SELECT 
+FOR SELECT
 TO public
 USING (id = 'post-images');
 
@@ -88,17 +90,17 @@ GRANT SELECT ON storage.buckets TO anon;
 -- 7. 创建辅助函数用于调试 (可选)
 CREATE OR REPLACE FUNCTION debug_storage_access()
 RETURNS TABLE(
-  current_role text,
-  current_user_id text,
+  user_role text,
+  user_id text,
   bucket_policies text[],
   object_policies text[]
-) 
+)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 BEGIN
-  RETURN QUERY 
-  SELECT 
+  RETURN QUERY
+  SELECT
     auth.role()::text,
     auth.uid()::text,
     ARRAY(SELECT policyname FROM pg_policies WHERE schemaname = 'storage' AND tablename = 'buckets'),

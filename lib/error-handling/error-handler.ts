@@ -16,6 +16,7 @@ import ErrorFactory from "./error-factory"
 import RetryManager from "./retry-manager"
 import ErrorLogger from "./error-logger"
 import { toast } from "@/hooks/use-toast"
+import { logger } from "@/lib/utils/logger"
 
 type ErrorEventListener = (error: AppError) => void
 
@@ -106,7 +107,7 @@ class ErrorHandler {
 
       return result
     } catch (handlingError) {
-      console.error("错误处理器本身发生错误:", handlingError)
+      logger.error("错误处理器本身发生错误", {}, handlingError)
       return {
         handled: false,
         logged: false,
@@ -237,7 +238,7 @@ class ErrorHandler {
       try {
         listener(error)
       } catch (listenerError) {
-        console.error("错误监听器执行失败:", listenerError)
+        logger.error("错误监听器执行失败", {}, listenerError)
       }
     })
   }

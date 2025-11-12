@@ -6,115 +6,92 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { redirect } from "next/navigation"
-import { requireAuth, requireAdmin } from "@/lib/permissions"
+import { requireAuth } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
+import { logger } from "@/lib/utils/logger"
+import { randomUUID } from "node:crypto"
+import {
+  createPost as createPostAction,
+  updatePost as updatePostAction,
+  deletePost as deletePostAction,
+} from "@/lib/actions/posts"
+
+type UpdatePostRequest = Parameters<typeof updatePostAction>[0]
 
 /**
  * 创建新文章（管理员专用）
  */
 export async function createPost(formData: FormData) {
   try {
-    // 验证管理员权限
-    const admin = await requireAdmin()
-
-    // 提取表单数据
-    const title = formData.get("title")?.toString()
-    const content = formData.get("content")?.toString()
+    const title = formData.get("title")?.toString() ?? ""
+    const content = formData.get("content")?.toString() ?? ""
     const excerpt = formData.get("excerpt")?.toString()
-    const slug = formData.get("slug")?.toString()
-    const published = formData.get("published") === "true"
+    const canonicalUrl = formData.get("canonicalUrl")?.toString()
+    const seoTitle = formData.get("seoTitle")?.toString()
+    const seoDescription = formData.get("seoDescription")?.toString()
+    const coverImage = formData.get("coverImage")?.toString()
     const seriesId = formData.get("seriesId")?.toString()
-    const tags = formData.get("tags")?.toString()
+    const published = formData.get("published") === "true"
 
-    // 输入验证
-    if (!title || title.trim().length < 3) {
-      throw new Error("文章标题至少需要3个字符")
-    }
+    const rawTags = formData.get("tags")
+    const tagNames =
+      rawTags !== null
+        ? rawTags
+            .toString()
+            .split(",")
+            .map((tag) => tag.trim())
+            .filter(Boolean)
+        : undefined
 
-    if (!content || content.trim().length < 10) {
-      throw new Error("文章内容至少需要10个字符")
-    }
-
-    if (!slug || slug.trim().length < 3) {
-      throw new Error("文章URL至少需要3个字符")
-    }
-
-    // 验证slug格式（只允许字母、数字、连字符）
-    if (!/^[a-z0-9-]+$/.test(slug.trim())) {
-      throw new Error("URL只能包含小写字母、数字和连字符")
-    }
-
-    // 检查slug是否已存在
-    const existingPost = await prisma.post.findUnique({
-      where: { slug: slug.trim() },
+    const result = await createPostAction({
+      title,
+      content,
+      excerpt: excerpt?.trim() || undefined,
+      published,
+      canonicalUrl: canonicalUrl?.trim() || undefined,
+      seoTitle: seoTitle?.trim() || undefined,
+      seoDescription: seoDescription?.trim() || undefined,
+      coverImage: coverImage?.trim() || undefined,
+      seriesId: seriesId?.trim() || undefined,
+      ...(tagNames !== undefined ? { tagNames } : {}),
     })
 
-    if (existingPost) {
-      throw new Error("此URL已被使用，请选择其他URL")
-    }
-
-    // 创建文章
-    const post = await prisma.post.create({
-      data: {
-        title: title.trim(),
-        content: content.trim(),
-        excerpt: excerpt?.trim() || null,
-        slug: slug.trim(),
-        published,
-        publishedAt: published ? new Date() : null,
-        authorId: admin.id,
-        seriesId: seriesId || null,
-      },
-    })
-
-    // 处理标签
-    if (tags) {
-      const tagNames = tags
-        .split(",")
-        .map((tag) => tag.trim())
-        .filter(Boolean)
-
-      for (const tagName of tagNames) {
-        // 创建或获取标签
-        const tag = await prisma.tag.upsert({
-          where: { slug: tagName.toLowerCase().replace(/\s+/g, "-") },
-          update: {
-            postsCount: {
-              increment: 1,
-            },
-          },
-          create: {
-            name: tagName,
-            slug: tagName.toLowerCase().replace(/\s+/g, "-"),
-            postsCount: 1,
-          },
-        })
-
-        // 关联文章和标签
-        await prisma.postTag.create({
-          data: {
-            postId: post.id,
-            tagId: tag.id,
-          },
-        })
+    if (!result.success || !result.data) {
+      return {
+        success: false,
+        error: result.error?.message ?? "创建文章失败",
       }
     }
 
-    // 重新验证相关页面
-    revalidatePath("/admin/posts")
-    revalidatePath("/blog")
-    if (published) {
-      revalidatePath(`/blog/${post.slug}`)
+    let finalSlug = result.data.slug
+    const manualSlug = formData.get("slug")?.toString()?.trim()
+    if (manualSlug && manualSlug !== result.data.slug) {
+      const updateResult = await updatePostAction({
+        id: result.data.id,
+        slug: manualSlug,
+      })
+
+      if (!updateResult.success || !updateResult.data) {
+        return {
+          success: false,
+          error: updateResult.error?.message ?? "创建文章失败",
+        }
+      }
+
+      finalSlug = updateResult.data.slug
     }
 
     return {
       success: true,
-      data: { postId: post.id, slug: post.slug },
-      message: published ? "文章发布成功" : "文章草稿保存成功",
+      data: { postId: result.data.id, slug: finalSlug },
+      message: result.data.published ? "文章发布成功" : "文章草稿保存成功",
     }
   } catch (error) {
-    console.error("创建文章失败:", error)
+    logger.error(
+      "创建文章失败",
+      { module: "app/actions/post-actions", action: "createPost" },
+      error
+    )
     return {
       success: false,
       error: error instanceof Error ? error.message : "创建文章失败",
@@ -127,68 +104,86 @@ export async function createPost(formData: FormData) {
  */
 export async function updatePost(postId: string, formData: FormData) {
   try {
-    // 验证管理员权限
-    await requireAdmin()
+    const updatePayload: UpdatePostRequest = { id: postId }
 
-    // 验证文章存在
-    const existingPost = await prisma.post.findUnique({
-      where: { id: postId },
-    })
-
-    if (!existingPost) {
-      throw new Error("文章不存在")
+    const title = formData.get("title")
+    if (title !== null) {
+      updatePayload.title = title.toString()
     }
 
-    // 提取表单数据
-    const title = formData.get("title")?.toString()
-    const content = formData.get("content")?.toString()
-    const excerpt = formData.get("excerpt")?.toString()
-    const published = formData.get("published") === "true"
-    const isPinned = formData.get("isPinned") === "true"
-
-    // 输入验证
-    if (!title || title.trim().length < 3) {
-      throw new Error("文章标题至少需要3个字符")
+    const content = formData.get("content")
+    if (content !== null) {
+      updatePayload.content = content.toString()
     }
 
-    if (!content || content.trim().length < 10) {
-      throw new Error("文章内容至少需要10个字符")
+    const excerpt = formData.get("excerpt")
+    if (excerpt !== null) {
+      updatePayload.excerpt = excerpt.toString()
     }
 
-    // 更新数据
-    const updateData: any = {
-      title: title.trim(),
-      content: content.trim(),
-      excerpt: excerpt?.trim() || null,
-      published,
-      isPinned,
+    const slug = formData.get("slug")
+    if (slug !== null) {
+      updatePayload.slug = slug.toString()
     }
 
-    // 如果发布状态改变，更新发布时间
-    if (published && !existingPost.published) {
-      updateData.publishedAt = new Date()
-    } else if (!published && existingPost.published) {
-      updateData.publishedAt = null
+    const canonicalUrl = formData.get("canonicalUrl")
+    if (canonicalUrl !== null) {
+      updatePayload.canonicalUrl = canonicalUrl.toString()
     }
 
-    // 执行更新
-    const updatedPost = await prisma.post.update({
-      where: { id: postId },
-      data: updateData,
-    })
+    const seoTitle = formData.get("seoTitle")
+    if (seoTitle !== null) {
+      updatePayload.seoTitle = seoTitle.toString()
+    }
 
-    // 重新验证相关页面
-    revalidatePath("/admin/posts")
-    revalidatePath("/blog")
-    revalidatePath(`/blog/${updatedPost.slug}`)
+    const seoDescription = formData.get("seoDescription")
+    if (seoDescription !== null) {
+      updatePayload.seoDescription = seoDescription.toString()
+    }
+
+    const coverImage = formData.get("coverImage")
+    if (coverImage !== null) {
+      updatePayload.coverImage = coverImage.toString()
+    }
+
+    const seriesId = formData.get("seriesId")
+    if (seriesId !== null) {
+      updatePayload.seriesId = seriesId.toString()
+    }
+
+    if (formData.has("published")) {
+      updatePayload.published = formData.get("published") === "true"
+    }
+
+    const rawTags = formData.get("tags")
+    if (rawTags !== null) {
+      updatePayload.tagNames = rawTags
+        .toString()
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+    }
+
+    const result = await updatePostAction(updatePayload)
+
+    if (!result.success || !result.data) {
+      return {
+        success: false,
+        error: result.error?.message ?? "更新文章失败",
+      }
+    }
 
     return {
       success: true,
-      data: { postId: updatedPost.id, slug: updatedPost.slug },
+      data: { postId: result.data.id, slug: result.data.slug },
       message: "文章更新成功",
     }
   } catch (error) {
-    console.error("更新文章失败:", error)
+    logger.error(
+      "更新文章失败",
+      { module: "app/actions/post-actions", action: "updatePost", postId },
+      error
+    )
     return {
       success: false,
       error: error instanceof Error ? error.message : "更新文章失败",
@@ -201,52 +196,25 @@ export async function updatePost(postId: string, formData: FormData) {
  */
 export async function deletePost(postId: string) {
   try {
-    // 验证管理员权限
-    await requireAdmin()
+    const result = await deletePostAction(postId)
 
-    // 验证文章存在
-    const existingPost = await prisma.post.findUnique({
-      where: { id: postId },
-      include: {
-        tags: {
-          include: {
-            tag: true,
-          },
-        },
-      },
-    })
-
-    if (!existingPost) {
-      throw new Error("文章不存在")
+    if (!result.success || !result.data) {
+      return {
+        success: false,
+        error: result.error?.message ?? "删除文章失败",
+      }
     }
-
-    // 删除文章（级联删除相关数据）
-    await prisma.post.delete({
-      where: { id: postId },
-    })
-
-    // 更新标签使用计数
-    for (const postTag of existingPost.tags) {
-      await prisma.tag.update({
-        where: { id: postTag.tag.id },
-        data: {
-          postsCount: {
-            decrement: 1,
-          },
-        },
-      })
-    }
-
-    // 重新验证相关页面
-    revalidatePath("/admin/posts")
-    revalidatePath("/blog")
 
     return {
       success: true,
-      message: "文章删除成功",
+      message: result.data.message ?? "文章删除成功",
     }
   } catch (error) {
-    console.error("删除文章失败:", error)
+    logger.error(
+      "删除文章失败",
+      { module: "app/actions/post-actions", action: "deletePost" },
+      error
+    )
     return {
       success: false,
       error: error instanceof Error ? error.message : "删除文章失败",
@@ -291,6 +259,7 @@ export async function bookmarkPost(postId: string) {
     // 创建收藏记录
     await prisma.bookmark.create({
       data: {
+        id: randomUUID(),
         userId: user.id,
         postId: postId,
       },
@@ -305,7 +274,11 @@ export async function bookmarkPost(postId: string) {
       message: "收藏成功",
     }
   } catch (error) {
-    console.error("收藏文章失败:", error)
+    logger.error(
+      "收藏文章失败",
+      { module: "app/actions/post-actions", action: "bookmarkPost" },
+      error
+    )
     return {
       success: false,
       error: error instanceof Error ? error.message : "收藏失败",
@@ -361,7 +334,11 @@ export async function unbookmarkPost(postId: string) {
       message: "取消收藏成功",
     }
   } catch (error) {
-    console.error("取消收藏失败:", error)
+    logger.error(
+      "取消收藏失败",
+      { module: "app/actions/post-actions", action: "removeBookmark" },
+      error
+    )
     return {
       success: false,
       error: error instanceof Error ? error.message : "取消收藏失败",
@@ -419,6 +396,7 @@ export async function likePost(postId: string) {
       // 创建点赞记录
       await prisma.like.create({
         data: {
+          id: randomUUID(),
           authorId: user.id,
           postId: postId,
         },
@@ -431,7 +409,11 @@ export async function likePost(postId: string) {
       }
     }
   } catch (error) {
-    console.error("点赞操作失败:", error)
+    logger.error(
+      "点赞操作失败",
+      { module: "app/actions/post-actions", action: "toggleLike", postId },
+      error
+    )
     return {
       success: false,
       error: error instanceof Error ? error.message : "点赞操作失败",

@@ -3,6 +3,8 @@
  * Phase 4.1 安全性增强 - 统一错误处理机制
  */
 
+import { logger } from "./utils/logger"
+
 export enum AuthErrorType {
   SESSION_EXPIRED = "SESSION_EXPIRED",
   TOKEN_INVALID = "TOKEN_INVALID",
@@ -115,7 +117,7 @@ export class ErrorHandler {
       details: error.details,
     }
 
-    console.error("错误记录:", logData)
+    logger.error("错误记录", logData)
 
     // 在生产环境中可以发送到日志服务
     if (process.env.NODE_ENV === "production") {

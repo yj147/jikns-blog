@@ -3,10 +3,11 @@
  * Phase 5: 前端错误处理与用户体验优化
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { withApiSecurity, createSuccessResponse } from '@/lib/security/api-security'
-import { z } from 'zod'
+import { NextRequest, NextResponse } from "next/server"
+import { createServerClient } from "@supabase/ssr"
+import { withApiSecurity, createSuccessResponse } from "@/lib/security/api-security"
+import { z } from "zod"
+import { logger } from "@/lib/utils/logger"
 
 // 日志数据结构验证
 const logEntrySchema = z.object({
@@ -115,33 +116,40 @@ export async function POST(request: NextRequest) {
         // 注意：这里需要根据实际的数据库表结构调整
         try {
           const { error: insertError } = await supabase
-            .from('error_logs')
+            .from("error_logs")
             .insert(sanitizedLogs)
 
           if (insertError) {
-            console.error('插入错误日志失败:', insertError)
+            logger.error(
+              "插入错误日志失败",
+              { module: "api/logs/errors", count: sanitizedLogs.length },
+              insertError
+            )
             // 不阻塞响应，记录到控制台即可
           }
         } catch (dbError) {
-          console.error('数据库操作错误:', dbError)
+          logger.error("错误日志数据库操作失败", { module: "api/logs/errors" }, dbError)
           // 在开发环境中，没有数据库表时，只记录到控制台
         }
 
         // 记录到控制台（开发环境）
-        if (process.env.NODE_ENV === 'development') {
-          console.group(`前端错误日志 (${logs.length} 条)`)
+        if (process.env.NODE_ENV === "development") {
           logs.forEach((log, index) => {
-            console.group(`日志 ${index + 1}: ${log.error.type} - ${log.error.severity}`)
-            if (log.error.details) {
-            }
-            console.groupEnd()
+            logger.debug("前端错误日志采集", {
+              module: "api/logs/errors",
+              index: index + 1,
+              total: logs.length,
+              type: log.error.type,
+              severity: log.error.severity,
+              path: log.error.context?.path ?? log.url,
+              message: log.error.message,
+            })
           })
-          console.groupEnd()
         }
 
         // 返回成功响应
         return createSuccessResponse({
-          message: '日志上传成功',
+          message: "日志上传成功",
           data: {
             processed: logs.length,
             timestamp: new Date().toISOString()
@@ -149,13 +157,13 @@ export async function POST(request: NextRequest) {
         })
 
       } catch (error) {
-        console.error('处理错误日志失败:', error)
-        
+        logger.error("处理错误日志失败", { module: "api/logs/errors" }, error)
+
         if (error instanceof z.ZodError) {
           return NextResponse.json({
             error: true,
-            code: 'VALIDATION_ERROR',
-            message: '日志数据格式错误',
+            code: "VALIDATION_ERROR",
+            message: "日志数据格式错误",
             details: error.errors,
             timestamp: Date.now()
           }, { status: 400 })
@@ -163,8 +171,8 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
           error: true,
-          code: 'INTERNAL_ERROR',
-          message: '内部服务器错误',
+          code: "INTERNAL_ERROR",
+          message: "内部服务器错误",
           timestamp: Date.now()
         }, { status: 500 })
       }
@@ -246,7 +254,7 @@ export async function GET(request: NextRequest) {
         })
 
       } catch (error) {
-        console.error('查询错误日志失败:', error)
+        logger.error("查询错误日志失败", { module: "api/logs/errors" }, error)
 
         return NextResponse.json({
           error: true,

@@ -6,10 +6,95 @@
  */
 
 import { revalidatePath, revalidateTag } from "next/cache"
+import { revalidateArchiveCache } from "@/lib/actions/archive-cache"
 import { prisma } from "@/lib/prisma"
 import { requireAuth, requireAdmin } from "@/lib/auth"
+import { recalculateTagCounts, syncPostTags } from "@/lib/repos/tag-repo"
 import { validateSlug } from "@/lib/utils/slug"
 import { createUniqueSmartSlug } from "@/lib/utils/slug-english"
+import { logger } from "@/lib/utils/logger"
+import { AuditEventType, auditLogger } from "@/lib/audit-log"
+import { getServerContext } from "@/lib/server-context"
+
+function resolveErrorCode(error: unknown, fallback: string): string {
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase()
+
+    if (
+      message.includes("至少") ||
+      message.includes("不能超过") ||
+      message.includes("格式不正确") ||
+      message.includes("请提供有效") ||
+      message.includes("不能为空") ||
+      message.includes("重复提交") ||
+      message.includes("长度")
+    ) {
+      return "VALIDATION_ERROR"
+    }
+
+    if (
+      message.includes("已被使用") ||
+      message.includes("已经发布") ||
+      message.includes("尚未发布")
+    ) {
+      return "CONFLICT"
+    }
+
+    if (message.includes("不存在")) {
+      return "NOT_FOUND"
+    }
+
+    if (message.includes("forbidden") || message.includes("权限") || message.includes("未授权")) {
+      return "FORBIDDEN"
+    }
+
+    if (message.includes("未登录") || message.includes("请登录")) {
+      return "AUTHENTICATION_REQUIRED"
+    }
+  }
+
+  return fallback
+}
+
+type PostAuditAction =
+  | "POST_CREATE"
+  | "POST_UPDATE"
+  | "POST_DELETE"
+  | "POST_BULK_DELETE"
+  | "POST_PUBLISH"
+  | "POST_UNPUBLISH"
+  | "POST_TOGGLE_PIN"
+
+async function recordPostAudit(params: {
+  action: PostAuditAction
+  success: boolean
+  adminId?: string
+  postId?: string
+  errorCode?: string
+  errorMessage?: string
+}): Promise<void> {
+  const context = getServerContext()
+  const details =
+    params.errorCode !== undefined
+      ? {
+          errorCode: params.errorCode,
+        }
+      : undefined
+
+  await auditLogger.logEvent({
+    eventType: AuditEventType.ADMIN_ACTION,
+    action: params.action,
+    resource: params.postId,
+    userId: params.adminId,
+    success: params.success,
+    details,
+    errorMessage: params.errorMessage,
+    severity: params.success ? "LOW" : "MEDIUM",
+    requestId: context.requestId,
+    ipAddress: context.ipAddress,
+    userAgent: context.userAgent,
+  })
+}
 
 // ============================================================================
 // 类型定义 (内联定义避免导出类型冲突)
@@ -154,9 +239,10 @@ interface PaginatedApiResponse<T> extends ApiResponse<T[]> {
  * 创建文章 Server Action
  */
 export async function createPost(data: CreatePostRequest): Promise<ApiResponse<PostResponse>> {
+  let admin: { id: string } | null = null
   try {
     // 验证管理员权限
-    const admin = await requireAdmin()
+    admin = await requireAdmin()
 
     // 增强的输入验证
     const trimmedTitle = data.title?.trim() || ""
@@ -213,17 +299,15 @@ export async function createPost(data: CreatePostRequest): Promise<ApiResponse<P
       60
     )
 
-    // 处理标签
-    let processedTags: string[] = []
-    if (data.tagNames && data.tagNames.length > 0) {
-      processedTags = data.tagNames
-        .map((tag) => tag.trim())
-        .filter((tag) => tag.length > 0)
-        .slice(0, 10) // 限制最多10个标签
+    const incomingTagNames = Array.isArray(data.tagNames) ? data.tagNames : []
+
+    if (!admin) {
+      throw new Error("管理员身份验证失败")
     }
+    const adminId = admin.id
 
     // 执行数据库事务
-    const result = await prisma.$transaction(async (tx) => {
+    const { post: result, tagsAffected } = await prisma.$transaction(async (tx) => {
       // 创建文章
       const post = await tx.post.create({
         data: {
@@ -237,7 +321,7 @@ export async function createPost(data: CreatePostRequest): Promise<ApiResponse<P
           seoTitle: data.seoTitle?.trim() || null,
           seoDescription: data.seoDescription?.trim() || null,
           coverImage: data.coverImage?.trim() || null,
-          authorId: admin.id,
+          authorId: adminId,
           seriesId: data.seriesId || null,
         },
         include: {
@@ -250,53 +334,18 @@ export async function createPost(data: CreatePostRequest): Promise<ApiResponse<P
         },
       })
 
-      // 处理标签关联
-      const tagIds: string[] = []
-      for (const tagName of processedTags) {
-        const tagSlug = tagName
-          .toLowerCase()
-          .replace(/[^a-z0-9\u4e00-\u9fa5]/g, "-")
-          .replace(/-+/g, "-")
-          .replace(/^-|-$/g, "")
-
-        // 先尝试查找现有标签
-        let tag = await tx.tag.findFirst({
-          where: {
-            OR: [{ slug: tagSlug }, { name: tagName }],
-          },
+      let tagsTouched = false
+      if (incomingTagNames.length > 0) {
+        const { tagIds } = await syncPostTags({
+          tx,
+          postId: post.id,
+          newTagNames: incomingTagNames,
         })
-
-        if (tag) {
-          // 更新现有标签的帖子数量
-          tag = await tx.tag.update({
-            where: { id: tag.id },
-            data: {
-              postsCount: { increment: 1 },
-            },
-          })
-        } else {
-          // 创建新标签
-          tag = await tx.tag.create({
-            data: {
-              name: tagName,
-              slug: tagSlug,
-              postsCount: 1,
-            },
-          })
-        }
-
-        // 创建文章-标签关联
-        await tx.postTag.upsert({
-          where: { postId_tagId: { postId: post.id, tagId: tag.id } },
-          create: { postId: post.id, tagId: tag.id },
-          update: {}, // 已存在则不做任何操作
-        })
-
-        tagIds.push(tag.id)
+        tagsTouched = tagIds.length > 0
       }
 
       // 返回完整的文章信息
-      return await tx.post.findUnique({
+      const fullPost = await tx.post.findUnique({
         where: { id: post.id },
         include: {
           author: {
@@ -321,11 +370,30 @@ export async function createPost(data: CreatePostRequest): Promise<ApiResponse<P
           },
         },
       })
+
+      if (!fullPost) {
+        throw new Error("创建文章失败")
+      }
+
+      return { post: fullPost, tagsAffected: tagsTouched }
     })
 
-    if (!result) {
-      throw new Error("创建文章失败")
+    if (tagsAffected) {
+      revalidateTag("tags:list")
+      revalidateTag("tags:detail")
     }
+
+    await revalidateArchiveCache({
+      nextPublished: result.published,
+      nextPublishedAt: result.publishedAt,
+    })
+
+    await recordPostAudit({
+      action: "POST_CREATE",
+      success: true,
+      adminId,
+      postId: result.id,
+    })
 
     // 重新验证相关页面缓存
     revalidatePath("/admin/posts")
@@ -370,11 +438,19 @@ export async function createPost(data: CreatePostRequest): Promise<ApiResponse<P
       },
     }
   } catch (error) {
-    console.error("创建文章失败:", error)
+    logger.error("创建文章失败", { module: "lib/actions/posts", action: "createPost" }, error)
+    const code = resolveErrorCode(error, "AUTH_INSUFFICIENT_PERMISSIONS")
+    await recordPostAudit({
+      action: "POST_CREATE",
+      success: false,
+      adminId: admin?.id,
+      errorCode: code,
+      errorMessage: error instanceof Error ? error.message : undefined,
+    })
     return {
       success: false,
       error: {
-        code: "AUTH_INSUFFICIENT_PERMISSIONS",
+        code,
         message: error instanceof Error ? error.message : "创建文章失败",
         timestamp: Date.now(),
       },
@@ -522,7 +598,7 @@ export async function getPosts(
       },
     }
   } catch (error) {
-    console.error("获取文章列表失败:", error)
+    logger.error("获取文章列表失败", { module: "lib/actions/posts", action: "getPosts" }, error)
     return {
       success: false,
       data: [],
@@ -637,7 +713,7 @@ export async function getPost(
       },
     }
   } catch (error) {
-    console.error("获取文章失败:", error)
+    logger.error("获取文章失败", { module: "lib/actions/posts", action: "getPost" }, error)
     return {
       success: false,
       error: {
@@ -653,9 +729,10 @@ export async function getPost(
  * 更新文章 Server Action
  */
 export async function updatePost(data: UpdatePostRequest): Promise<ApiResponse<PostResponse>> {
+  let admin: { id: string } | null = null
   try {
     // 验证管理员权限
-    await requireAdmin()
+    admin = await requireAdmin()
 
     const { id, ...updateData } = data
 
@@ -739,7 +816,7 @@ export async function updatePost(data: UpdatePostRequest): Promise<ApiResponse<P
     }
 
     // 执行事务更新
-    const result = await prisma.$transaction(async (tx) => {
+    const { post: result, tagsAffected } = await prisma.$transaction(async (tx) => {
       // 准备更新数据
       const updatePayload: any = {
         ...(updateData.title && { title: updateData.title.trim() }),
@@ -772,9 +849,40 @@ export async function updatePost(data: UpdatePostRequest): Promise<ApiResponse<P
       }
 
       // 更新文章
-      const updatedPost = await tx.post.update({
+      await tx.post.update({
         where: { id },
         data: updatePayload,
+      })
+
+      let tagsTouched = false
+
+      if (updateData.tagNames !== undefined) {
+        await syncPostTags({
+          tx,
+          postId: id,
+          newTagNames: updateData.tagNames ?? [],
+          existingPostTags: existingPost.tags,
+        })
+        tagsTouched = true
+      }
+
+      const publishedChanged =
+        updateData.published !== undefined && updateData.published !== existingPost.published
+
+      if (publishedChanged) {
+        const relatedTags = await tx.postTag.findMany({
+          where: { postId: id },
+          select: { tagId: true },
+        })
+        const tagIds = relatedTags.map((relation) => relation.tagId)
+        await recalculateTagCounts(tx, tagIds)
+        if (tagIds.length > 0) {
+          tagsTouched = true
+        }
+      }
+
+      const fullPost = await tx.post.findUnique({
+        where: { id },
         include: {
           author: {
             select: { id: true, name: true, avatarUrl: true, bio: true },
@@ -799,53 +907,11 @@ export async function updatePost(data: UpdatePostRequest): Promise<ApiResponse<P
         },
       })
 
-      // 处理标签更新
-      if (updateData.tagNames) {
-        // 删除现有标签关联
-        await tx.postTag.deleteMany({
-          where: { postId: id },
-        })
-
-        // 更新旧标签计数
-        for (const existingTag of existingPost.tags) {
-          await tx.tag.update({
-            where: { id: existingTag.tag.id },
-            data: { postsCount: { decrement: 1 } },
-          })
-        }
-
-        // 添加新标签关联
-        const processedTags = updateData.tagNames
-          .map((tag) => tag.trim())
-          .filter((tag) => tag.length > 0)
-          .slice(0, 10) // 限制最多10个标签
-
-        for (const tagName of processedTags) {
-          const tagSlug = tagName
-            .toLowerCase()
-            .replace(/[^a-z0-9\u4e00-\u9fa5]/g, "-")
-            .replace(/-+/g, "-")
-            .replace(/^-|-$/g, "")
-
-          const tag = await tx.tag.upsert({
-            where: { slug: tagSlug },
-            create: {
-              name: tagName,
-              slug: tagSlug,
-              postsCount: 1,
-            },
-            update: {
-              postsCount: { increment: 1 },
-            },
-          })
-
-          await tx.postTag.create({
-            data: { postId: id, tagId: tag.id },
-          })
-        }
+      if (!fullPost) {
+        throw new Error("更新文章失败")
       }
 
-      return updatedPost
+      return { post: fullPost, tagsAffected: tagsTouched }
     })
 
     // 重新验证相关页面缓存
@@ -855,6 +921,25 @@ export async function updatePost(data: UpdatePostRequest): Promise<ApiResponse<P
     if (newSlug !== existingPost.slug) {
       revalidatePath(`/blog/${newSlug}`)
     }
+
+    if (tagsAffected) {
+      revalidateTag("tags:list")
+      revalidateTag("tags:detail")
+    }
+
+    await revalidateArchiveCache({
+      previousPublished: existingPost.published,
+      previousPublishedAt: existingPost.publishedAt,
+      nextPublished: result.published,
+      nextPublishedAt: result.publishedAt,
+    })
+
+    await recordPostAudit({
+      action: "POST_UPDATE",
+      success: true,
+      adminId: admin.id,
+      postId: result.id,
+    })
 
     // 格式化响应
     const response: PostResponse = {
@@ -892,11 +977,20 @@ export async function updatePost(data: UpdatePostRequest): Promise<ApiResponse<P
       },
     }
   } catch (error) {
-    console.error("更新文章失败:", error)
+    logger.error("更新文章失败", { module: "lib/actions/posts", action: "updatePost" }, error)
+    const code = resolveErrorCode(error, "INTERNAL_ERROR")
+    await recordPostAudit({
+      action: "POST_UPDATE",
+      success: false,
+      adminId: admin?.id,
+      postId: data.id,
+      errorCode: code,
+      errorMessage: error instanceof Error ? error.message : undefined,
+    })
     return {
       success: false,
       error: {
-        code: "AUTH_INSUFFICIENT_PERMISSIONS",
+        code,
         message: error instanceof Error ? error.message : "更新文章失败",
         timestamp: Date.now(),
       },
@@ -910,9 +1004,10 @@ export async function updatePost(data: UpdatePostRequest): Promise<ApiResponse<P
 export async function deletePost(
   postId: string
 ): Promise<ApiResponse<{ id: string; message: string }>> {
+  let admin: { id: string } | null = null
   try {
     // 验证管理员权限
-    await requireAdmin()
+    admin = await requireAdmin()
     // 验证文章存在
     const existingPost = await prisma.post.findUnique({
       where: { id: postId },
@@ -927,26 +1022,41 @@ export async function deletePost(
       throw new Error("文章不存在")
     }
 
+    const affectedTagIds = existingPost.tags.map((postTag) => postTag.tag.id)
+
     // 执行事务删除
     await prisma.$transaction(async (tx) => {
-      // 更新标签计数
-      for (const postTag of existingPost.tags) {
-        await tx.tag.update({
-          where: { id: postTag.tag.id },
-          data: { postsCount: { decrement: 1 } },
-        })
-      }
-
       // 删除文章（Prisma 会自动处理级联删除）
       await tx.post.delete({
         where: { id: postId },
       })
+
+      if (affectedTagIds.length > 0) {
+        await recalculateTagCounts(tx, affectedTagIds)
+      }
     })
 
     // 重新验证相关页面缓存
     revalidatePath("/admin/posts")
     revalidatePath("/blog")
     revalidatePath(`/blog/${existingPost.slug}`)
+
+    if (affectedTagIds.length > 0) {
+      revalidateTag("tags:list")
+      revalidateTag("tags:detail")
+    }
+
+    await revalidateArchiveCache({
+      previousPublished: existingPost.published,
+      previousPublishedAt: existingPost.publishedAt,
+    })
+
+    await recordPostAudit({
+      action: "POST_DELETE",
+      success: true,
+      adminId: admin.id,
+      postId,
+    })
 
     return {
       success: true,
@@ -960,11 +1070,20 @@ export async function deletePost(
       },
     }
   } catch (error) {
-    console.error("删除文章失败:", error)
+    logger.error("删除文章失败", { module: "lib/actions/posts", action: "deletePost" }, error)
+    const code = resolveErrorCode(error, "INTERNAL_ERROR")
+    await recordPostAudit({
+      action: "POST_DELETE",
+      success: false,
+      adminId: admin?.id,
+      postId,
+      errorCode: code,
+      errorMessage: error instanceof Error ? error.message : undefined,
+    })
     return {
       success: false,
       error: {
-        code: "AUTH_INSUFFICIENT_PERMISSIONS",
+        code,
         message: error instanceof Error ? error.message : "删除文章失败",
         timestamp: Date.now(),
       },
@@ -982,11 +1101,17 @@ export async function deletePost(
 export async function publishPost(
   postId: string
 ): Promise<ApiResponse<{ id: string; slug: string; publishedAt?: string; message: string }>> {
+  let admin: { id: string } | null = null
   try {
     // 验证管理员权限
-    await requireAdmin()
+    admin = await requireAdmin()
     const post = await prisma.post.findUnique({
       where: { id: postId },
+      include: {
+        tags: {
+          select: { tagId: true },
+        },
+      },
     })
 
     if (!post) {
@@ -997,18 +1122,47 @@ export async function publishPost(
       throw new Error("文章已经发布")
     }
 
-    const updatedPost = await prisma.post.update({
-      where: { id: postId },
-      data: {
-        published: true,
-        publishedAt: new Date(),
-      },
+    const tagIds = post.tags.map((relation) => relation.tagId)
+
+    const updatedPost = await prisma.$transaction(async (tx) => {
+      const updated = await tx.post.update({
+        where: { id: postId },
+        data: {
+          published: true,
+          publishedAt: new Date(),
+        },
+      })
+
+      if (tagIds.length > 0) {
+        await recalculateTagCounts(tx, tagIds)
+      }
+
+      return updated
     })
 
     // 重新验证相关页面缓存
     revalidatePath("/admin/posts")
     revalidatePath("/blog")
     revalidatePath(`/blog/${updatedPost.slug}`)
+
+    if (tagIds.length > 0) {
+      revalidateTag("tags:list")
+      revalidateTag("tags:detail")
+    }
+
+    await revalidateArchiveCache({
+      previousPublished: post.published,
+      previousPublishedAt: post.publishedAt,
+      nextPublished: updatedPost.published,
+      nextPublishedAt: updatedPost.publishedAt,
+    })
+
+    await recordPostAudit({
+      action: "POST_PUBLISH",
+      success: true,
+      adminId: admin.id,
+      postId,
+    })
 
     return {
       success: true,
@@ -1024,11 +1178,20 @@ export async function publishPost(
       },
     }
   } catch (error) {
-    console.error("发布文章失败:", error)
+    logger.error("发布文章失败", { module: "lib/actions/posts", action: "publishPost" }, error)
+    const code = resolveErrorCode(error, "INTERNAL_ERROR")
+    await recordPostAudit({
+      action: "POST_PUBLISH",
+      success: false,
+      adminId: admin?.id,
+      postId,
+      errorCode: code,
+      errorMessage: error instanceof Error ? error.message : undefined,
+    })
     return {
       success: false,
       error: {
-        code: "AUTH_INSUFFICIENT_PERMISSIONS",
+        code,
         message: error instanceof Error ? error.message : "发布文章失败",
         timestamp: Date.now(),
       },
@@ -1042,11 +1205,17 @@ export async function publishPost(
 export async function unpublishPost(
   postId: string
 ): Promise<ApiResponse<{ id: string; slug: string; message: string }>> {
+  let admin: { id: string } | null = null
   try {
     // 验证管理员权限
-    await requireAdmin()
+    admin = await requireAdmin()
     const post = await prisma.post.findUnique({
       where: { id: postId },
+      include: {
+        tags: {
+          select: { tagId: true },
+        },
+      },
     })
 
     if (!post) {
@@ -1057,18 +1226,47 @@ export async function unpublishPost(
       throw new Error("文章尚未发布")
     }
 
-    const updatedPost = await prisma.post.update({
-      where: { id: postId },
-      data: {
-        published: false,
-        publishedAt: null,
-      },
+    const tagIds = post.tags.map((relation) => relation.tagId)
+
+    const updatedPost = await prisma.$transaction(async (tx) => {
+      const updated = await tx.post.update({
+        where: { id: postId },
+        data: {
+          published: false,
+          publishedAt: null,
+        },
+      })
+
+      if (tagIds.length > 0) {
+        await recalculateTagCounts(tx, tagIds)
+      }
+
+      return updated
     })
 
     // 重新验证相关页面缓存
     revalidatePath("/admin/posts")
     revalidatePath("/blog")
     revalidatePath(`/blog/${updatedPost.slug}`)
+
+    if (tagIds.length > 0) {
+      revalidateTag("tags:list")
+      revalidateTag("tags:detail")
+    }
+
+    await revalidateArchiveCache({
+      previousPublished: post.published,
+      previousPublishedAt: post.publishedAt,
+      nextPublished: updatedPost.published,
+      nextPublishedAt: updatedPost.publishedAt,
+    })
+
+    await recordPostAudit({
+      action: "POST_UNPUBLISH",
+      success: true,
+      adminId: admin.id,
+      postId,
+    })
 
     return {
       success: true,
@@ -1083,11 +1281,24 @@ export async function unpublishPost(
       },
     }
   } catch (error) {
-    console.error("取消发布文章失败:", error)
+    logger.error(
+      "取消发布文章失败",
+      { module: "lib/actions/posts", action: "unpublishPost" },
+      error
+    )
+    const code = resolveErrorCode(error, "INTERNAL_ERROR")
+    await recordPostAudit({
+      action: "POST_UNPUBLISH",
+      success: false,
+      adminId: admin?.id,
+      postId,
+      errorCode: code,
+      errorMessage: error instanceof Error ? error.message : undefined,
+    })
     return {
       success: false,
       error: {
-        code: "AUTH_INSUFFICIENT_PERMISSIONS",
+        code,
         message: error instanceof Error ? error.message : "取消发布文章失败",
         timestamp: Date.now(),
       },
@@ -1101,9 +1312,10 @@ export async function unpublishPost(
 export async function togglePinPost(
   postId: string
 ): Promise<ApiResponse<{ id: string; isPinned: boolean; message: string }>> {
+  let admin: { id: string } | null = null
   try {
     // 验证管理员权限
-    await requireAdmin()
+    admin = await requireAdmin()
     const post = await prisma.post.findUnique({
       where: { id: postId },
     })
@@ -1126,6 +1338,13 @@ export async function togglePinPost(
       revalidatePath(`/blog/${updatedPost.slug}`)
     }
 
+    await recordPostAudit({
+      action: "POST_TOGGLE_PIN",
+      success: true,
+      adminId: admin.id,
+      postId,
+    })
+
     return {
       success: true,
       data: {
@@ -1139,11 +1358,24 @@ export async function togglePinPost(
       },
     }
   } catch (error) {
-    console.error("切换置顶状态失败:", error)
+    logger.error(
+      "切换置顶状态失败",
+      { module: "lib/actions/posts", action: "togglePostPin" },
+      error
+    )
+    const code = resolveErrorCode(error, "INTERNAL_ERROR")
+    await recordPostAudit({
+      action: "POST_TOGGLE_PIN",
+      success: false,
+      adminId: admin?.id,
+      postId,
+      errorCode: code,
+      errorMessage: error instanceof Error ? error.message : undefined,
+    })
     return {
       success: false,
       error: {
-        code: "AUTH_INSUFFICIENT_PERMISSIONS",
+        code,
         message: error instanceof Error ? error.message : "切换置顶状态失败",
         timestamp: Date.now(),
       },
@@ -1157,9 +1389,10 @@ export async function togglePinPost(
 export async function bulkDeletePosts(
   postIds: string[]
 ): Promise<ApiResponse<{ deletedCount: number; message: string }>> {
+  let admin: { id: string } | null = null
   try {
     // 验证管理员权限
-    await requireAdmin()
+    admin = await requireAdmin()
     if (!postIds || postIds.length === 0) {
       throw new Error("请至少选择一篇文章")
     }
@@ -1178,27 +1411,47 @@ export async function bulkDeletePosts(
       throw new Error("部分文章不存在")
     }
 
+    const affectedTagIds = new Set<string>()
+    for (const post of posts) {
+      for (const postTag of post.tags) {
+        affectedTagIds.add(postTag.tag.id)
+      }
+    }
+
     // 执行批量删除事务
     await prisma.$transaction(async (tx) => {
-      // 更新标签计数
-      for (const post of posts) {
-        for (const postTag of post.tags) {
-          await tx.tag.update({
-            where: { id: postTag.tag.id },
-            data: { postsCount: { decrement: 1 } },
-          })
-        }
-      }
-
       // 批量删除文章
       await tx.post.deleteMany({
         where: { id: { in: postIds } },
       })
+
+      if (affectedTagIds.size > 0) {
+        await recalculateTagCounts(tx, Array.from(affectedTagIds))
+      }
     })
 
     // 重新验证相关页面缓存
     revalidatePath("/admin/posts")
     revalidatePath("/blog")
+
+    if (affectedTagIds.size > 0) {
+      revalidateTag("tags:list")
+      revalidateTag("tags:detail")
+    }
+
+    await revalidateArchiveCache(
+      posts.map((post) => ({
+        previousPublished: post.published,
+        previousPublishedAt: post.publishedAt,
+      }))
+    )
+
+    await recordPostAudit({
+      action: "POST_BULK_DELETE",
+      success: true,
+      adminId: admin.id,
+      postId: postIds.join(","),
+    })
 
     return {
       success: true,
@@ -1212,11 +1465,24 @@ export async function bulkDeletePosts(
       },
     }
   } catch (error) {
-    console.error("批量删除文章失败:", error)
+    logger.error(
+      "批量删除文章失败",
+      { module: "lib/actions/posts", action: "bulkDeletePosts" },
+      error
+    )
+    const code = resolveErrorCode(error, "INTERNAL_ERROR")
+    await recordPostAudit({
+      action: "POST_BULK_DELETE",
+      success: false,
+      adminId: admin?.id,
+      postId: postIds.join(","),
+      errorCode: code,
+      errorMessage: error instanceof Error ? error.message : undefined,
+    })
     return {
       success: false,
       error: {
-        code: "AUTH_INSUFFICIENT_PERMISSIONS",
+        code,
         message: error instanceof Error ? error.message : "批量删除文章失败",
         timestamp: Date.now(),
       },

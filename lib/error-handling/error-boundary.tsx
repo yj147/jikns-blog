@@ -12,6 +12,7 @@ import { AlertTriangle, RefreshCw, Home, Bug } from "lucide-react"
 import { ErrorBoundaryState } from "@/types/error"
 import ErrorFactory from "./error-factory"
 import errorHandler from "./error-handler"
+import { logger } from "@/lib/utils/logger"
 
 interface ErrorBoundaryProps {
   children: ReactNode
@@ -96,7 +97,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       try {
         this.props.onError(error, errorInfo)
       } catch (callbackError) {
-        console.error("错误边界回调函数执行失败:", callbackError)
+        logger.error("错误边界回调函数执行失败", {}, callbackError)
       }
     }
   }
@@ -351,11 +352,11 @@ function DefaultErrorFallback({
               variant="outline"
               size="sm"
               onClick={() => {
-                console.group("错误边界 - 调试信息")
-                console.error("错误对象:", error)
-                console.error("错误信息:", errorInfo)
-                console.error("状态:", { retryCount, maxRetries, canRetry })
-                console.groupEnd()
+                logger.debug("错误边界调试信息", {
+                  error,
+                  errorInfo,
+                  state: { retryCount, maxRetries, canRetry },
+                })
               }}
             >
               <Bug className="mr-1 h-4 w-4" />

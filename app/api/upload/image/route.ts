@@ -1,4 +1,5 @@
 import { uploadImage } from "@/lib/actions/upload"
+import { logger } from "@/lib/utils/logger"
 import { NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest) {
@@ -12,7 +13,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(result, { status: 400 })
     }
   } catch (error) {
-    console.error("Upload API error:", error)
+    logger.error("图片上传接口异常", { module: "api/upload/image" }, error)
     return NextResponse.json(
       {
         success: false,

@@ -343,7 +343,7 @@ export function PostList({
             {/* 网格视图 */}
             {viewMode === "grid" && (
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {currentPosts.map((post) => (
+                {currentPosts.map((post, index) => (
                   <PostCard
                     key={post.id}
                     post={post}
@@ -351,6 +351,7 @@ export function PostList({
                     onDelete={onDelete}
                     onTogglePin={onTogglePin}
                     onTogglePublish={onTogglePublish}
+                    index={index}
                     variant="admin"
                   />
                 ))}
@@ -360,7 +361,7 @@ export function PostList({
             {/* 列表视图 */}
             {viewMode === "list" && (
               <div className="space-y-4">
-                {currentPosts.map((post) => (
+                {currentPosts.map((post, index) => (
                   <PostCard
                     key={post.id}
                     post={post}
@@ -368,6 +369,7 @@ export function PostList({
                     onDelete={onDelete}
                     onTogglePin={onTogglePin}
                     onTogglePublish={onTogglePublish}
+                    index={index}
                     variant="compact"
                   />
                 ))}

@@ -1,0 +1,14 @@
+-- Rollback helper: restore legacy isDeleted flag if needed
+
+-- 1. add the legacy column back
+ALTER TABLE public.activities
+  ADD COLUMN IF NOT EXISTS "isDeleted" BOOLEAN NOT NULL DEFAULT false;
+
+-- 2. sync historical rows (any deletedAt timestamp means the row was soft-deleted)
+UPDATE public.activities
+SET "isDeleted" = true
+WHERE "deletedAt" IS NOT NULL;
+
+-- 3. recreate the supporting index
+CREATE INDEX IF NOT EXISTS "activities_isDeleted_createdAt_idx"
+  ON public.activities ("isDeleted", "createdAt" DESC);

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { validateApiPermissions, createPermissionError } from "@/lib/permissions"
 import type { User } from "@/lib/generated/prisma"
+import { logger } from "@/lib/utils/logger"
 
 /**
  * API 响应类型
@@ -123,7 +124,7 @@ export function withApiAuth(
       // 权限验证通过，执行处理函数
       return handler(request, permissionResult.user!, context)
     } catch (error) {
-      console.error(`API 错误 [${requestId}]:`, error)
+      logger.error("API 错误", { requestId }, error)
 
       return createErrorResponse("服务器内部错误", "INTERNAL_SERVER_ERROR", 500, requestId)
     }
@@ -163,7 +164,7 @@ export function withServerActionAuth<TArgs extends any[], TReturn>(
       // 权限验证通过，执行 Action
       return action(permissionResult.user!, ...args)
     } catch (error) {
-      console.error("Server Action 错误:", error)
+      logger.error("Server Action 错误", {}, error)
       throw error
     }
   }
@@ -221,7 +222,7 @@ export async function batchPermissionCheck(
       },
     }
   } catch (error) {
-    console.error("批量权限检查错误:", error)
+    logger.error("批量权限检查错误", {}, error)
     return {
       success: false,
       error: {
@@ -354,7 +355,7 @@ export function withRateLimit(
       // 无需权限验证或跳过认证
       return handler(request, undefined, context)
     } catch (error) {
-      console.error(`API 限流错误 [${requestId}]:`, error)
+      logger.error("API 限流错误", { requestId }, error)
       return createErrorResponse("服务器内部错误", "INTERNAL_SERVER_ERROR", 500, requestId)
     }
   }

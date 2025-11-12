@@ -1,0 +1,48 @@
+import { NextRequest, NextResponse } from "next/server"
+import { runViewCountSync } from "@/lib/cron/sync-view-counts"
+
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+
+/**
+ * Vercel Cron Job 端点
+ * 每分钟执行一次，同步 Redis 中的浏览量到数据库
+ *
+ * 配置方式：在 vercel.json 中添加
+ * {
+ *   "crons": [{
+ *     "path": "/api/cron/sync-view-counts",
+ *     "schedule": "* * * * *"
+ *   }]
+ * }
+ */
+export async function GET(request: NextRequest) {
+  // 验证 Vercel Cron Secret（生产环境）
+  const authHeader = request.headers.get("authorization")
+  const cronSecret = process.env.CRON_SECRET
+
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  try {
+    const result = await runViewCountSync()
+
+    return NextResponse.json({
+      success: true,
+      synced: result.synced,
+      failed: result.failed,
+      errors: result.errors.length > 0 ? result.errors.slice(0, 5) : undefined,
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString(),
+      },
+      { status: 500 }
+    )
+  }
+}

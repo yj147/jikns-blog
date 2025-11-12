@@ -1,18 +1,122 @@
 /** @type {import('next').NextConfig} */
 import { fileURLToPath } from "url"
 import { dirname } from "path"
+import bundleAnalyzer from "@next/bundle-analyzer"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
+const allowedDevOrigins = ["127.0.0.1:3000", "localhost:3000", "172.29.144.193:3000"]
+
+const normalizeOrigin = (origin) =>
+  origin && /^https?:\/\//i.test(origin) ? origin : `http://${origin}`
+
+const devOriginsWithProtocol = Array.from(
+  new Set(allowedDevOrigins.map((origin) => normalizeOrigin(origin)))
+)
+
+const parseOrigins = (value) =>
+  (value ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+
+const envAllowedOrigins = parseOrigins(process.env.SERVER_ACTIONS_ALLOWED_ORIGINS).map(
+  normalizeOrigin
+)
+const siteOrigins = [process.env.NEXT_PUBLIC_SITE_URL, process.env.SITE_URL]
+  .map((origin) => origin?.trim())
+  .filter(Boolean)
+  .map(normalizeOrigin)
+
+const baseOrigins =
+  envAllowedOrigins.length > 0
+    ? envAllowedOrigins
+    : siteOrigins.length > 0
+      ? siteOrigins
+      : devOriginsWithProtocol
+
+const serverActionAllowedOrigins = Array.from(
+  new Set(
+    process.env.NODE_ENV === "production"
+      ? baseOrigins
+      : [...baseOrigins, ...devOriginsWithProtocol]
+  )
+)
+
+const getHostnameFromUrl = (value) => {
+  if (!value) return undefined
+  try {
+    return new URL(value).hostname
+  } catch {
+    return undefined
+  }
+}
+
+const supabaseHostname = getHostnameFromUrl(process.env.NEXT_PUBLIC_SUPABASE_URL)
+
+const supabaseRemotePatterns = [
+  ...(supabaseHostname
+    ? [
+        {
+          protocol: "https",
+          hostname: supabaseHostname,
+          pathname: "/storage/v1/object/public/**",
+        },
+      ]
+    : []),
+  {
+    protocol: "https",
+    hostname: "*.supabase.co",
+    pathname: "/storage/v1/object/public/**",
+  },
+  {
+    protocol: "https",
+    hostname: "*.supabase.in",
+    pathname: "/storage/v1/object/public/**",
+  },
+  {
+    protocol: "http",
+    hostname: "localhost",
+    port: "54321",
+    pathname: "/storage/v1/object/public/**",
+  },
+  {
+    protocol: "http",
+    hostname: "127.0.0.1",
+    port: "54321",
+    pathname: "/storage/v1/object/public/**",
+  },
+]
+
+const supabaseImageDomains = Array.from(
+  new Set(
+    [
+      supabaseHostname,
+      ...(process.env.NODE_ENV !== "production" ? ["localhost", "127.0.0.1"] : []),
+    ].filter(Boolean)
+  )
+)
+
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === "true",
+})
+
 const nextConfig = {
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   // 允许的开发环境跨域来源
-  allowedDevOrigins: ["127.0.0.1:3000", "localhost:3000", "172.29.144.193:3000"],
+  allowedDevOrigins,
 
   // Server Actions 配置
   experimental: {
     serverActions: {
       bodySizeLimit: "50mb", // 增加到 50MB，支持批量图片上传
+      allowedOrigins: serverActionAllowedOrigins,
     },
   },
 
@@ -23,7 +127,13 @@ const nextConfig = {
   },
 
   images: {
-    unoptimized: true,
+    unoptimized: false,
+    formats: ["image/avif", "image/webp"],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    minimumCacheTTL: 60,
+    domains: supabaseImageDomains,
+    remotePatterns: supabaseRemotePatterns,
   },
   // 安全头部配置
   async headers() {
@@ -114,25 +224,56 @@ const nextConfig = {
 
     // 减少包大小的分析输出
     if (!isServer) {
-      // 确保 splitChunks 配置存在
-      config.optimization.splitChunks = config.optimization.splitChunks || {}
-      config.optimization.splitChunks.cacheGroups =
-        config.optimization.splitChunks.cacheGroups || {}
+      const existingSplitChunks = config.optimization.splitChunks || {}
+      const existingCacheGroups = existingSplitChunks.cacheGroups || {}
 
-      config.optimization.splitChunks.cacheGroups.prisma = {
-        name: "prisma",
-        chunks: "all",
-        test: /[\\/]node_modules[\\/]@prisma[\\/]/,
-        priority: 30,
-        reuseExistingChunk: true,
-      }
-
-      config.optimization.splitChunks.cacheGroups.lucide = {
-        name: "lucide",
-        chunks: "all",
-        test: /[\\/]node_modules[\\/]lucide-react[\\/]/,
-        priority: 25,
-        reuseExistingChunk: true,
+      config.optimization.splitChunks = {
+        ...existingSplitChunks,
+        cacheGroups: {
+          ...existingCacheGroups,
+          react: {
+            name: "react-vendor",
+            test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+            priority: 40,
+            chunks: "all",
+            reuseExistingChunk: true,
+          },
+          radix: {
+            name: "radix-vendor",
+            test: /[\\/]node_modules[\\/]@radix-ui[\\/]/,
+            priority: 35,
+            chunks: "all",
+            reuseExistingChunk: true,
+          },
+          prisma: {
+            name: "prisma",
+            test: /[\\/]node_modules[\\/]@prisma[\\/]/,
+            priority: 30,
+            chunks: "all",
+            reuseExistingChunk: true,
+          },
+          lucide: {
+            name: "lucide",
+            test: /[\\/]node_modules[\\/]lucide-react[\\/]/,
+            priority: 25,
+            chunks: "all",
+            reuseExistingChunk: true,
+          },
+          utils: {
+            name: "utils-vendor",
+            test: /[\\/]node_modules[\\/](date-fns|clsx|class-variance-authority|tailwind-merge)[\\/]/,
+            priority: 20,
+            chunks: "all",
+            reuseExistingChunk: true,
+          },
+          editor: {
+            name: "editor-vendor",
+            test: /[\\/]node_modules[\\/](@tiptap|react-markdown|remark|rehype)[\\/]/,
+            priority: 15,
+            chunks: "all",
+            reuseExistingChunk: true,
+          },
+        },
       }
     }
 
@@ -140,4 +281,4 @@ const nextConfig = {
   },
 }
 
-export default nextConfig
+export default withBundleAnalyzer(nextConfig)

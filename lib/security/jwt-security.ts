@@ -12,6 +12,7 @@ import type {
   SecurityValidationResult,
   SessionValidationOptions,
 } from "./types"
+import { logger } from "../utils/logger"
 
 /**
  * JWT 安全管理类
@@ -71,7 +72,7 @@ export class JWTSecurity {
       const expectedSignature = this.createSignature(`${encodedHeader}.${encodedPayload}`, secret)
 
       if (signature !== expectedSignature) {
-        console.warn("JWT签名验证失败")
+        logger.warn("JWT 签名验证失败", { tokenPartLength: token.length })
         return null
       }
 
@@ -81,13 +82,13 @@ export class JWTSecurity {
       // 检查过期时间
       const now = Math.floor(Date.now() / 1000)
       if (payload.exp && payload.exp < now) {
-        console.warn("JWT令牌已过期")
+        logger.warn("JWT 令牌已过期", { userId: payload.sub })
         return null
       }
 
       return payload as TokenPayload
     } catch (error) {
-      console.error("JWT解码错误:", error)
+      logger.error("JWT 解码错误", {}, error)
       return null
     }
   }
@@ -259,7 +260,7 @@ export class TokenRefreshManager {
       // 验证刷新令牌
       const validation = JWTSecurity.validateRefreshToken(refreshToken)
       if (!validation.isValid) {
-        console.warn("刷新令牌验证失败:", validation.errorMessage)
+        logger.warn("刷新令牌验证失败", { error: validation.errorMessage })
         return null
       }
 
@@ -268,13 +269,13 @@ export class TokenRefreshManager {
       // 从会话存储中获取会话信息
       const session = await SessionStore.getSession(sessionId)
       if (!session || !session.isActive) {
-        console.warn("会话无效或已失效")
+        logger.warn("会话无效或已失效", { sessionId })
         return null
       }
 
       // 检查会话是否过期
       if (new Date() > session.expiresAt) {
-        console.warn("会话已过期")
+        logger.warn("会话已过期", { sessionId })
         await SessionStore.invalidateSession(sessionId)
         return null
       }
@@ -306,7 +307,7 @@ export class TokenRefreshManager {
         tokenType: "Bearer",
       }
     } catch (error) {
-      console.error("令牌刷新错误:", error)
+      logger.error("令牌刷新错误", { refreshToken }, error)
       return null
     }
   }
@@ -415,7 +416,7 @@ export class SessionStore {
 
     // 检查会话指纹
     if (options.checkFingerprint && session.fingerprint !== fingerprint) {
-      console.warn("会话指纹不匹配，可能存在会话劫持")
+      logger.warn("会话指纹不匹配，可能存在会话劫持", { sessionId, fingerprint })
       await this.invalidateSession(sessionId)
       return {
         isValid: false,

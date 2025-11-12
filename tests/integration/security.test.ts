@@ -12,6 +12,7 @@ import {
   RateLimiter,
   validateRequestOrigin,
 } from "@/lib/security"
+import { GET as csrfTokenHandler } from "@/app/api/csrf-token/route"
 
 describe("Phase 4.1 安全性增强测试", () => {
   beforeEach(() => {
@@ -67,6 +68,25 @@ describe("Phase 4.1 安全性增强测试", () => {
 
       const isValid = CSRFProtection.validateToken(request)
       expect(isValid).toBe(false)
+    })
+
+    it("GET /api/csrf-token 应该返回与 Cookie 匹配的令牌", async () => {
+      const request = new NextRequest("http://localhost:3000/api/csrf-token")
+      const response = await csrfTokenHandler(request)
+      const body = await response.json()
+
+      const csrfCookie = response.cookies.get("csrf-token")
+      expect(csrfCookie?.value).toBeDefined()
+      expect(body.token).toBe(csrfCookie?.value)
+
+      const protectedRequest = new NextRequest("http://localhost:3000/api/tags", {
+        method: "POST",
+        headers: { "X-CSRF-Token": body.token },
+      })
+
+      vi.spyOn(protectedRequest.cookies, "get").mockReturnValue({ value: body.token } as any)
+
+      expect(CSRFProtection.validateToken(protectedRequest)).toBe(true)
     })
   })
 

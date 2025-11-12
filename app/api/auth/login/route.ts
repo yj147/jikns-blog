@@ -4,10 +4,16 @@
  */
 
 import { NextRequest, NextResponse } from "next/server"
-import { createRouteHandlerClient } from "@/lib/supabase"
+import { createRouteHandlerClient, createServiceRoleClient } from "@/lib/supabase"
 import { syncUserFromAuth } from "@/lib/auth"
 import { XSSProtection, RateLimiter } from "@/lib/security"
 import { z } from "zod"
+import { authLogger } from "@/lib/utils/logger"
+import { prisma } from "@/lib/prisma"
+import bcrypt from "bcryptjs"
+import type { SupabaseClient } from "@supabase/supabase-js"
+import type { Database } from "@/types/database"
+import type { Session } from "@supabase/supabase-js"
 
 // 登录请求验证 Schema
 const LoginSchema = z.object({
@@ -23,7 +29,7 @@ export async function POST(request: NextRequest) {
   try {
     // 速率限制检查 - 每个IP每15分钟最多尝试5次
     if (!RateLimiter.checkRateLimit(`login:${clientIP}`, 5, 15 * 60 * 1000)) {
-      console.warn(`登录速率限制触发，IP: ${clientIP}`)
+      authLogger.warn("登录速率限制触发", { clientIP })
       return NextResponse.json(
         {
           success: false,
@@ -49,7 +55,9 @@ export async function POST(request: NextRequest) {
     // 验证数据格式
     const validationResult = LoginSchema.safeParse(cleanedBody)
     if (!validationResult.success) {
-      console.warn("登录数据验证失败:", validationResult.error.errors)
+      authLogger.warn("登录数据验证失败", {
+        errors: validationResult.error.errors,
+      })
       return NextResponse.json(
         {
           success: false,
@@ -66,20 +74,37 @@ export async function POST(request: NextRequest) {
 
     const { email, password, redirectTo } = validationResult.data
 
+    const normalizedEmail = email.toLowerCase()
+
     // 创建 Supabase 客户端
     const supabase = await createRouteHandlerClient()
     // 使用 Supabase Auth 进行身份验证
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({
-      email: email.toLowerCase(),
+    let {
+      data,
+      error: signInError,
+    } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
       password: password,
     })
 
+    if (signInError && isInvalidCredentialsError(signInError)) {
+      const provisioned = await autoProvisionSupabaseUser(normalizedEmail, password)
+      if (provisioned) {
+        const retry = await supabase.auth.signInWithPassword({
+          email: normalizedEmail,
+          password: password,
+        })
+        data = retry.data
+        signInError = retry.error
+      }
+    }
+
     if (signInError) {
-      console.error("Supabase 登录失败:", {
-        email,
-        error: signInError.message,
-        status: signInError.status,
-      })
+      authLogger.error(
+        "Supabase 登录失败",
+        { email, status: signInError.status, module: "api/auth/login" },
+        signInError
+      )
 
       // 根据错误类型返回适当的错误信息
       let errorMessage = "登录失败"
@@ -107,7 +132,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!data.session || !data.user) {
-      console.error("登录响应中缺少会话或用户数据")
+      authLogger.error("登录响应中缺少会话或用户数据", { email })
       return NextResponse.json(
         {
           success: false,
@@ -117,57 +142,20 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
-    try {
-      // 同步用户数据到数据库
-      const syncedUser = await syncUserFromAuth({
-        id: data.user.id,
-        email: data.user.email,
-        user_metadata: data.user.user_metadata,
-      })
-      // 返回成功响应
-      const response = {
-        success: true,
-        message: "登录成功",
-        data: {
-          user: {
-            id: syncedUser.id,
-            email: syncedUser.email,
-            name: syncedUser.name,
-            role: syncedUser.role,
-            status: syncedUser.status,
-            avatarUrl: syncedUser.avatarUrl,
-          },
-          redirectTo: redirectTo || "/",
+    const responsePayload = await buildSuccessResponse(
+      {
+        user: {
+          id: data.user.id,
+          email: data.user.email,
+          user_metadata: data.user.user_metadata,
         },
-      }
-
-      return NextResponse.json(response, { status: 200 })
-    } catch (syncError) {
-      console.error("用户数据同步失败:", syncError)
-
-      // 同步失败但认证成功，返回警告
-      return NextResponse.json(
-        {
-          success: true,
-          message: "登录成功，但用户资料同步异常",
-          warning: "sync_failed",
-          data: {
-            user: {
-              id: data.user.id,
-              email: data.user.email,
-              name: data.user.user_metadata?.full_name || data.user.user_metadata?.name,
-              role: "USER", // 默认角色
-              status: "ACTIVE",
-              avatarUrl: data.user.user_metadata?.avatar_url,
-            },
-            redirectTo: redirectTo || "/",
-          },
-        },
-        { status: 200 }
-      )
-    }
+        session: data.session,
+      },
+      redirectTo
+    )
+    return NextResponse.json(responsePayload, { status: 200 })
   } catch (error) {
-    console.error("登录API异常:", error)
+    authLogger.error("登录 API 异常", { clientIP }, error)
 
     return NextResponse.json(
       {
@@ -177,6 +165,68 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 }
     )
+  }
+}
+
+async function buildSuccessResponse(
+  supabaseData: {
+    user: { id: string; email: string | null | undefined; user_metadata: Record<string, any> | null }
+    session: Session | null
+  },
+  redirectTo?: string
+) {
+  try {
+    const syncedUser = await syncUserFromAuth({
+      id: supabaseData.user.id,
+      email: supabaseData.user.email,
+      user_metadata: supabaseData.user.user_metadata,
+    })
+
+    return {
+      success: true,
+      message: "登录成功",
+      data: {
+        user: {
+          id: syncedUser.id,
+          email: syncedUser.email,
+          name: syncedUser.name,
+          role: syncedUser.role,
+          status: syncedUser.status,
+          avatarUrl: syncedUser.avatarUrl,
+        },
+        session: extractSessionTokens(supabaseData.session),
+        redirectTo: redirectTo || "/",
+      },
+    }
+  } catch (error) {
+    authLogger.error("用户数据同步失败", { userId: supabaseData.user.id }, error)
+
+    return {
+      success: true,
+      message: "登录成功，但用户资料同步异常",
+      warning: "sync_failed",
+      data: {
+        user: {
+          id: supabaseData.user.id,
+          email: supabaseData.user.email,
+          name: supabaseData.user.user_metadata?.full_name || supabaseData.user.user_metadata?.name,
+          role: "USER",
+          status: "ACTIVE",
+          avatarUrl: supabaseData.user.user_metadata?.avatar_url,
+        },
+        session: extractSessionTokens(supabaseData.session),
+        redirectTo: redirectTo || "/",
+      },
+    }
+  }
+}
+
+function extractSessionTokens(session: Session | null) {
+  if (!session) return null
+  return {
+    access_token: session.access_token,
+    refresh_token: session.refresh_token,
+    expires_at: session.expires_at,
   }
 }
 
@@ -190,4 +240,154 @@ export async function GET() {
     },
     { status: 405 }
   )
+}
+
+function isInvalidCredentialsError(error: any): boolean {
+  if (!error) return false
+  const message = (error.message || "").toLowerCase()
+  return message.includes("invalid login credentials")
+}
+
+async function autoProvisionSupabaseUser(email: string, password: string): Promise<boolean> {
+  try {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return false
+    }
+
+    const localUser = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, passwordHash: true },
+    })
+
+    if (!localUser?.passwordHash) {
+      return false
+    }
+
+    const passwordMatches = await bcrypt.compare(password, localUser.passwordHash)
+    if (!passwordMatches) {
+      return false
+    }
+
+    const adminClient = createServiceRoleClient()
+    const desiredUserId = localUser.id
+
+    const ensured = await ensureSupabaseUserWithId(adminClient, {
+      id: desiredUserId,
+      email,
+      password,
+    })
+
+    return ensured
+  } catch (error) {
+    authLogger.error("自动同步 Supabase 用户异常", { stage: "autoProvision", email }, error)
+    return false
+  }
+}
+
+async function ensureSupabaseUserWithId(
+  adminClient: SupabaseClient<Database>,
+  params: { id: string; email: string; password: string }
+): Promise<boolean> {
+  const { id, email, password } = params
+
+  // 1. 尝试直接按 ID 获取
+  const { data: userById, error: fetchByIdError } = await adminClient.auth.admin.getUserById(id)
+  if (!fetchByIdError && userById?.user) {
+    const { error: updateError } = await adminClient.auth.admin.updateUserById(id, {
+      password,
+      email_confirm: true,
+    })
+    if (updateError) {
+      authLogger.error("更新 Supabase 用户密码失败", { stage: "autoProvision:update", email }, updateError)
+      return false
+    }
+    return true
+  }
+
+  // 2. 尝试创建同 ID 新用户
+  const { error: createError } = await adminClient.auth.admin.createUser({
+    id,
+    email,
+    password,
+    email_confirm: true,
+  })
+
+  if (!createError) {
+    return true
+  }
+
+  if (createError.message?.includes("already registered")) {
+    // 存在其他 ID 的用户，尝试删除并重建
+    const existing = await findSupabaseUserByEmail(adminClient, email)
+
+    if (existing) {
+      if (existing.id !== id) {
+        const { error: deleteError } = await adminClient.auth.admin.deleteUser(existing.id)
+        if (deleteError) {
+          authLogger.error(
+            "删除 Supabase 冲突用户失败",
+            { stage: "autoProvision:delete", email, existingId: existing.id },
+            deleteError
+          )
+          return false
+        }
+
+        const retry = await adminClient.auth.admin.createUser({
+          id,
+          email,
+          password,
+          email_confirm: true,
+        })
+
+        if (retry.error) {
+          authLogger.error("重新创建 Supabase 用户失败", { stage: "autoProvision:retry", email }, retry.error)
+          return false
+        }
+        return true
+      }
+
+      const { error: updateError } = await adminClient.auth.admin.updateUserById(existing.id, {
+        password,
+        email_confirm: true,
+      })
+
+      if (updateError) {
+        authLogger.error("更新 Supabase 用户密码失败", { stage: "autoProvision:updateExisting", email }, updateError)
+        return false
+      }
+
+      return true
+    }
+  }
+
+  authLogger.error("自动创建 Supabase 用户失败", { stage: "autoProvision:create", email }, createError)
+  return false
+}
+
+async function findSupabaseUserByEmail(adminClient: SupabaseClient<Database>, email: string) {
+  const normalizedEmail = email.toLowerCase()
+  const perPage = 100
+  let page = 1
+
+  while (true) {
+    const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage })
+    if (error) {
+      authLogger.error("查询 Supabase 用户列表失败", { stage: "autoProvision:list", page }, error)
+      return null
+    }
+
+    const users = data?.users ?? []
+    const match = users.find((user) => user.email?.toLowerCase() === normalizedEmail)
+    if (match) {
+      return match
+    }
+
+    if (!data?.nextPage) {
+      break
+    }
+
+    page = data.nextPage
+  }
+
+  return null
 }

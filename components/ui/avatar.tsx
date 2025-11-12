@@ -1,9 +1,19 @@
 "use client"
 
 import * as React from "react"
+import Image, { ImageProps } from "next/image"
 import * as AvatarPrimitive from "@radix-ui/react-avatar"
 
 import { cn } from "@/lib/utils"
+import { getOptimizedImageUrl } from "@/lib/images/optimizer"
+
+type OptimizedAvatarImageProps = {
+  src?: string | null
+  alt?: string
+  priority?: boolean
+  sizes?: string
+  quality?: number
+} & Omit<ImageProps, "src" | "alt" | "fill">
 
 function Avatar({ className, ...props }: React.ComponentProps<typeof AvatarPrimitive.Root>) {
   return (
@@ -15,13 +25,37 @@ function Avatar({ className, ...props }: React.ComponentProps<typeof AvatarPrimi
   )
 }
 
-function AvatarImage({ className, ...props }: React.ComponentProps<typeof AvatarPrimitive.Image>) {
+function AvatarImage({
+  className,
+  src,
+  alt = "",
+  priority = false,
+  sizes = "48px",
+  quality = 70,
+  ...props
+}: OptimizedAvatarImageProps) {
+  const resolvedSrc =
+    getOptimizedImageUrl(src, { width: 128, height: 128, quality, format: "webp" }) ||
+    src ||
+    "/placeholder.svg"
+
   return (
     <AvatarPrimitive.Image
       data-slot="avatar-image"
       className={cn("aspect-square size-full", className)}
-      {...props}
-    />
+      asChild
+    >
+      <Image
+        src={resolvedSrc}
+        alt={alt}
+        fill
+        sizes={sizes}
+        priority={priority}
+        quality={quality}
+        className="object-cover"
+        {...props}
+      />
+    </AvatarPrimitive.Image>
   )
 }
 

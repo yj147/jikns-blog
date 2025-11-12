@@ -8,6 +8,7 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { createClient } from "@/lib/supabase"
+import { logger } from "@/lib/utils/logger"
 import { Github, CheckCircle, XCircle, AlertCircle, Loader2 } from "lucide-react"
 import { useState, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
@@ -42,7 +43,7 @@ function TestOAuthPageContent() {
         setSession(data.session)
         setTestStatus((prev) => ({ ...prev, supabase: "success" }))
       } catch (err) {
-        console.error("Supabase 连接检查失败:", err)
+        logger.error("Supabase 连接检查失败", { module: "TestOAuth.checkConfiguration" }, err)
         setTestStatus((prev) => ({ ...prev, supabase: "error" }))
       }
     }
@@ -89,7 +90,7 @@ function TestOAuthPageContent() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "登录失败"
       setError(errorMessage)
-      console.error("GitHub OAuth 错误:", err)
+      logger.error("GitHub OAuth 错误", { module: "TestOAuth.handleGithubLogin" }, err)
     } finally {
       setLoading(false)
     }
@@ -103,7 +104,7 @@ function TestOAuthPageContent() {
       setSession(null)
       setError(null)
     } catch (err) {
-      console.error("登出错误:", err)
+      logger.error("测试 OAuth 登出错误", { module: "TestOAuth.handleLogout" }, err)
     }
   }
 

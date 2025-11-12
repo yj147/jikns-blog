@@ -1,9 +1,12 @@
-import { Navigation } from "@/components/navigation"
+"use client"
+
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -25,323 +28,379 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { fetchGet, fetchJson, FetchError } from "@/lib/api/fetch-json"
+import { useToast } from "@/components/ui/use-toast"
 import {
   Search,
-  Filter,
-  MoreHorizontal,
+  Users,
   UserCheck,
   UserX,
   Shield,
-  Mail,
-  Calendar,
-  Users,
   UserPlus,
+  MoreHorizontal,
+  Loader2,
 } from "lucide-react"
 
-// Mock users data
-const users = [
-  {
-    id: 1,
-    name: "张三",
-    username: "@zhangsan",
-    email: "zhang@example.com",
-    avatar: "/author-writing.png?height=32&width=32&query=user 1",
-    role: "admin",
-    status: "active",
-    joinDate: "2022年3月15日",
-    lastActive: "2小时前",
-    posts: 25,
-    followers: 1234,
-    verified: true,
-  },
-  {
-    id: 2,
-    name: "李四",
-    username: "@lisi",
-    email: "li@example.com",
-    avatar: "/author-writing.png?height=32&width=32&query=user 2",
-    role: "user",
-    status: "active",
-    joinDate: "2023年1月20日",
-    lastActive: "1天前",
-    posts: 12,
-    followers: 456,
-    verified: false,
-  },
-  {
-    id: 3,
-    name: "王五",
-    username: "@wangwu",
-    email: "wang@example.com",
-    avatar: "/author-writing.png?height=32&width=32&query=user 3",
-    role: "user",
-    status: "suspended",
-    joinDate: "2023年6月10日",
-    lastActive: "1周前",
-    posts: 8,
-    followers: 123,
-    verified: true,
-  },
-  {
-    id: 4,
-    name: "赵六",
-    username: "@zhaoliu",
-    email: "zhao@example.com",
-    avatar: "/author-writing.png?height=32&width=32&query=user 4",
-    role: "moderator",
-    status: "active",
-    joinDate: "2023年8月5日",
-    lastActive: "30分钟前",
-    posts: 18,
-    followers: 789,
-    verified: false,
-  },
-]
+type UserRole = "ADMIN" | "USER"
+type UserStatus = "ACTIVE" | "BANNED"
 
-const getRoleBadge = (role: string) => {
-  switch (role) {
-    case "admin":
-      return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">管理员</Badge>
-    case "moderator":
-      return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">版主</Badge>
-    case "user":
-      return <Badge variant="secondary">用户</Badge>
-    default:
-      return <Badge variant="outline">未知</Badge>
+interface AdminUserRecord {
+  id: string
+  name: string | null
+  email: string
+  role: UserRole
+  status: UserStatus
+  avatarUrl: string | null
+  createdAt: string
+  lastLoginAt: string | null
+  _count: {
+    posts: number
+    activities: number
+    comments: number
   }
 }
 
-const getStatusBadge = (status: string) => {
-  switch (status) {
-    case "active":
-      return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">活跃</Badge>
-    case "suspended":
-      return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">已封禁</Badge>
-    case "inactive":
-      return <Badge variant="secondary">不活跃</Badge>
-    default:
-      return <Badge variant="outline">未知</Badge>
+interface UsersResponse {
+  users: AdminUserRecord[]
+  pagination: {
+    page: number
+    limit: number
+    totalCount: number
+    totalPages: number
+    hasNext: boolean
+    hasPrev: boolean
   }
+  summary: {
+    totalUsers: number
+    activeUsers: number
+    bannedUsers: number
+    adminUsers: number
+  }
+}
+
+const DEFAULT_PAGINATION = {
+  page: 1,
+  limit: 20,
+  totalCount: 0,
+  totalPages: 1,
+  hasNext: false,
+  hasPrev: false,
+}
+
+const DEFAULT_SUMMARY = {
+  totalUsers: 0,
+  activeUsers: 0,
+  bannedUsers: 0,
+  adminUsers: 0,
 }
 
 export default function AdminUsersPage() {
+  const { toast } = useToast()
+  const [query, setQuery] = useState({ search: "", status: "all", role: "all", page: 1 })
+  const [searchInput, setSearchInput] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [users, setUsers] = useState<AdminUserRecord[]>([])
+  const [pagination, setPagination] = useState(DEFAULT_PAGINATION)
+  const [summary, setSummary] = useState(DEFAULT_SUMMARY)
+  const [actionUserId, setActionUserId] = useState<string | null>(null)
+
+  const loadUsers = useCallback(
+    async (params = query) => {
+      setLoading(true)
+      setError(null)
+      try {
+        const response = await fetchGet<{ data?: UsersResponse }>("/api/admin/users", {
+          page: params.page,
+          limit: DEFAULT_PAGINATION.limit,
+          search: params.search || undefined,
+          status: params.status !== "all" ? params.status : undefined,
+          role: params.role !== "all" ? params.role : undefined,
+        })
+
+        const payload = ((response as any)?.data ?? response) as UsersResponse
+        setUsers(payload.users)
+        setPagination(payload.pagination ?? DEFAULT_PAGINATION)
+        setSummary(payload.summary ?? DEFAULT_SUMMARY)
+      } catch (error) {
+        const message = error instanceof FetchError ? error.message : "加载用户失败"
+        setError(message)
+        setUsers([])
+      } finally {
+        setLoading(false)
+      }
+    },
+    [query]
+  )
+
+  useEffect(() => {
+    loadUsers(query)
+  }, [query, loadUsers])
+
+  const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setQuery((prev) => ({ ...prev, search: searchInput.trim(), page: 1 }))
+  }
+
+  const handleStatusChange = (value: string) => {
+    setQuery((prev) => ({ ...prev, status: value, page: 1 }))
+  }
+
+  const handleRoleChange = (value: string) => {
+    setQuery((prev) => ({ ...prev, role: value, page: 1 }))
+  }
+
+  const handlePageChange = (direction: "prev" | "next") => {
+    setQuery((prev) => ({ ...prev, page: Math.max(1, prev.page + (direction === "next" ? 1 : -1)) }))
+  }
+
+  const updateUser = async (userId: string, payload: Record<string, any>, successMessage: string) => {
+    try {
+      setActionUserId(userId)
+      await fetchJson(`/api/admin/users/${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      })
+      toast({ title: successMessage })
+      await loadUsers({ ...query })
+    } catch (error) {
+      const message = error instanceof FetchError ? error.message : "操作失败"
+      toast({ variant: "destructive", title: message })
+    } finally {
+      setActionUserId(null)
+    }
+  }
+
+  const summaryCards = useMemo(
+    () => [
+      { title: "总用户", value: summary.totalUsers, icon: <Users className="h-4 w-4" /> },
+      { title: "活跃用户", value: summary.activeUsers, icon: <UserCheck className="h-4 w-4" /> },
+      { title: "封禁用户", value: summary.bannedUsers, icon: <UserX className="h-4 w-4" /> },
+      { title: "管理员", value: summary.adminUsers, icon: <Shield className="h-4 w-4" /> },
+    ],
+    [summary]
+  )
+
   return (
     <div className="bg-background min-h-screen">
-      <Navigation />
 
       <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="mb-2 text-3xl font-bold">用户管理</h1>
-              <p className="text-muted-foreground">管理所有用户账户和权限</p>
-            </div>
-            <Button>
-              <UserPlus className="mr-2 h-4 w-4" />
-              邀请用户
-            </Button>
+        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="mb-1 text-3xl font-bold">用户管理</h1>
+            <p className="text-muted-foreground">管理账号、角色与状态，所有数据均来自实时 API</p>
           </div>
+          <Button variant="outline">
+            <UserPlus className="mr-2 h-4 w-4" /> 邀请用户
+          </Button>
         </div>
 
-        {/* Stats Cards */}
-        <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">总用户数</CardTitle>
-              <Users className="text-muted-foreground h-4 w-4" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">12,456</div>
-              <p className="text-muted-foreground text-xs">
-                <span className="text-green-600">+156</span> 本月新增
-              </p>
-            </CardContent>
-          </Card>
+        <section className="mb-8 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          {summaryCards.map((card) => (
+            <Card key={card.title}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
+                <span className="text-muted-foreground">{card.icon}</span>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{card.value.toLocaleString()}</div>
+              </CardContent>
+            </Card>
+          ))}
+        </section>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">活跃用户</CardTitle>
-              <UserCheck className="text-muted-foreground h-4 w-4" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">8,234</div>
-              <p className="text-muted-foreground text-xs">66% 活跃率</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">已封禁</CardTitle>
-              <UserX className="text-muted-foreground h-4 w-4" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">23</div>
-              <p className="text-muted-foreground text-xs">需要关注</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">管理员</CardTitle>
-              <Shield className="text-muted-foreground h-4 w-4" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">5</div>
-              <p className="text-muted-foreground text-xs">系统管理员</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Filters and Search */}
         <Card className="mb-6">
-          <CardContent className="pt-6">
-            <div className="flex flex-col gap-4 md:flex-row">
-              <div className="relative flex-1">
-                <Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transform" />
-                <Input placeholder="搜索用户名、邮箱..." className="pl-10" />
+          <CardHeader>
+            <CardTitle>筛选与搜索</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSearchSubmit} className="grid gap-4 md:grid-cols-3">
+              <div>
+                <Label htmlFor="search">关键词</Label>
+                <div className="relative mt-2">
+                  <Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
+                  <Input
+                    id="search"
+                    value={searchInput}
+                    onChange={(event) => setSearchInput(event.target.value)}
+                    placeholder="搜索姓名或邮箱"
+                    className="pl-10"
+                  />
+                </div>
               </div>
-              <Select>
-                <SelectTrigger className="w-full md:w-48">
-                  <Filter className="mr-2 h-4 w-4" />
-                  <SelectValue placeholder="角色筛选" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部角色</SelectItem>
-                  <SelectItem value="admin">管理员</SelectItem>
-                  <SelectItem value="moderator">版主</SelectItem>
-                  <SelectItem value="user">普通用户</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select>
-                <SelectTrigger className="w-full md:w-48">
-                  <SelectValue placeholder="状态筛选" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部状态</SelectItem>
-                  <SelectItem value="active">活跃</SelectItem>
-                  <SelectItem value="inactive">不活跃</SelectItem>
-                  <SelectItem value="suspended">已封禁</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+
+              <div>
+                <Label htmlFor="status">状态</Label>
+                <Select defaultValue="all" value={query.status} onValueChange={handleStatusChange}>
+                  <SelectTrigger id="status" className="mt-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部</SelectItem>
+                    <SelectItem value="ACTIVE">活跃</SelectItem>
+                    <SelectItem value="BANNED">已封禁</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="role">角色</Label>
+                <Select defaultValue="all" value={query.role} onValueChange={handleRoleChange}>
+                  <SelectTrigger id="role" className="mt-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部</SelectItem>
+                    <SelectItem value="ADMIN">管理员</SelectItem>
+                    <SelectItem value="USER">普通用户</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="md:col-span-3">
+                <Button type="submit" className="w-full md:w-auto">
+                  <Search className="mr-2 h-4 w-4" /> 搜索
+                </Button>
+              </div>
+            </form>
           </CardContent>
         </Card>
 
-        {/* Users Table */}
         <Card>
           <CardHeader>
             <CardTitle>用户列表</CardTitle>
-            <CardDescription>管理所有用户账户</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {error && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                {error}
+              </div>
+            )}
+
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>用户</TableHead>
                   <TableHead>角色</TableHead>
                   <TableHead>状态</TableHead>
-                  <TableHead>加入时间</TableHead>
-                  <TableHead>最后活跃</TableHead>
-                  <TableHead>数据</TableHead>
+                  <TableHead>内容统计</TableHead>
+                  <TableHead>最近活跃</TableHead>
                   <TableHead className="text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>
-                      <div className="flex items-center space-x-3">
-                        <Avatar className="h-10 w-10">
-                          <AvatarImage src={user.avatar || "/placeholder.svg"} alt={user.name} />
-                          <AvatarFallback>{user.name[0]}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <p className="font-medium">{user.name}</p>
-                            {user.verified && (
-                              <div className="bg-primary flex h-4 w-4 items-center justify-center rounded-full">
-                                <div className="h-2 w-2 rounded-full bg-white" />
-                              </div>
-                            )}
-                          </div>
-                          <p className="text-muted-foreground text-sm">{user.username}</p>
-                          <div className="text-muted-foreground flex items-center space-x-1 text-xs">
-                            <Mail className="h-3 w-3" />
-                            <span>{user.email}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>{getRoleBadge(user.role)}</TableCell>
-                    <TableCell>{getStatusBadge(user.status)}</TableCell>
-                    <TableCell>
-                      <div className="text-muted-foreground flex items-center space-x-1 text-sm">
-                        <Calendar className="h-3 w-3" />
-                        <span>{user.joinDate}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-muted-foreground text-sm">{user.lastActive}</span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-1 text-sm">
-                        <div>{user.posts} 文章</div>
-                        <div className="text-muted-foreground">{user.followers} 关注者</div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
-                            <UserCheck className="mr-2 h-4 w-4" />
-                            查看详情
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Mail className="mr-2 h-4 w-4" />
-                            发送消息
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Shield className="mr-2 h-4 w-4" />
-                            修改权限
-                          </DropdownMenuItem>
-                          {user.status === "active" ? (
-                            <DropdownMenuItem className="text-red-600">
-                              <UserX className="mr-2 h-4 w-4" />
-                              封禁用户
-                            </DropdownMenuItem>
-                          ) : (
-                            <DropdownMenuItem className="text-green-600">
-                              <UserCheck className="mr-2 h-4 w-4" />
-                              解除封禁
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center">
+                      <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : users.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                      暂无符合条件的用户
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  users.map((user) => (
+                    <TableRow key={user.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage src={user.avatarUrl ?? undefined} alt={user.name ?? user.email} />
+                            <AvatarFallback>{user.name?.charAt(0) ?? user.email[0]}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-semibold">{user.name ?? "未设置昵称"}</p>
+                            <p className="text-muted-foreground text-sm">{user.email}</p>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {user.role === "ADMIN" ? (
+                          <Badge className="bg-red-100 text-red-800 hover:bg-red-100">管理员</Badge>
+                        ) : (
+                          <Badge variant="secondary">用户</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {user.status === "ACTIVE" ? (
+                          <Badge className="bg-green-100 text-green-800 hover:bg-green-100">活跃</Badge>
+                        ) : (
+                          <Badge className="bg-red-100 text-red-800 hover:bg-red-100">已封禁</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        <div className="flex gap-3">
+                          <span>文章 {user._count.posts}</span>
+                          <span>动态 {user._count.activities}</span>
+                          <span>评论 {user._count.comments}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              {actionUserId === user.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <MoreHorizontal className="h-4 w-4" />
+                              )}
+                              <span className="sr-only">打开操作菜单</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {user.status === "ACTIVE" ? (
+                              <DropdownMenuItem onClick={() => updateUser(user.id, { status: "BANNED" }, "用户已封禁")}>封禁</DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem onClick={() => updateUser(user.id, { status: "ACTIVE" }, "用户已解封")}>解除封禁</DropdownMenuItem>
+                            )}
+                            {user.role === "ADMIN" ? (
+                              <DropdownMenuItem onClick={() => updateUser(user.id, { role: "USER" }, "已降级为普通用户")}>
+                                设为普通用户
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem onClick={() => updateUser(user.id, { role: "ADMIN" }, "已授予管理员权限")}>
+                                提升为管理员
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
+
+            <div className="flex items-center justify-between border-t pt-4 text-sm">
+              <span>
+                第 {pagination.page} / {pagination.totalPages} 页，共 {pagination.totalCount} 人
+              </span>
+              <div className="space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange("prev")}
+                  disabled={loading || !pagination.hasPrev}
+                >
+                  上一页
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange("next")}
+                  disabled={loading || !pagination.hasNext}
+                >
+                  下一页
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
-
-        {/* Pagination */}
-        <div className="mt-6 flex justify-center">
-          <div className="flex space-x-2">
-            <Button variant="outline" disabled>
-              上一页
-            </Button>
-            <Button variant="default">1</Button>
-            <Button variant="outline">2</Button>
-            <Button variant="outline">3</Button>
-            <Button variant="outline">下一页</Button>
-          </div>
-        </div>
       </div>
     </div>
   )

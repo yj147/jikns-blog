@@ -3,7 +3,7 @@
  * 基于 Prisma schema 的增强类型
  */
 
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@/lib/generated/prisma"
 
 // ============================================================================
 // 基础数据模型类型
@@ -373,4 +373,4 @@ export interface Database {
 // 枚举类型导出
 // ============================================================================
 
-export { Role, UserStatus } from "@prisma/client"
+export { Role, UserStatus } from "@/lib/generated/prisma"

@@ -1,13 +1,11 @@
-import { Navigation } from "@/components/navigation"
 import { HeroSection } from "@/components/hero-section"
 import { FeaturesSection } from "@/components/features-section"
 import { LatestContentSection } from "@/components/latest-content-section"
-import { InteractiveTerminal } from "@/components/interactive-terminal"
+import { InteractiveTerminalSection } from "@/components/interactive-terminal-section"
 
 export default function HomePage() {
   return (
     <div className="bg-background min-h-screen">
-      <Navigation />
 
       <HeroSection />
       <FeaturesSection />
@@ -18,7 +16,7 @@ export default function HomePage() {
           <p className="text-muted-foreground mx-auto mb-12 max-w-2xl">
             观看现代化开发工作流程的实时演示，或切换到交互模式亲自体验命令行操作
           </p>
-          <InteractiveTerminal />
+          <InteractiveTerminalSection />
         </div>
       </section>
 

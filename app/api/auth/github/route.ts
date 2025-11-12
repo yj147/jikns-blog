@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createRouteHandlerClient } from "@/lib/supabase"
 import { validateRedirectUrl } from "@/lib/auth"
 import { RateLimiter } from "@/lib/security"
+import { authLogger } from "@/lib/utils/logger"
 
 export async function POST(request: NextRequest) {
   const clientIP =
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest) {
   try {
     // 速率限制检查 - 每个IP每分钟最多5次OAuth启动请求
     if (!RateLimiter.checkRateLimit(`github-oauth:${clientIP}`, 5, 60 * 1000)) {
-      console.warn(`GitHub OAuth启动速率限制触发，IP: ${clientIP}`)
+      authLogger.warn("GitHub OAuth 启动速率限制触发", { clientIP })
       return NextResponse.json(
         {
           success: false,
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (error) {
-      console.error("GitHub OAuth启动失败:", error)
+      authLogger.error("GitHub OAuth 启动失败", { clientIP }, error)
 
       let errorMessage = "OAuth启动失败"
       let errorCode = "oauth_start_failed"
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!data.url) {
-      console.error("OAuth响应中没有重定向URL")
+      authLogger.error("OAuth 响应中没有重定向 URL", { clientIP })
       return NextResponse.json(
         {
           success: false,
@@ -100,7 +101,7 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     )
   } catch (error) {
-    console.error("GitHub OAuth API异常:", error)
+    authLogger.error("GitHub OAuth API 异常", { clientIP }, error)
 
     return NextResponse.json(
       {
@@ -142,14 +143,14 @@ export async function GET(request: NextRequest) {
     })
 
     if (error || !data.url) {
-      console.error("GitHub OAuth重定向失败:", error)
+      authLogger.error("GitHub OAuth 重定向失败", { redirectTo: safeRedirectTo }, error)
       return NextResponse.redirect(new URL(`/login?error=oauth_start_failed`, request.url))
     }
 
     // 直接重定向到GitHub OAuth页面
     return NextResponse.redirect(data.url)
   } catch (error) {
-    console.error("GitHub OAuth重定向异常:", error)
+    authLogger.error("GitHub OAuth 重定向异常", {}, error)
     return NextResponse.redirect(new URL("/login?error=oauth_redirect_failed", request.url))
   }
 }

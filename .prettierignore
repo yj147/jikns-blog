@@ -25,6 +25,9 @@ out/
 *.log
 logs/
 
+# Monitoring data
+monitoring-data/
+
 # Database
 *.db
 *.sqlite
@@ -68,6 +71,11 @@ prisma/generated/
 # Test coverage
 coverage/
 *.lcov
+
+# Test backups and reports
+tests.backup.*/
+playwright-report/
+test-results/
 
 # Storybook build outputs
 storybook-static/

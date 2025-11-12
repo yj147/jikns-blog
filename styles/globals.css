@@ -121,3 +121,50 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  [data-hover-scale],
+  [data-hover-lift],
+  [data-hover-shift],
+  [data-hover-tilt] {
+    @apply transition-transform duration-300;
+  }
+
+  [data-hover-scale]:hover {
+    @apply scale-105;
+  }
+
+  [data-hover-scale]:active {
+    @apply scale-95;
+  }
+
+  [data-hover-lift]:hover {
+    @apply -translate-y-1 scale-105;
+  }
+
+  [data-hover-shift]:hover {
+    @apply translate-x-1;
+  }
+
+  [data-hover-tilt]:hover {
+    @apply rotate-3 scale-105;
+  }
+
+  [data-spin-slow] {
+    animation: spin 2s linear infinite;
+  }
+
+  @keyframes badge-pulse {
+    0%,
+    100% {
+      background-color: #10b981;
+    }
+    50% {
+      background-color: #059669;
+    }
+  }
+
+  [data-rank-highlight] {
+    animation: badge-pulse 2s ease-in-out infinite;
+  }
+}

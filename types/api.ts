@@ -16,6 +16,7 @@ export interface ApiResponse<T = unknown> {
 
 export interface ApiError {
   code: string
+  type?: string
   message: string
   details?: Record<string, unknown>
   field?: string // 用于表单验证错误
@@ -30,6 +31,7 @@ export interface ApiMeta {
   version?: string
   processingTime?: number // 毫秒
   warnings?: string[] // 警告信息数组
+  cached?: boolean
 }
 
 // ============================================================================

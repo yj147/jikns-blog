@@ -1,0 +1,34 @@
+"use client"
+
+import dynamic from "next/dynamic"
+
+const ThemeToggle = dynamic(() => import("./theme-toggle"), {
+  ssr: false,
+  loading: () => <div className="bg-muted h-10 w-10 rounded-full" />,
+})
+
+const NavigationClient = dynamic(() => import("./navigation-client"), {
+  ssr: false,
+  loading: () => null,
+})
+
+const MobileNavigation = dynamic(() => import("./navigation-mobile"), {
+  ssr: false,
+  loading: () => <div className="bg-muted h-10 w-10 rounded-full md:hidden" />,
+})
+
+const AuthActions = dynamic(() => import("./navigation-auth-actions"), {
+  ssr: false,
+  loading: () => <div className="bg-muted h-10 w-24 rounded-full" />,
+})
+
+export default function NavigationInteractive() {
+  return (
+    <div className="flex items-center gap-3">
+      <ThemeToggle />
+      <NavigationClient />
+      <MobileNavigation />
+      <AuthActions />
+    </div>
+  )
+}

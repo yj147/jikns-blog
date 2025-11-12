@@ -1,0 +1,196 @@
+/**
+ * 路由级权限工具
+ * 提供统一的认证和授权入口
+ * 渐进式替换现有认证判断逻辑
+ */
+
+import { NextRequest } from "next/server"
+import { cookies } from "next/headers"
+import { createServerClient } from "@supabase/ssr"
+import { prisma } from "@/lib/prisma"
+import { createErrorResponse, ErrorCode } from "@/lib/api/unified-response"
+import { authLogger } from "@/lib/utils/logger"
+
+/**
+ * 用户信息接口
+ */
+export interface RouteUser {
+  id: string
+  email: string | null
+  role: "USER" | "ADMIN"
+  status: "ACTIVE" | "BANNED"
+}
+
+/**
+ * 从请求中获取 Supabase 用户
+ * 修复：使用正确的 cookie 处理以支持会话刷新
+ */
+async function getSupabaseUser(request: NextRequest) {
+  const cookieStore = await cookies()
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: any) {
+          // 正确设置 cookie 以支持会话刷新
+          cookieStore.set(name, value, options)
+        },
+        remove(name: string, options: any) {
+          // 正确删除 cookie
+          cookieStore.delete(name)
+        },
+      },
+    }
+  )
+
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser()
+
+  if (error || !user) {
+    return null
+  }
+
+  return user
+}
+
+/**
+ * 获取用户信息或返回 null
+ * 不会抛出错误，适用于可选认证场景
+ */
+export async function getUserOrNull(request: NextRequest): Promise<RouteUser | null> {
+  try {
+    const supabaseUser = await getSupabaseUser(request)
+
+    if (!supabaseUser) {
+      return null
+    }
+
+    // 从数据库获取完整用户信息
+    const dbUser = await prisma.user.findUnique({
+      where: { id: supabaseUser.id },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+      },
+    })
+
+    if (!dbUser) {
+      // Supabase 用户存在但数据库中没有记录
+      // 这种情况可能发生在用户刚注册但还未同步到数据库
+      return {
+        id: supabaseUser.id,
+        email: supabaseUser.email || null,
+        role: "USER",
+        status: "ACTIVE",
+      }
+    }
+
+    return dbUser
+  } catch (error) {
+    authLogger.error("获取用户信息失败", error)
+    return null
+  }
+}
+
+/**
+ * 要求认证的路由守卫
+ * 如果用户未登录，返回 401 错误响应
+ * 如果用户已登录，返回用户信息
+ */
+export async function requireAuth(request: NextRequest): Promise<RouteUser | Response> {
+  const user = await getUserOrNull(request)
+
+  if (!user) {
+    return createErrorResponse(ErrorCode.UNAUTHORIZED, "请先登录")
+  }
+
+  // 检查用户状态
+  if (user.status === "BANNED") {
+    return createErrorResponse(ErrorCode.FORBIDDEN, "账户已被封禁")
+  }
+
+  return user
+}
+
+/**
+ * 要求管理员权限的路由守卫
+ * 如果用户未登录，返回 401 错误响应
+ * 如果用户不是管理员，返回 403 错误响应
+ * 如果用户是管理员，返回用户信息
+ */
+export async function requireAdmin(request: NextRequest): Promise<RouteUser | Response> {
+  const authResult = await requireAuth(request)
+
+  // 如果 requireAuth 返回了错误响应，直接返回
+  if (authResult instanceof Response) {
+    return authResult
+  }
+
+  const user = authResult
+
+  // 检查管理员权限
+  if (user.role !== "ADMIN") {
+    return createErrorResponse(ErrorCode.FORBIDDEN, "需要管理员权限")
+  }
+
+  return user
+}
+
+/**
+ * 示例：在路由中使用
+ *
+ * ```typescript
+ * // API 路由示例
+ * export async function POST(request: NextRequest) {
+ *   // 要求用户登录
+ *   const authResult = await requireAuth(request)
+ *   if (authResult instanceof Response) {
+ *     return authResult // 返回错误响应
+ *   }
+ *   const user = authResult
+ *
+ *   // 继续处理业务逻辑...
+ *   return createSuccessResponse({ userId: user.id })
+ * }
+ *
+ * // 管理员路由示例
+ * export async function DELETE(request: NextRequest) {
+ *   // 要求管理员权限
+ *   const authResult = await requireAdmin(request)
+ *   if (authResult instanceof Response) {
+ *     return authResult // 返回错误响应
+ *   }
+ *   const admin = authResult
+ *
+ *   // 执行管理员操作...
+ *   return createSuccessResponse({ deleted: true })
+ * }
+ *
+ * // 可选认证示例
+ * export async function GET(request: NextRequest) {
+ *   const user = await getUserOrNull(request)
+ *
+ *   if (user) {
+ *     // 已登录用户的逻辑
+ *     return createSuccessResponse({
+ *       data: personalizedData,
+ *       userId: user.id
+ *     })
+ *   } else {
+ *     // 未登录用户的逻辑
+ *     return createSuccessResponse({
+ *       data: publicData
+ *     })
+ *   }
+ * }
+ * ```
+ */

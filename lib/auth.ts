@@ -9,6 +9,7 @@ import { cache } from "react"
 import { unstable_cache } from "next/cache"
 import { SessionSecurity } from "./security"
 import type { User } from "./generated/prisma"
+import { authLogger } from "./utils/logger"
 
 /**
  * Supabase Auth User 类型定义
@@ -26,12 +27,57 @@ interface SupabaseUser {
   } | null
 }
 
+async function shouldSkipAuthLookup(): Promise<boolean> {
+  try {
+    const { cookies } = await import("next/headers")
+    const cookieStore = await cookies()
+    const hasSessionCookie = cookieStore
+      .getAll()
+      .some((cookie) => isSupabaseAuthCookie(cookie.name))
+
+    return !hasSessionCookie
+  } catch {
+    // 测试或脚本环境中无法访问 cookies 时维持原有逻辑
+    return false
+  }
+}
+
+function isSupabaseAuthCookie(name: string): boolean {
+  if (!name || !name.startsWith("sb-")) return false
+  return (
+    name.endsWith("-auth-token") ||
+    name.endsWith("-auth-token.0") ||
+    name.endsWith("-auth-token.1") ||
+    name.endsWith("-refresh-token")
+  )
+}
+
+function isSessionMissingError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const { name, message, code } = error as { name?: string; message?: string; code?: string }
+  const normalizedMessage = (message || "").toLowerCase()
+
+  return (
+    name === "AuthSessionMissingError" ||
+    code === "auth_session_missing" ||
+    normalizedMessage.includes("auth session missing")
+  )
+}
+
+function logSessionMissing(stage: string) {
+  authLogger.debug("Supabase 会话缺失，返回匿名状态", { stage })
+}
+
 /**
  * 获取当前认证用户（Server Components 专用）
  * 安全性增强: 使用 getUser() 替代 getSession() 来获取经过验证的用户数据
  * 使用 React cache 优化，在同一请求中避免重复查询
  */
 export const getAuthenticatedUser = cache(async () => {
+  if (await shouldSkipAuthLookup()) {
+    return { user: null, error: null }
+  }
+
   const supabase = await createServerSupabaseClient()
 
   try {
@@ -41,13 +87,23 @@ export const getAuthenticatedUser = cache(async () => {
     } = await supabase.auth.getUser()
 
     if (error) {
-      console.error("获取认证用户失败:", error)
+      if (isSessionMissingError(error)) {
+        logSessionMissing("getAuthenticatedUser")
+        return { user: null, error: null }
+      }
+
+      authLogger.error("获取认证用户失败", { stage: "getAuthenticatedUser" }, error)
       return { user: null, error }
     }
 
     return { user, error: null }
   } catch (error) {
-    console.error("用户认证查询异常:", error)
+    if (isSessionMissingError(error)) {
+      logSessionMissing("getAuthenticatedUser")
+      return { user: null, error: null }
+    }
+
+    authLogger.error("用户认证查询异常", { stage: "getAuthenticatedUser" }, error)
     return { user: null, error }
   }
 })
@@ -57,6 +113,10 @@ export const getAuthenticatedUser = cache(async () => {
  * @deprecated 建议使用 getAuthenticatedUser() 获取经过验证的用户数据
  */
 export const getUserSession = cache(async () => {
+  if (await shouldSkipAuthLookup()) {
+    return { session: null, error: null }
+  }
+
   const supabase = await createServerSupabaseClient()
 
   try {
@@ -66,13 +126,23 @@ export const getUserSession = cache(async () => {
     } = await supabase.auth.getSession()
 
     if (error) {
-      console.error("获取会话失败:", error)
+      if (isSessionMissingError(error)) {
+        logSessionMissing("getUserSession")
+        return { session: null, error: null }
+      }
+
+      authLogger.error("获取会话失败", { stage: "getUserSession" }, error)
       return { session: null, error }
     }
 
     return { session, error: null }
   } catch (error) {
-    console.error("会话查询异常:", error)
+    if (isSessionMissingError(error)) {
+      logSessionMissing("getUserSession")
+      return { session: null, error: null }
+    }
+
+    authLogger.error("会话查询异常", { stage: "getUserSession" }, error)
     return { session: null, error }
   }
 })
@@ -88,7 +158,7 @@ async function fetchUserFromDatabase(userId: string): Promise<User | null> {
 
     return user
   } catch (error) {
-    console.error("获取用户信息失败:", error)
+    authLogger.error("获取用户信息失败", { stage: "fetchUserFromDatabase", userId }, error)
     return null
   }
 }
@@ -224,7 +294,7 @@ export async function syncUserFromAuth(authUser: SupabaseUser): Promise<User> {
       return newUser
     }
   } catch (error) {
-    console.error("用户数据同步失败:", error)
+    authLogger.error("用户数据同步失败", { stage: "syncUserFromAuth", userId: authUser.id }, error)
     throw new Error(`用户数据同步失败: ${error instanceof Error ? error.message : "未知错误"}`)
   }
 }
@@ -263,7 +333,7 @@ export async function isEmailRegistered(email: string): Promise<boolean> {
 
     return !!user
   } catch (error) {
-    console.error("检查邮箱注册状态失败:", error)
+    authLogger.error("检查邮箱注册状态失败", { email }, error)
     return false
   }
 }

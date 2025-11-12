@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server"
+import { logger } from "./utils/logger"
 
 // 动态导入 DOMPurify，仅在客户端或支持的环境中使用
 let DOMPurify: any = null
@@ -136,16 +137,18 @@ export class CSRFProtection {
   /**
    * 设置 CSRF Cookie
    */
-  static setCsrfCookie(response: NextResponse): void {
-    const token = this.generateToken()
+  static setCsrfCookie(response: NextResponse, token?: string): string {
+    const csrfToken = token ?? this.generateToken()
 
-    response.cookies.set(this.TOKEN_COOKIE, token, {
+    response.cookies.set(this.TOKEN_COOKIE, csrfToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
       path: "/",
       maxAge: 60 * 60 * 24, // 24 小时
     })
+
+    return csrfToken
   }
 }
 
@@ -241,7 +244,7 @@ export class XSSProtection {
 
     for (const pattern of suspiciousPatterns) {
       if (pattern.test(input)) {
-        console.warn("检测到可疑输入模式:", pattern.toString())
+        logger.warn("检测到可疑输入模式", { pattern: pattern.toString() })
         return this.sanitizeHTML(input)
       }
     }
@@ -463,12 +466,19 @@ export class RateLimiter {
   }
 
   /**
+   * 获取速率限制状态（用于监控和调试）
+   */
+  static getRateLimitState(identifier: string): { count: number; resetTime: number } | null {
+    return this.requests.get(identifier) ?? null
+  }
+
+  /**
    * 重置所有速率限制记录（开发环境使用）
    */
   static resetAllRateLimits(): void {
     if (process.env.NODE_ENV === "development") {
       this.requests.clear()
-      console.log("🔄 开发环境：已重置所有速率限制记录")
+      logger.debug("开发环境已重置所有速率限制记录")
     }
   }
 

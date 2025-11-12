@@ -8,6 +8,7 @@ import { withApiAuth, createSuccessResponse, createErrorResponse } from "@/lib/a
 import { prisma } from "@/lib/prisma"
 import { XSSProtection } from "@/lib/security"
 import type { User } from "@/lib/generated/prisma"
+import { logger } from "@/lib/utils/logger"
 
 /**
  * 处理点赞/取消点赞
@@ -112,7 +113,11 @@ async function handleLikeHandler(request: NextRequest, user: User) {
       )
     }
   } catch (error) {
-    console.error("处理点赞失败:", error)
+    logger.error(
+      "处理点赞失败",
+      { module: "api/user/interactions", action: "like", userId: user.id },
+      error
+    )
     return createErrorResponse("处理点赞失败", "HANDLE_LIKE_FAILED", 500)
   }
 }
@@ -209,7 +214,11 @@ async function handleFollowHandler(request: NextRequest, user: User) {
       )
     }
   } catch (error) {
-    console.error("处理关注失败:", error)
+    logger.error(
+      "处理关注失败",
+      { module: "api/user/interactions", action: "follow", userId: user.id },
+      error
+    )
     return createErrorResponse("处理关注失败", "HANDLE_FOLLOW_FAILED", 500)
   }
 }
@@ -297,7 +306,11 @@ async function handleBookmarkHandler(request: NextRequest, user: User) {
       )
     }
   } catch (error) {
-    console.error("处理收藏失败:", error)
+    logger.error(
+      "处理收藏失败",
+      { module: "api/user/interactions", action: "bookmark", userId: user.id },
+      error
+    )
     return createErrorResponse("处理收藏失败", "HANDLE_BOOKMARK_FAILED", 500)
   }
 }

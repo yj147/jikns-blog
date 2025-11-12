@@ -4,11 +4,14 @@
  */
 
 import { createBrowserClient, createServerClient } from "@supabase/ssr"
+import { createClient as createSupabaseJsClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/database"
+import { logger } from "./utils/logger"
 
 // 环境变量验证
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
@@ -45,7 +48,7 @@ export async function createServerSupabaseClient() {
           cookieStore.set(name, value, options)
         } catch (error) {
           // 处理在某些上下文中无法设置 cookie 的情况
-          console.error("无法设置 cookie:", error)
+          logger.error("无法设置 cookie", { name }, error)
         }
       },
       remove(name: string, options: any) {
@@ -53,7 +56,7 @@ export async function createServerSupabaseClient() {
           cookieStore.delete(name)
         } catch (error) {
           // 处理在某些上下文中无法删除 cookie 的情况
-          console.error("无法删除 cookie:", error)
+          logger.error("无法删除 cookie", { name }, error)
         }
       },
     },
@@ -79,6 +82,25 @@ export async function createRouteHandlerClient() {
       remove(name: string, options: any) {
         cookieStore.delete(name)
       },
+    },
+  })
+}
+
+/**
+ * 创建 Service Role Supabase 客户端
+ * 仅在服务端使用，用于执行管理类操作（如 admin create user）
+ */
+export function createServiceRoleClient() {
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    throw new Error(
+      "缺少 Supabase Service Role Key。请在环境变量中设置 SUPABASE_SERVICE_ROLE_KEY"
+    )
+  }
+
+  return createSupabaseJsClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
     },
   })
 }

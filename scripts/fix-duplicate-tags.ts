@@ -1,7 +1,7 @@
 /**
  * 修复数据库中的重复标签问题
  */
-import { PrismaClient } from "@prisma/client"
+import { PrismaClient } from "@/lib/generated/prisma"
 
 const prisma = new PrismaClient()
 

@@ -1,4 +1,3 @@
-import { Navigation } from "@/components/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -20,7 +19,6 @@ import { User, Bell, Shield, Palette, Globe, Trash2, Camera } from "lucide-react
 export default function SettingsPage() {
   return (
     <div className="bg-background min-h-screen">
-      <Navigation />
 
       <div className="container mx-auto px-4 py-8">
         <div className="mx-auto max-w-4xl">

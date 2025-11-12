@@ -3,6 +3,8 @@
  * 监控认证请求响应时间、权限验证性能和错误率统计
  */
 
+import { logger } from "./utils/logger"
+
 /**
  * 性能指标类型
  */
@@ -33,6 +35,31 @@ export enum MetricType {
   // 错误指标
   ERROR_RATE = "ERROR_RATE",
   FAILURE_RATE = "FAILURE_RATE",
+
+  // 关注与社交操作指标
+  FOLLOW_ACTION_DURATION = "FOLLOW_ACTION_DURATION",
+  FOLLOW_AUTH_REJECTED = "FOLLOW_AUTH_REJECTED",
+  FOLLOW_RATE_LIMITED = "FOLLOW_RATE_LIMITED",
+  FOLLOW_ACTION_RATE_LIMIT = "FOLLOW_ACTION_RATE_LIMIT",
+  FEED_FOLLOWING_RESULT_COUNT = "FEED_FOLLOWING_RESULT_COUNT",
+
+  // 动态与活动指标
+  ACTIVITY_RATE_LIMIT_CHECK = "ACTIVITY_RATE_LIMIT_CHECK",
+  ACTIVITY_SEARCH_DURATION = "ACTIVITY_SEARCH_DURATION",
+
+  // 搜索指标
+  SEARCH_CONTENT_DURATION = "SEARCH_CONTENT_DURATION",
+  SEARCH_SUGGESTION_DURATION = "SEARCH_SUGGESTION_DURATION",
+  SEARCH_AUTHOR_CANDIDATE_DURATION = "SEARCH_AUTHOR_CANDIDATE_DURATION",
+  SEARCH_REPO_FALLBACK_TRIGGERED = "SEARCH_REPO_FALLBACK_TRIGGERED",
+
+  // 互动（点赞/收藏/评论）限流指标
+  LIKE_RATE_LIMIT_CHECK = "LIKE_RATE_LIMIT_CHECK",
+  BOOKMARK_RATE_LIMIT_CHECK = "BOOKMARK_RATE_LIMIT_CHECK",
+  COMMENT_RATE_LIMIT_CHECK = "COMMENT_RATE_LIMIT_CHECK",
+
+  // 通用自定义指标
+  CUSTOM = "CUSTOM",
 }
 
 /**
@@ -107,7 +134,7 @@ export class PerformanceMonitor {
   endTimer(id: string, type: MetricType, additionalContext?: any): number | null {
     const timer = this.timers.get(id)
     if (!timer) {
-      console.warn(`计时器 ${id} 不存在`)
+      logger.warn("计时器不存在", { module: "PerformanceMonitor", id })
       return null
     }
 
@@ -411,16 +438,19 @@ export class PerformanceMonitor {
       // 在开发环境下输出到控制台
       if (process.env.NODE_ENV === "development") {
         metricsToFlush.forEach((metric) => {
-          console.log(
-            `[${metric.type}] ${metric.value}${metric.unit} - ${metric.timestamp.toISOString()}`
-          )
+          logger.debug("性能指标", {
+            type: metric.type,
+            value: metric.value,
+            unit: metric.unit,
+            timestamp: metric.timestamp.toISOString(),
+          })
         })
       }
 
       // 在生产环境下，应该将指标发送到监控系统
       await this.persistMetrics(metricsToFlush)
     } catch (error) {
-      console.error("性能指标刷新失败:", error)
+      logger.error("性能指标刷新失败", {}, error)
     } finally {
       this.isFlushingMetrics = false
     }
@@ -455,7 +485,7 @@ export class PerformanceMonitor {
         // 客户端环境：可以发送指标到API端点
       }
     } catch (error) {
-      console.error("性能指标持久化失败:", error)
+      logger.error("性能指标持久化失败", {}, error)
     }
   }
 

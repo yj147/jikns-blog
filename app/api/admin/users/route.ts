@@ -6,6 +6,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { validateApiPermissions } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
+import { logger } from "@/lib/utils/logger"
+import { createSuccessResponse, createErrorResponse, ErrorCode } from "@/lib/api/unified-response"
 
 /**
  * 获取所有用户列表（管理员专用）
@@ -15,7 +17,12 @@ export async function GET(request: NextRequest) {
   const { success, error, user } = await validateApiPermissions(request, "admin")
 
   if (!success) {
-    return NextResponse.json(error, { status: error.statusCode })
+    return createErrorResponse(
+      error?.code ?? ErrorCode.FORBIDDEN,
+      error?.message || "无权查看用户列表",
+      undefined,
+      error?.statusCode ?? 403
+    )
   }
 
   try {
@@ -46,7 +53,9 @@ export async function GET(request: NextRequest) {
     }
 
     // 执行查询
-    const [users, totalCount] = await Promise.all([
+    const requestId = crypto.randomUUID()
+
+    const [users, totalCount, totalUsers, activeUsers, bannedUsers, adminUsers] = await Promise.all([
       prisma.user.findMany({
         where,
         select: {
@@ -73,33 +82,38 @@ export async function GET(request: NextRequest) {
         take: limit,
       }),
       prisma.user.count({ where }),
+      prisma.user.count(),
+      prisma.user.count({ where: { status: "ACTIVE" } }),
+      prisma.user.count({ where: { status: "BANNED" } }),
+      prisma.user.count({ where: { role: "ADMIN" } }),
     ])
 
     // 计算分页信息
     const totalPages = Math.ceil(totalCount / limit)
 
-    return NextResponse.json({
-      data: users,
-      pagination: {
-        page,
-        limit,
-        totalCount,
-        totalPages,
-        hasNext: page < totalPages,
-        hasPrev: page > 1,
-      },
-      message: "用户列表获取成功",
-    })
-  } catch (error) {
-    console.error("获取用户列表失败:", error)
-    return NextResponse.json(
+    return createSuccessResponse(
       {
-        error: "获取用户列表失败",
-        code: "FETCH_USERS_FAILED",
-        timestamp: new Date().toISOString(),
+        users,
+        pagination: {
+          page,
+          limit,
+          totalCount,
+          totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
+        },
+        summary: {
+          totalUsers,
+          activeUsers,
+          bannedUsers,
+          adminUsers,
+        },
       },
-      { status: 500 }
+      { requestId }
     )
+  } catch (error) {
+    logger.error("获取用户列表失败", { module: "api/admin/users" }, error)
+    return createErrorResponse(ErrorCode.INTERNAL_ERROR, "获取用户列表失败")
   }
 }
 
@@ -195,7 +209,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
-    console.error("创建用户失败:", error)
+    logger.error("创建用户失败", { module: "api/admin/users" }, error)
     return NextResponse.json(
       {
         error: "创建用户失败",

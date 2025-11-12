@@ -1,7 +1,7 @@
 /**
  * 检查数据库中的文章状态
  */
-import { PrismaClient } from "@prisma/client"
+import { PrismaClient } from "@/lib/generated/prisma"
 
 const prisma = new PrismaClient()
 
