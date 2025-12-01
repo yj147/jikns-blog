@@ -10,19 +10,25 @@ import * as perfMonitor from "@/lib/performance-monitor"
 import { ErrorCode } from "@/lib/api/unified-response"
 
 // 使用 vi.hoisted 确保 mock 函数在正确的作用域中创建
-const { userCountMock, followCountMock } = vi.hoisted(() => ({
-  userCountMock: vi.fn(),
-  followCountMock: vi.fn(),
-}))
+const { userCountMock, userFindUniqueMock, followCountMock, followFindUniqueMock } = vi.hoisted(
+  () => ({
+    userCountMock: vi.fn(),
+    userFindUniqueMock: vi.fn(),
+    followCountMock: vi.fn(),
+    followFindUniqueMock: vi.fn(),
+  })
+)
 
 vi.mock("@/lib/prisma", () => {
   return {
     prisma: {
       user: {
         count: userCountMock,
+        findUnique: userFindUniqueMock,
       },
       follow: {
         count: followCountMock,
+        findUnique: followFindUniqueMock,
       },
     },
   }
@@ -74,11 +80,17 @@ describe("follow list routes", () => {
     vi.clearAllMocks()
     mockedRateLimit.rateLimitCheck.mockResolvedValue({ success: true } as any)
     mockedPerformance.performanceMonitor.recordMetric.mockClear()
+    userFindUniqueMock.mockReset().mockResolvedValue({
+      id: "user-1",
+      privacySettings: { profileVisibility: "public" },
+    })
+    followFindUniqueMock.mockReset().mockResolvedValue(null)
+    userCountMock.mockReset()
+    followCountMock.mockReset().mockResolvedValue(0)
   })
 
   it("returns followers list", async () => {
     // 重置 mock 并设置新的返回值
-    userCountMock.mockReset().mockResolvedValue(1) // 目标用户存在检查
     followCountMock.mockReset().mockResolvedValue(12) // 粉丝总数查询
     mockedInteractions.listFollowers.mockResolvedValueOnce({
       items: [
@@ -126,7 +138,7 @@ describe("follow list routes", () => {
   })
 
   it("returns 404 when target user missing (followers)", async () => {
-    userCountMock.mockResolvedValueOnce(0)
+    userFindUniqueMock.mockResolvedValueOnce(null)
 
     const request = new NextRequest("http://localhost:3000/api/users/missing/followers")
     const response = await getFollowers(request, { params: Promise.resolve({ userId: "missing" }) })
@@ -181,7 +193,6 @@ describe("follow list routes", () => {
 
   it("returns following list", async () => {
     // 重置 mock 并设置新的返回值
-    userCountMock.mockReset().mockResolvedValue(1) // 目标用户存在检查
     followCountMock.mockReset().mockResolvedValue(8) // 关注总数查询
     mockedInteractions.listFollowing.mockResolvedValueOnce({
       items: [
@@ -224,7 +235,7 @@ describe("follow list routes", () => {
   })
 
   it("returns 404 when target user missing (following)", async () => {
-    userCountMock.mockResolvedValueOnce(0)
+    userFindUniqueMock.mockResolvedValueOnce(null)
 
     const request = new NextRequest("http://localhost:3000/api/users/missing/following")
     const response = await getFollowing(request, { params: Promise.resolve({ userId: "missing" }) })
@@ -289,7 +300,6 @@ describe("follow list routes", () => {
   })
 
   it("returns total when includeTotal is omitted", async () => {
-    userCountMock.mockReset().mockResolvedValue(1)
     followCountMock.mockReset().mockResolvedValue(7)
     mockedInteractions.listFollowers.mockResolvedValueOnce({
       items: [],
@@ -305,5 +315,127 @@ describe("follow list routes", () => {
     expect(body.success).toBe(true)
     expect(body.meta.pagination.total).toBe(7)
     expect(followCountMock).toHaveBeenCalledWith({ where: { followingId: "user-1" } })
+  })
+
+  it("blocks followers-only list for non-follower", async () => {
+    userFindUniqueMock.mockResolvedValueOnce({
+      id: "target-followers",
+      privacySettings: { profileVisibility: "followers" },
+    })
+    mockedSession.getOptionalViewer.mockResolvedValueOnce({
+      id: "viewer-not-follower",
+      role: "USER",
+      status: "ACTIVE",
+    } as any)
+
+    const request = new NextRequest("http://localhost:3000/api/users/target-followers/followers")
+    const response = await getFollowers(request, {
+      params: Promise.resolve({ userId: "target-followers" }),
+    })
+    const body = await response.json()
+
+    expect(response.status).toBe(403)
+    expect(body.error.code).toBe(ErrorCode.FORBIDDEN)
+    expect(mockedInteractions.listFollowers).not.toHaveBeenCalled()
+  })
+
+  it("allows followers-only list for follower", async () => {
+    userFindUniqueMock.mockResolvedValueOnce({
+      id: "target-followers",
+      privacySettings: { profileVisibility: "followers" },
+    })
+    mockedSession.getOptionalViewer.mockResolvedValueOnce({
+      id: "viewer-follower",
+      role: "USER",
+      status: "ACTIVE",
+    } as any)
+    followFindUniqueMock.mockResolvedValueOnce({ followerId: "viewer-follower" } as any)
+    mockedInteractions.listFollowers.mockResolvedValueOnce({
+      items: [],
+      hasMore: false,
+      nextCursor: undefined,
+    })
+
+    const request = new NextRequest("http://localhost:3000/api/users/target-followers/followers")
+    const response = await getFollowers(request, {
+      params: Promise.resolve({ userId: "target-followers" }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(mockedInteractions.listFollowers).toHaveBeenCalled()
+  })
+
+  it("normalizes followers_only visibility alias", async () => {
+    userFindUniqueMock.mockResolvedValueOnce({
+      id: "target-followers-alias",
+      privacySettings: { profileVisibility: "followers_only" },
+    })
+    mockedSession.getOptionalViewer.mockResolvedValueOnce({
+      id: "viewer-follower",
+      role: "USER",
+      status: "ACTIVE",
+    } as any)
+    followFindUniqueMock.mockResolvedValueOnce({ followerId: "viewer-follower" } as any)
+    mockedInteractions.listFollowers.mockResolvedValueOnce({
+      items: [],
+      hasMore: false,
+      nextCursor: undefined,
+    })
+
+    const request = new NextRequest(
+      "http://localhost:3000/api/users/target-followers-alias/followers"
+    )
+    const response = await getFollowers(request, {
+      params: Promise.resolve({ userId: "target-followers-alias" }),
+    })
+
+    expect(response.status).toBe(200)
+  })
+
+  it("blocks private list for non-owner", async () => {
+    userFindUniqueMock.mockResolvedValueOnce({
+      id: "target-private",
+      privacySettings: { profileVisibility: "private" },
+    })
+    mockedSession.getOptionalViewer.mockResolvedValueOnce({
+      id: "other-user",
+      role: "USER",
+      status: "ACTIVE",
+    } as any)
+
+    const request = new NextRequest("http://localhost:3000/api/users/target-private/following")
+    const response = await getFollowing(request, {
+      params: Promise.resolve({ userId: "target-private" }),
+    })
+    const body = await response.json()
+
+    expect(response.status).toBe(403)
+    expect(body.error.code).toBe(ErrorCode.FORBIDDEN)
+    expect(mockedInteractions.listFollowing).not.toHaveBeenCalled()
+  })
+
+  it("allows private list for owner", async () => {
+    userFindUniqueMock.mockResolvedValueOnce({
+      id: "target-private",
+      privacySettings: { profileVisibility: "private" },
+    })
+    mockedSession.getOptionalViewer.mockResolvedValueOnce({
+      id: "target-private",
+      role: "USER",
+      status: "ACTIVE",
+    } as any)
+    mockedInteractions.listFollowing.mockResolvedValueOnce({
+      items: [],
+      hasMore: false,
+      nextCursor: undefined,
+    })
+
+    const request = new NextRequest("http://localhost:3000/api/users/target-private/following")
+    const response = await getFollowing(request, {
+      params: Promise.resolve({ userId: "target-private" }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(mockedInteractions.listFollowing).toHaveBeenCalled()
   })
 })

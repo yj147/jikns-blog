@@ -46,6 +46,7 @@ async function executeSearchUsersMain(
       Array<{
         id: string
         name: string | null
+        email: string
         avatarUrl: string | null
         bio: string | null
         role: string
@@ -55,6 +56,7 @@ async function executeSearchUsersMain(
       SELECT
         id,
         name,
+        email,
         "avatarUrl",
         bio,
         role,
@@ -79,9 +81,14 @@ async function executeSearchUsersMain(
 
   const total = Number(totalRows[0]?.total ?? 0)
 
+  const items: SearchUserResult[] = users.map((user) => ({
+    ...user,
+    rank: user.similarity,
+  }))
+
   return {
     total,
-    items: users,
+    items,
   }
 }
 
@@ -111,6 +118,7 @@ async function executeSearchUsersFallback(
       select: {
         id: true,
         name: true,
+        email: true,
         avatarUrl: true,
         bio: true,
         role: true,
@@ -119,12 +127,15 @@ async function executeSearchUsersFallback(
     prisma.user.count({ where }),
   ])
 
+  const items: SearchUserResult[] = users.map((user, index) => ({
+    ...user,
+    rank: offset + index + 1,
+    similarity: 0, // LIKE 查询没有相似度分数
+  }))
+
   return {
     total,
-    items: users.map((user) => ({
-      ...user,
-      similarity: 0, // LIKE 查询没有相似度分数
-    })),
+    items,
   }
 }
 

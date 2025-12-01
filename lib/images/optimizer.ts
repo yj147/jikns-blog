@@ -1,5 +1,7 @@
 const SUPABASE_STORAGE_SEGMENT = "/storage/v1/object/public/"
 const SUPABASE_RENDER_SEGMENT = "/storage/v1/render/image/public/"
+const DEFAULT_STORAGE_BUCKET = "activity-images"
+const STORAGE_RELATIVE_PREFIXES = ["avatars/", "activities/", "users/"]
 
 type OptimizeOptions = {
   width?: number
@@ -21,20 +23,38 @@ export function getOptimizedImageUrl(
 ): string | undefined {
   if (!src) return undefined
 
+  const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+
+  // 处理 Storage 相对路径（如 avatars/xxx、activities/xxx）
+  const isStorageRelativePath = STORAGE_RELATIVE_PREFIXES.some((prefix) => src.startsWith(prefix))
+  if (isStorageRelativePath && baseUrl) {
+    const fullStorageUrl = `${baseUrl}${SUPABASE_STORAGE_SEGMENT}${DEFAULT_STORAGE_BUCKET}/${src}`
+    return getOptimizedImageUrl(fullStorageUrl, options)
+  }
+
+  // 确保相对路径以 / 开头（next/image 要求）
+  const normalizedSrc = src.startsWith("/") || src.startsWith("http") ? src : `/${src}`
+
   let parsed: URL
   try {
-    parsed = new URL(src)
+    parsed = new URL(normalizedSrc)
   } catch {
     const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    if (!baseUrl) return src
+    if (!baseUrl) return normalizedSrc
     try {
-      parsed = new URL(src, baseUrl)
+      parsed = new URL(normalizedSrc, baseUrl)
     } catch {
-      return src
+      return normalizedSrc
     }
   }
 
   if (!parsed.pathname.includes(SUPABASE_STORAGE_SEGMENT)) {
+    return normalizedSrc
+  }
+
+  // 在本地开发环境禁用图片优化，因为 Supabase 本地开发不支持 Render API
+  const isLocalDev = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1"
+  if (isLocalDev) {
     return src
   }
 
@@ -49,7 +69,8 @@ export function getOptimizedImageUrl(
   if (merged.height) optimizedUrl.searchParams.set("height", String(merged.height))
   if (merged.fit) optimizedUrl.searchParams.set("fit", merged.fit)
   if (merged.quality) optimizedUrl.searchParams.set("quality", String(merged.quality))
-  if (merged.format) optimizedUrl.searchParams.set("format", merged.format)
+  // format 参数在 Supabase 本地开发环境中不支持，生产环境需要测试
+  // if (merged.format) optimizedUrl.searchParams.set("format", merged.format)
 
   return optimizedUrl.toString()
 }

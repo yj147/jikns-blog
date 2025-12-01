@@ -6,6 +6,9 @@ import useSWRInfinite from "swr/infinite"
 import { logger } from "@/lib/utils/logger"
 import { fetchPost } from "@/lib/api/fetch-json"
 
+type FollowListError = Error & { status?: number; code?: string }
+type FollowListDenyReason = "NOT_FOUND" | "FORBIDDEN" | "UNAUTHORIZED" | "UNKNOWN"
+
 /**
  * 关注列表项的类型定义
  *
@@ -59,8 +62,11 @@ const defaultFetcher = async (url: string): Promise<FollowListResponse> => {
   })
 
   if (!res.ok) {
-    const error = await res.json()
-    throw new Error(error.error?.message || "获取列表失败")
+    const payload = await res.json().catch(() => ({}))
+    const error = new Error(payload?.error?.message || "获取列表失败") as FollowListError
+    error.status = res.status
+    error.code = payload?.error?.code
+    throw error
   }
 
   return res.json()
@@ -129,6 +135,7 @@ function useFollowList(
       revalidateOnFocus,
       revalidateOnReconnect,
       errorRetryCount: 2,
+      shouldRetryOnError: false,
       onError: (error) => {
         logger.error(`获取${listType === "followers" ? "粉丝" : "关注"}列表失败:`, error)
       },
@@ -142,26 +149,47 @@ function useFollowList(
   const lastPage = data?.[data.length - 1]
   const pagination = lastPage?.meta?.pagination
 
+  const accessDenied = useMemo(() => {
+    if (!error) return false
+    const status = (error as FollowListError).status
+    return status === 401 || status === 403 || status === 404
+  }, [error])
+
+  const deniedReason: FollowListDenyReason | null = useMemo(() => {
+    if (!accessDenied) return null
+    const status = (error as FollowListError).status
+    if (status === 404) return "NOT_FOUND"
+    if (status === 401) return "UNAUTHORIZED"
+    if (status === 403) return "FORBIDDEN"
+    return "UNKNOWN"
+  }, [accessDenied, error])
+
+  const shouldFetch = autoLoad && !accessDenied
+
   // 是否还有更多数据
-  const hasMore = pagination?.hasMore ?? false
+  const hasMore = accessDenied ? false : pagination?.hasMore ?? false
 
   // 是否正在加载更多
-  const isInitialLoading = isLoading && size <= 1
+  const isInitialLoading = shouldFetch && isLoading && size <= 1
   const isLoadingMore =
     (!isInitialLoading && isLoading) ||
     (size > 0 && !!data && typeof data[size - 1] === "undefined")
 
   // 加载下一页
   const loadMore = () => {
-    if (!hasMore || isLoadingMore) return
+    if (accessDenied || !hasMore || isLoadingMore) return
     setSize((size) => size + 1)
   }
 
   // 刷新列表（重新加载第一页）
-  const refresh = () => mutate()
+  const refresh = () => {
+    if (accessDenied) return
+    mutate()
+  }
 
   // 重置列表（清空并重新加载）
   const reset = () => {
+    if (accessDenied) return
     setSize(1)
     mutate()
   }
@@ -174,6 +202,8 @@ function useFollowList(
     isError: !!error,
     error,
     hasMore,
+    accessDenied,
+    deniedReason,
     loadMore,
     refresh,
     reset,
@@ -186,6 +216,9 @@ function useFollowList(
     },
   }
 }
+
+// 测试专用：暴露默认 fetcher 便于覆盖率校验
+export const __testFollowListFetcher = defaultFetcher
 
 /**
  * 获取用户粉丝列表的 Hook

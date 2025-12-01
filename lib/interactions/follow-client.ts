@@ -25,9 +25,9 @@ export type ToggleFollowInvoker = (
 ) => Promise<ToggleFollowResponse>
 export type ToggleFollowLoader = () => Promise<ToggleFollowInvoker>
 
-let cachedToggleInvoker: ToggleFollowInvoker | null = null
+// 直接注入的 invoker（用于测试），优先级最高
+let directInvoker: ToggleFollowInvoker | null = null
 let toggleLoader: ToggleFollowLoader | null = null
-let toggleLoadPromise: Promise<ToggleFollowInvoker> | null = null
 
 export const DEFAULT_FOLLOW_MUTATE_MATCHERS: Array<Key | ((key: Key) => boolean)> = [
   (key) => typeof key === "string" && key.startsWith("/api/users/suggested"),
@@ -46,45 +46,25 @@ const ERROR_PRESET: Record<string, FollowError> = {
 }
 
 export const setToggleFollowInvoker = (invoker: ToggleFollowInvoker | null) => {
-  cachedToggleInvoker = invoker
-  if (!invoker) {
-    toggleLoadPromise = null
-  }
+  directInvoker = invoker
 }
 
 export const setToggleFollowLoader = (loader: ToggleFollowLoader | null) => {
   toggleLoader = loader
-  toggleLoadPromise = null
-  if (loader === null) {
-    cachedToggleInvoker = null
-  }
 }
 
 const ensureToggleFollowInvoker = async (): Promise<ToggleFollowInvoker> => {
-  if (cachedToggleInvoker) {
-    return cachedToggleInvoker
+  // 测试环境直接注入的 invoker 优先
+  if (directInvoker) {
+    return directInvoker
   }
 
   if (!toggleLoader) {
     throw new Error("toggle follow loader is not configured")
   }
 
-  if (!toggleLoadPromise) {
-    toggleLoadPromise = (async () => {
-      try {
-        const loaded = await toggleLoader()
-        cachedToggleInvoker = loaded
-        return loaded
-      } catch (error) {
-        cachedToggleInvoker = null
-        throw error
-      } finally {
-        toggleLoadPromise = null
-      }
-    })()
-  }
-
-  return toggleLoadPromise
+  // loader 由调用方配置（生产为静态导入、测试可注入），确保 HMR 能替换 Server Action 引用
+  return toggleLoader()
 }
 
 export const invokeToggleFollow = async (

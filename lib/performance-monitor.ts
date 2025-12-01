@@ -3,6 +3,8 @@
  * 监控认证请求响应时间、权限验证性能和错误率统计
  */
 
+import { MetricType as PersistedMetricType } from "./generated/prisma"
+import type { Prisma } from "./generated/prisma"
 import { logger } from "./utils/logger"
 
 /**
@@ -80,6 +82,8 @@ export interface PerformanceMetric {
     additionalData?: Record<string, any>
   }
   tags?: string[]
+  requestId?: string
+  userId?: string
 }
 
 /**
@@ -165,6 +169,7 @@ export class PerformanceMonitor {
     }
 
     this.metrics.push(metricWithId)
+    void this.persistMetrics([metricWithId])
 
     // 定期刷新指标到存储
     if (this.metrics.length >= 100) {
@@ -223,7 +228,67 @@ export class PerformanceMonitor {
     metricType: MetricType,
     timeRange: { start: Date; end: Date }
   ): Promise<PerformanceStats> {
-    const filteredMetrics = this.metrics.filter(
+    return this.calculateStatsFromMetrics(this.metrics, metricType, timeRange)
+  }
+
+  /**
+   * 直接从数据库获取聚合统计（仅服务器端可用）
+   */
+  async getStatsFromDB(
+    metricType: MetricType,
+    timeRange: { start: Date; end: Date },
+    queryFn?: (type: PersistedMetricType, startTime: Date, endTime: Date) => Promise<{
+      count: number
+      sum: number
+      min: number
+      max: number
+    }>
+  ): Promise<PerformanceStats> {
+    const persistedType = this.mapMetricType(metricType)
+
+    if (!persistedType || typeof window !== "undefined") {
+      return this.calculateStatsFromMetrics([], metricType, timeRange)
+    }
+
+    try {
+      const queryMetrics =
+        queryFn ??
+        (await import("./metrics/persistence")).queryMetrics
+
+      const aggregated = await queryMetrics(persistedType, timeRange.start, timeRange.end)
+      const count = aggregated.count
+      const sum = aggregated.sum
+
+      const average = count > 0 ? sum / count : 0
+      const min = count > 0 ? aggregated.min : 0
+      const max = count > 0 ? aggregated.max : 0
+
+      // 无分位数据时，使用平均值/最大值作为近似
+      return {
+        metricType,
+        count,
+        average,
+        min,
+        max,
+        p50: average,
+        p90: max,
+        p95: max,
+        p99: max,
+        errorRate: 0,
+        timeRange,
+      }
+    } catch (error) {
+      logger.warn("数据库统计查询失败，回退到空结果", { metricType, error })
+      return this.calculateStatsFromMetrics([], metricType, timeRange)
+    }
+  }
+
+  private calculateStatsFromMetrics(
+    metrics: PerformanceMetric[],
+    metricType: MetricType,
+    timeRange: { start: Date; end: Date }
+  ): PerformanceStats {
+    const filteredMetrics = metrics.filter(
       (metric) =>
         metric.type === metricType &&
         metric.timestamp >= timeRange.start &&
@@ -250,13 +315,11 @@ export class PerformanceMonitor {
     const count = values.length
     const sum = values.reduce((a, b) => a + b, 0)
 
-    // 计算百分位数
     const getPercentile = (p: number) => {
       const index = Math.ceil((p / 100) * count) - 1
       return values[Math.max(0, index)]
     }
 
-    // 计算错误率
     const errorCount = filteredMetrics.filter(
       (m) => m.context?.additionalData?.success === "false" || m.tags?.includes("failure")
     ).length
@@ -344,17 +407,29 @@ export class PerformanceMonitor {
     const startTime = new Date(now.getTime() - hours * 60 * 60 * 1000)
     const timeRange = { start: startTime, end: now }
 
-    // 获取各类指标的统计
-    const [loginStats, sessionStats, permissionStats] = await Promise.all([
-      this.getStats(MetricType.AUTH_LOGIN_TIME, timeRange),
-      this.getStats(MetricType.AUTH_SESSION_CHECK_TIME, timeRange),
-      this.getStats(MetricType.PERMISSION_CHECK_TIME, timeRange),
-    ])
-
-    // 获取 API 响应时间统计
-    const apiMetrics = this.metrics.filter(
-      (m) => m.type === MetricType.API_RESPONSE_TIME && m.timestamp >= startTime
+    const memoryMetrics = this.metrics.filter(
+      (m) => m.timestamp >= timeRange.start && m.timestamp <= timeRange.end
     )
+
+    let mergedMetrics = memoryMetrics
+
+    try {
+      const dbMetrics = await this.fetchDbMetrics(timeRange)
+      mergedMetrics = this.mergeMetrics(dbMetrics, memoryMetrics)
+    } catch (error) {
+      logger.warn("查询历史性能指标失败，使用内存数据回退", { hours, error })
+    }
+
+    const statsFor = (metricType: MetricType) =>
+      this.calculateStatsFromMetrics(mergedMetrics, metricType, timeRange)
+
+    const [loginStats, sessionStats, permissionStats] = [
+      statsFor(MetricType.AUTH_LOGIN_TIME),
+      statsFor(MetricType.AUTH_SESSION_CHECK_TIME),
+      statsFor(MetricType.PERMISSION_CHECK_TIME),
+    ]
+
+    const apiMetrics = mergedMetrics.filter((m) => m.type === MetricType.API_RESPONSE_TIME)
 
     const totalRequests = apiMetrics.length
     const averageResponseTime =
@@ -363,12 +438,9 @@ export class PerformanceMonitor {
     const slowRequests = apiMetrics.filter((m) => m.value > 1000).length
     const slowRequestsRate = totalRequests > 0 ? (slowRequests / totalRequests) * 100 : 0
 
-    const errorMetrics = this.metrics.filter(
-      (m) => m.type === MetricType.ERROR_RATE && m.timestamp >= startTime
-    )
+    const errorMetrics = mergedMetrics.filter((m) => m.type === MetricType.ERROR_RATE)
     const errorRate = totalRequests > 0 ? (errorMetrics.length / totalRequests) * 100 : 0
 
-    // 统计最慢的端点
     const endpointStats = new Map<string, { total: number; count: number }>()
     apiMetrics.forEach((m) => {
       const endpoint = m.context?.endpoint || "unknown"
@@ -388,7 +460,6 @@ export class PerformanceMonitor {
       .sort((a, b) => b.averageTime - a.averageTime)
       .slice(0, 10)
 
-    // 错误类型分析
     const errorTypeMap = new Map<string, number>()
     errorMetrics.forEach((m) => {
       const errorType = m.context?.additionalData?.type || "unknown"
@@ -421,6 +492,124 @@ export class PerformanceMonitor {
     }
   }
 
+  private async fetchDbMetrics(timeRange: { start: Date; end: Date }): Promise<PerformanceMetric[]> {
+    if (typeof window !== "undefined") {
+      return []
+    }
+
+    const { prisma } = await import("./prisma")
+
+    const rows = await prisma.performanceMetric.findMany({
+      where: {
+        type: {
+          in: [
+            PersistedMetricType.api_response,
+            PersistedMetricType.auth_login,
+            PersistedMetricType.auth_session,
+            PersistedMetricType.permission_check,
+            PersistedMetricType.db_query,
+            PersistedMetricType.external_api,
+          ],
+        },
+        timestamp: {
+          gte: timeRange.start,
+          lte: timeRange.end,
+        },
+      },
+      select: {
+        id: true,
+        type: true,
+        value: true,
+        unit: true,
+        timestamp: true,
+        context: true,
+        tags: true,
+        requestId: true,
+        userId: true,
+      },
+    })
+
+    return rows
+      .map((row) => this.fromPersistedMetric(row))
+      .filter((metric): metric is PerformanceMetric => Boolean(metric))
+  }
+
+  private fromPersistedMetric(
+    metric: Prisma.PerformanceMetricGetPayload<{
+      select: {
+        id: true
+        type: true
+        value: true
+        unit: true
+        timestamp: true
+        context: true
+        tags: true
+        requestId: true
+        userId: true
+      }
+    }>
+  ): PerformanceMetric | null {
+    const mappedType = this.mapPersistedMetricType(metric.type)
+
+    if (!mappedType) {
+      return null
+    }
+
+    return {
+      id: metric.id,
+      type: mappedType,
+      value: metric.value,
+      unit: metric.unit as PerformanceMetric["unit"],
+      timestamp: metric.timestamp,
+      context: metric.context as PerformanceMetric["context"],
+      tags: metric.tags ?? [],
+      requestId: metric.requestId ?? undefined,
+      userId: metric.userId ?? undefined,
+    }
+  }
+
+  private mapPersistedMetricType(type: PersistedMetricType): MetricType | null {
+    switch (type) {
+      case PersistedMetricType.api_response:
+        return MetricType.API_RESPONSE_TIME
+      case PersistedMetricType.auth_login:
+        return MetricType.AUTH_LOGIN_TIME
+      case PersistedMetricType.auth_session:
+        return MetricType.AUTH_SESSION_CHECK_TIME
+      case PersistedMetricType.permission_check:
+        return MetricType.PERMISSION_CHECK_TIME
+      case PersistedMetricType.db_query:
+        return MetricType.DB_USER_QUERY_TIME
+      case PersistedMetricType.external_api:
+        return MetricType.OAUTH_CALLBACK_TIME
+      default:
+        return null
+    }
+  }
+
+  private mergeMetrics(
+    dbMetrics: PerformanceMetric[],
+    memoryMetrics: PerformanceMetric[]
+  ): PerformanceMetric[] {
+    const merged = new Map<string, PerformanceMetric>()
+
+    for (const metric of dbMetrics) {
+      const key = metric.id ?? this.buildMetricKey(metric)
+      merged.set(key, metric)
+    }
+
+    for (const metric of memoryMetrics) {
+      const key = metric.id ?? this.buildMetricKey(metric)
+      merged.set(key, metric)
+    }
+
+    return Array.from(merged.values())
+  }
+
+  private buildMetricKey(metric: PerformanceMetric): string {
+    return `${metric.type}-${metric.timestamp.getTime()}-${metric.value}`
+  }
+
   /**
    * 刷新指标到存储
    */
@@ -447,10 +636,12 @@ export class PerformanceMonitor {
         })
       }
 
-      // 在生产环境下，应该将指标发送到监控系统
-      await this.persistMetrics(metricsToFlush)
+      if (typeof window === "undefined") {
+        const { metricsQueue } = await import("./metrics/persistence")
+        await metricsQueue.flush()
+      }
     } catch (error) {
-      logger.error("性能指标刷新失败", {}, error)
+      logger.error("性能指标刷新失败", {}, error as Error)
     } finally {
       this.isFlushingMetrics = false
     }
@@ -461,31 +652,70 @@ export class PerformanceMonitor {
    */
   private async persistMetrics(metrics: PerformanceMetric[]): Promise<void> {
     try {
-      // 仅在服务端环境中进行文件操作
+      const prepared = metrics
+        .map((metric) => this.toPersistedMetric(metric))
+        .filter((metric): metric is Prisma.PerformanceMetricCreateManyInput => Boolean(metric))
+
+      if (!prepared.length) {
+        return
+      }
+
       if (typeof window === "undefined") {
-        // 这里应该将指标发送到时序数据库或监控系统
-        // 目前写入到文件作为备用方案
-
-        const fs = await import("fs/promises")
-        const path = await import("path")
-
-        const metricsDir = path.join(process.cwd(), "logs", "metrics")
-        const metricsFile = path.join(
-          metricsDir,
-          `metrics-${new Date().toISOString().split("T")[0]}.json`
-        )
-
-        // 确保目录存在
-        await fs.mkdir(metricsDir, { recursive: true })
-
-        // 追加指标数据
-        const metricsData = metrics.map((m) => JSON.stringify(m)).join("\n") + "\n"
-        await fs.appendFile(metricsFile, metricsData, "utf8")
-      } else {
-        // 客户端环境：可以发送指标到API端点
+        const { metricsQueue } = await import("./metrics/persistence")
+        for (const metric of prepared) {
+          await metricsQueue.enqueue(metric)
+        }
       }
     } catch (error) {
-      logger.error("性能指标持久化失败", {}, error)
+      logger.error("性能指标持久化失败", {}, error as Error)
+    }
+  }
+
+  private toPersistedMetric(
+    metric: PerformanceMetric
+  ): Prisma.PerformanceMetricCreateManyInput | null {
+    const mappedType = this.mapMetricType(metric.type)
+
+    if (!mappedType) {
+      return null
+    }
+
+    return {
+      id: metric.id,
+      type: mappedType,
+      value: metric.value,
+      unit: metric.unit,
+      timestamp: metric.timestamp,
+      context: metric.context,
+      tags: metric.tags ?? [],
+      requestId: metric.requestId,
+      userId: metric.userId ?? metric.context?.userId,
+    }
+  }
+
+  private mapMetricType(type: MetricType): PersistedMetricType | null {
+    switch (type) {
+      case MetricType.API_RESPONSE_TIME:
+        return PersistedMetricType.api_response
+      case MetricType.DB_USER_QUERY_TIME:
+      case MetricType.DB_USER_UPDATE_TIME:
+      case MetricType.DB_CONNECTION_TIME:
+        return PersistedMetricType.db_query
+      case MetricType.AUTH_LOGIN_TIME:
+        return PersistedMetricType.auth_login
+      case MetricType.AUTH_SESSION_CHECK_TIME:
+      case MetricType.AUTH_TOKEN_VALIDATION_TIME:
+      case MetricType.AUTH_LOGOUT_TIME:
+        return PersistedMetricType.auth_session
+      case MetricType.PERMISSION_CHECK_TIME:
+      case MetricType.ROLE_VALIDATION_TIME:
+      case MetricType.ADMIN_PERMISSION_TIME:
+        return PersistedMetricType.permission_check
+      case MetricType.OAUTH_CALLBACK_TIME:
+      case MetricType.OAUTH_TOKEN_EXCHANGE_TIME:
+        return PersistedMetricType.external_api
+      default:
+        return null
     }
   }
 

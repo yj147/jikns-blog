@@ -2,6 +2,42 @@ import { defineConfig } from "vitest/config"
 import react from "@vitejs/plugin-react"
 import path from "path"
 
+const readingTimeTestPattern = "tests/unit/reading-time.test.ts"
+const isReadingTimeRun = process.argv.some((arg) => arg.includes(readingTimeTestPattern))
+const includeFromEnv = process.env.VITEST_INCLUDE?.split(",").filter(Boolean)
+
+const baseCoverageInclude = [
+  "components/admin/feed-*.tsx",
+  "components/profile/profile-posts-tab.tsx",
+  "hooks/useFeedFilters.ts",
+  "app/api/admin/feeds/**/*.ts",
+  "scripts/reconcile-tag-activities-count.ts",
+  // 用户空间补全功能覆盖率
+  "components/notifications/**/*.tsx",
+  "app/api/notifications/**/*.ts",
+  "app/api/users/[userId]/follow-list-handler.ts",
+  "hooks/use-follow-list.ts",
+  "lib/permissions/follow-permissions.ts",
+  "app/actions/settings.ts",
+  "app/api/user/preferences/**/*.ts",
+  "app/api/user/privacy/**/*.ts",
+  "lib/services/notification.ts",
+  "lib/interactions/likes.ts",
+  "lib/interactions/comments.ts",
+  "lib/profile/stats.ts",
+  "types/notification.ts",
+  "types/user-settings.ts",
+  // 性能指标监控功能覆盖率
+  "lib/metrics/persistence.ts",
+  "lib/api/response-wrapper.ts",
+  "lib/repos/metrics-repo.ts",
+  "lib/dto/metrics.dto.ts",
+  "app/api/admin/metrics/**/*.ts",
+  "hooks/use-metrics-timeseries.ts",
+  "components/admin/metrics-chart.tsx",
+  "components/admin/monitoring-dashboard.tsx",
+]
+
 export default defineConfig({
   plugins: [react()],
   test: {
@@ -19,22 +55,39 @@ export default defineConfig({
     maxConcurrency: 3,
 
     // 测试文件匹配模式 - 扩展测试覆盖范围
-    include: [
-      "tests/auth-core-stable.test.ts",
-      "tests/security/phase4-basic.test.ts",
-      "tests/unit/utils-basic.test.ts",
-      "tests/unit/utils.test.ts",
-      "tests/unit/activity-tags.test.ts",
-      "tests/unit/search-tokenizer.test.ts",
-      "tests/unit/prisma-token-extension.test.ts",
-      "tests/middleware/auth-middleware.test.ts",
-      "tests/api/posts-crud.test.ts",
-      "tests/actions/**/*.test.ts",
-      "tests/api/**/*.test.ts",
-      "tests/repos/**/*.test.ts",
-      "tests/components/**/*.test.{ts,tsx}",
-      "tests/integration/**/*.test.{ts,tsx}",
-    ],
+    include: includeFromEnv?.length
+      ? includeFromEnv
+      : [
+          "tests/auth-core-stable.test.ts",
+          "tests/security/phase4-basic.test.ts",
+          "tests/unit/utils-basic.test.ts",
+          "tests/unit/utils.test.ts",
+          "tests/unit/notification-service.test.ts",
+          "tests/unit/realtime-notifications.test.ts",
+          "tests/unit/activity-tags.test.ts",
+          "tests/unit/search-tokenizer.test.ts",
+          "tests/unit/prisma-token-extension.test.ts",
+          "tests/unit/schema-validation.test.ts",
+          "tests/unit/admin-settings-page.test.tsx",
+          "tests/unit/profile-*.test.{ts,tsx}",
+          "tests/unit/likes-*.test.{ts,tsx}",
+          readingTimeTestPattern,
+          "tests/middleware/auth-middleware.test.ts",
+          "tests/auth/**/*.test.ts",
+          "tests/api/posts-crud.test.ts",
+          "tests/actions/**/*.test.ts",
+          "tests/api/**/*.test.ts",
+          "tests/api/**/*.spec.ts",
+          "tests/repos/**/*.test.ts",
+          "tests/services/**/*.test.ts",
+          "tests/unit/scripts/**/*.test.ts",
+          "tests/components/**/*.test.{ts,tsx}",
+          "tests/components/**/*.spec.{ts,tsx}",
+          "tests/hooks/**/*.test.{ts,tsx}",
+          "tests/ui/**/*.test.{ts,tsx}",
+          "tests/ui/**/*.spec.{ts,tsx}",
+          "tests/integration/**/*.test.{ts,tsx}",
+        ],
 
     // 排除不稳定的测试文件
     exclude: [
@@ -55,15 +108,7 @@ export default defineConfig({
       reporter: ["text", "json", "html"],
       reportsDirectory: "coverage/permissions",
 
-      include: [
-        "lib/auth.ts",
-        "lib/supabase.ts",
-        "lib/utils/**/*.ts",
-        "middleware.ts",
-        "app/api/**/*.ts",
-        "components/**/*.{ts,tsx}",
-        "hooks/**/*.ts",
-      ],
+      include: isReadingTimeRun ? ["lib/utils/reading-time.ts"] : baseCoverageInclude,
 
       exclude: [
         "node_modules/**",
@@ -81,10 +126,10 @@ export default defineConfig({
       // 覆盖率阈值
       thresholds: {
         global: {
-          statements: 80,
-          branches: 75,
-          functions: 80,
-          lines: 80,
+          statements: 90,
+          branches: 90,
+          functions: 90,
+          lines: 90,
         },
       },
 

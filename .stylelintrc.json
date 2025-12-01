@@ -1,0 +1,37 @@
+{
+  "extends": ["stylelint-config-standard"],
+  "plugins": ["./configs/stylelint/no-dangerous-global-reset.mjs"],
+  "ignoreFiles": [
+    "**/node_modules/**",
+    "coverage/**",
+    "perf-results/**"
+  ],
+  "rules": {
+    "import-notation": null,
+    "alpha-value-notation": null,
+    "hue-degree-notation": null,
+    "at-rule-no-unknown": [
+      true,
+      {
+        "ignoreAtRules": ["tailwind", "apply", "layer", "theme", "custom-variant", "config", "variants", "responsive"]
+      }
+    ],
+    "selector-disallowed-list": [
+      "/^\\*:focus(?!-visible)/i",
+      "/^\\*:focus-visible/i",
+      "/^\\*:focus-within/i",
+      "/^:where\\(\\s*\\*/i",
+      "/^:is\\(\\s*\\*/i"
+    ],
+    "declaration-empty-line-before": null,
+    "rule-empty-line-before": null,
+    "color-hex-length": "long",
+    "no-descending-specificity": null,
+    "jikns/no-dangerous-global-reset": [
+      true,
+      {
+        "allowSelectors": ["^\\s*\\*\\s*$", "^:root$"]
+      }
+    ]
+  }
+}

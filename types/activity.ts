@@ -8,12 +8,24 @@ const httpsImageUrlSchema = z
   .url("图片URL格式无效")
   .refine((value) => {
     try {
-      const { protocol } = new URL(value)
+      const url = new URL(value)
+      const { protocol, hostname } = url
+
+      const isLocalhost =
+        hostname === "localhost" ||
+        hostname === "127.0.0.1" ||
+        hostname.startsWith("192.168.") ||
+        hostname.endsWith(".local")
+
+      if (isLocalhost) {
+        return protocol === "http:" || protocol === "https:"
+      }
+
       return protocol === "https:"
     } catch {
       return false
     }
-  }, "图片URL必须使用HTTPS地址")
+  }, "图片URL必须使用HTTPS地址（本地开发环境除外）")
 
 /**
  * Activity 模块类型定义
@@ -40,7 +52,7 @@ export const activityQuerySchema = z
     page: z.coerce.number().int().min(1).default(1),
     limit: z.coerce.number().int().min(1).max(50).default(20),
     orderBy: z.enum(["latest", "trending", "following"]).default("latest"),
-    authorId: z.string().cuid().optional(),
+    authorId: z.string().uuid().optional(),
     cursor: z.string().min(1).optional(),
     isPinned: z.coerce.boolean().optional(),
     hasImages: z.coerce.boolean().optional(),
@@ -201,15 +213,19 @@ export interface BatchUploadResponse {
   }>
 }
 
+export interface ActivityLikeState {
+  isLiked: boolean
+  count: number
+}
+
 // 前端组件 Props 类型
 export interface ActivityCardProps {
   activity: ActivityWithAuthor
-  onLike?: (activityId: string) => void
+  onLike?: (activityId: string, nextState?: ActivityLikeState) => void
   onComment?: (activityId: string) => void
   onShare?: (activityId: string) => void
   onEdit?: (activity: ActivityWithAuthor) => void
   onDelete?: (activity: ActivityWithAuthor) => void
-  onCommentsChange?: () => void
   showActions?: boolean
   compact?: boolean
   priority?: boolean

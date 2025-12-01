@@ -32,6 +32,7 @@ export async function createPost(formData: FormData) {
     const coverImage = formData.get("coverImage")?.toString()
     const seriesId = formData.get("seriesId")?.toString()
     const published = formData.get("published") === "true"
+    const manualSlug = formData.get("slug")?.toString()?.trim()
 
     const rawTags = formData.get("tags")
     const tagNames =
@@ -48,6 +49,7 @@ export async function createPost(formData: FormData) {
       content,
       excerpt: excerpt?.trim() || undefined,
       published,
+      slug: manualSlug || undefined,
       canonicalUrl: canonicalUrl?.trim() || undefined,
       seoTitle: seoTitle?.trim() || undefined,
       seoDescription: seoDescription?.trim() || undefined,
@@ -63,27 +65,9 @@ export async function createPost(formData: FormData) {
       }
     }
 
-    let finalSlug = result.data.slug
-    const manualSlug = formData.get("slug")?.toString()?.trim()
-    if (manualSlug && manualSlug !== result.data.slug) {
-      const updateResult = await updatePostAction({
-        id: result.data.id,
-        slug: manualSlug,
-      })
-
-      if (!updateResult.success || !updateResult.data) {
-        return {
-          success: false,
-          error: updateResult.error?.message ?? "创建文章失败",
-        }
-      }
-
-      finalSlug = updateResult.data.slug
-    }
-
     return {
       success: true,
-      data: { postId: result.data.id, slug: finalSlug },
+      data: { postId: result.data.id, slug: result.data.slug },
       message: result.data.published ? "文章发布成功" : "文章草稿保存成功",
     }
   } catch (error) {

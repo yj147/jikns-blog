@@ -12,6 +12,7 @@ import { rateLimitCheck } from "@/lib/rate-limit/activity-limits"
 import { auditLogger, getClientIP, getClientUserAgent } from "@/lib/audit-log"
 import { performanceMonitor, MetricType } from "@/lib/performance-monitor"
 import { apiLogger } from "@/lib/utils/logger"
+import { evaluateFollowListAccess } from "@/lib/permissions/follow-permissions"
 
 const DEFAULT_LIMIT = 20
 const MAX_LIMIT = 50
@@ -109,11 +110,10 @@ export async function handleFollowListRequest({
   }
 
   try {
-    const targetExists = await prisma.user.count({
-      where: { id: userId },
-    })
+    const viewer = await getOptionalViewer({ request: req })
+    const access = await evaluateFollowListAccess(userId, viewer)
 
-    if (targetExists === 0) {
+    if (access.denyReason === "NOT_FOUND") {
       await auditLogger.logEvent({
         action: "USER_FOLLOW_LIST_VIEW",
         resource: `${type}:${userId}`,
@@ -125,6 +125,34 @@ export async function handleFollowListRequest({
       })
 
       return createErrorResponse(ErrorCode.NOT_FOUND, "目标用户不存在", undefined, 404, {
+        requestId,
+      })
+    }
+
+    if (!access.allowed) {
+      const denyMessage =
+        access.denyReason === "PRIVATE"
+          ? "该用户的关注列表仅本人可见"
+          : access.denyReason === "FOLLOWERS_ONLY"
+            ? "仅粉丝可访问该用户的关注列表"
+            : "请登录后查看该用户的关注列表"
+
+      await auditLogger.logEvent({
+        action: "USER_FOLLOW_LIST_VIEW",
+        resource: `${type}:${userId}`,
+        success: false,
+        errorMessage: denyMessage,
+        requestId,
+        userId: viewer?.id,
+        ipAddress: getClientIP(req),
+        userAgent: getClientUserAgent(req),
+        details: {
+          visibility: access.visibility,
+          denyReason: access.denyReason,
+        },
+      })
+
+      return createErrorResponse(ErrorCode.FORBIDDEN, denyMessage, undefined, 403, {
         requestId,
       })
     }
@@ -149,8 +177,6 @@ export async function handleFollowListRequest({
         ? await listFollowers(userId, listOptions)
         : await listFollowing(userId, listOptions)
 
-    const viewer = await getOptionalViewer({ request: req })
-
     await auditLogger.logEvent({
       action: "USER_FOLLOW_LIST_VIEW",
       resource: `${type}:${userId}`,
@@ -164,6 +190,7 @@ export async function handleFollowListRequest({
         page,
         cursorProvided: Boolean(cursor),
         resultCount: listResult.items.length,
+        visibility: access.visibility,
       },
     })
 

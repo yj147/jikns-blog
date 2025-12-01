@@ -8,6 +8,8 @@ import { createRouteHandlerClient } from "@/lib/supabase"
 import { XSSProtection, RateLimiter } from "@/lib/security"
 import { z } from "zod"
 import { authLogger } from "@/lib/utils/logger"
+import { getSetting, type RegistrationToggle } from "@/lib/services/system-settings"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 // 注册请求验证 Schema
 const RegisterSchema = z
@@ -27,7 +29,7 @@ const RegisterSchema = z
     path: ["confirmPassword"],
   })
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const clientIP =
     request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown"
 
@@ -42,6 +44,20 @@ export async function POST(request: NextRequest) {
           message: "注册请求过于频繁，请稍后再试",
         },
         { status: 429 }
+      )
+    }
+
+    // 检查系统设置中的注册开关
+    const registrationSetting = await getSetting<RegistrationToggle>("registration.toggle")
+    if (registrationSetting && registrationSetting.enabled === false) {
+      authLogger.info("注册已被管理员禁用", { clientIP })
+      return NextResponse.json(
+        {
+          success: false,
+          error: "signup_disabled",
+          message: "当前不允许新用户注册",
+        },
+        { status: 403 }
       )
     }
 
@@ -169,21 +185,33 @@ export async function POST(request: NextRequest) {
     }
 
     // 如果直接创建了会话（邮箱确认被禁用）
-
+    // 立即同步用户数据到 Prisma，确保用户可以正常访问需要数据库的功能
     try {
-      // 由于用户刚创建，会在首次登录时通过 auth callback 进行数据同步
-      // 这里直接返回成功响应
+      const { syncUserFromAuth } = await import("@/lib/auth")
+
+      // 同步用户数据到数据库
+      const syncedUser = await syncUserFromAuth({
+        id: data.user.id,
+        email: data.user.email,
+        user_metadata: data.user.user_metadata || {},
+      })
+
+      authLogger.info("注册用户数据同步成功", {
+        userId: syncedUser.id,
+        email: syncedUser.email,
+      })
+
       return NextResponse.json(
         {
           success: true,
           message: "注册并登录成功！",
           data: {
             user: {
-              id: data.user.id,
-              email: data.user.email,
-              name: name,
-              role: "USER",
-              status: "ACTIVE",
+              id: syncedUser.id,
+              email: syncedUser.email,
+              name: syncedUser.name,
+              role: syncedUser.role,
+              status: syncedUser.status,
               emailConfirmed: true,
             },
             redirectTo: redirectTo || "/",
@@ -225,7 +253,7 @@ export async function POST(request: NextRequest) {
 }
 
 // 不支持的方法
-export async function GET() {
+async function handleGet() {
   return NextResponse.json(
     {
       success: false,
@@ -235,3 +263,6 @@ export async function GET() {
     { status: 405 }
   )
 }
+
+export const POST = withApiResponseMetrics(handlePost)
+export const GET = withApiResponseMetrics(handleGet)

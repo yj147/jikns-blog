@@ -339,7 +339,7 @@ export function TagCandidateReview({
                           <TableCell className="text-right">
                             <Badge variant="secondary">{candidate.occurrences}</Badge>
                           </TableCell>
-                          <TableCell>{new Date(candidate.lastSeenAt).toLocaleString()}</TableCell>
+                          <TableCell>{new Date(candidate.lastSeenAt).toLocaleString("zh-CN", { hour12: false })}</TableCell>
                           <TableCell className="text-right">
                             <Button
                               size="sm"

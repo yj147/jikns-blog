@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { NextRequest } from "next/server"
 import { GET, POST } from "@/app/api/likes/route"
 import * as interactionsLib from "@/lib/interactions"
-import { InteractionTargetNotFoundError } from "@/lib/interactions/errors"
+import { InteractionNotAllowedError, InteractionTargetNotFoundError } from "@/lib/interactions/errors"
 import * as authSession from "@/lib/auth/session"
 import * as auditLog from "@/lib/audit-log"
 import { RateLimiter } from "@/lib/security"
@@ -83,7 +83,7 @@ describe("点赞 API 路由测试", () => {
     it("应该返回点赞状态（登录用户）", async () => {
       const mockUser = { id: "user-1", email: "test@example.com" }
       const mockStatus = { isLiked: true, count: 10 }
-      vi.mocked(authSession.getOptionalViewer).mockResolvedValue(mockUser as any)
+      vi.mocked(authSession.fetchAuthenticatedUser).mockResolvedValue(mockUser as any)
       vi.mocked(interactionsLib.getLikeStatus).mockResolvedValue(mockStatus)
 
       const request = new NextRequest(
@@ -270,6 +270,28 @@ describe("点赞 API 路由测试", () => {
       )
     })
 
+    it("应该拒绝自赞请求并返回 400", async () => {
+      const mockUser = { id: "user-1", email: "test@example.com", role: "USER", status: "ACTIVE" }
+
+      vi.mocked(authSession.assertPolicy).mockResolvedValue([mockUser as any, null])
+      vi.mocked(interactionsLib.toggleLike).mockRejectedValue(
+        new InteractionNotAllowedError("SELF_LIKE", "不能给自己的内容点赞", 400)
+      )
+
+      const request = new NextRequest("http://localhost:3000/api/likes", {
+        method: "POST",
+        body: JSON.stringify({ targetType: "activity", targetId: "act-1" }),
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(data.success).toBe(false)
+      expect(data.error.code).toBe("VALIDATION_ERROR")
+      expect(data.error.message).toContain("不能给自己的内容点赞")
+    })
+
     it("应该返回错误：未登录", async () => {
       vi.mocked(authSession.assertPolicy).mockResolvedValue([
         null,
@@ -328,8 +350,7 @@ describe("点赞 API 路由测试", () => {
       expect(response.status).toBe(400)
       expect(data.success).toBe(false)
       expect(data.error.code).toBe("VALIDATION_ERROR")
-      expect(data.error.message).toContain("Missing required fields")
-      expect(data.error.message).toContain("targetId")
+      expect(data.error.message).toContain("缺少必需参数")
     })
 
     it("应该返回错误：无效的 targetType", async () => {

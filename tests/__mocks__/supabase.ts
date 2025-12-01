@@ -153,14 +153,67 @@ export function resetMocks() {
   vi.clearAllMocks()
 }
 
+function buildServiceRoleClient() {
+  const admin = {
+    getUserById: vi.fn(async (userId: string) => {
+      const user =
+        Object.values(TEST_USERS).find((u) => u.id === userId) ||
+        (currentUser ? { ...currentUser } : null)
+
+      if (!user) {
+        return { data: { user: null }, error: null }
+      }
+
+      return {
+        data: {
+          user: {
+            id: user.id,
+            email: user.email,
+            user_metadata: {
+              full_name: user.name,
+              avatar_url: user.avatarUrl,
+            },
+          },
+        },
+        error: null,
+      }
+    }),
+    updateUserById: vi.fn(async (userId: string, { user_metadata }: { user_metadata?: any }) => ({
+      data: {
+        user: {
+          id: userId,
+          user_metadata,
+        },
+      },
+      error: null,
+    })),
+  }
+
+  return {
+    auth: { admin },
+    storage: {
+      from: vi.fn(() => ({
+        createSignedUrl: vi.fn(async (path: string, expiresIn: number) => ({
+          data: { signedUrl: `https://storage.test/signed/${path}?e=${expiresIn}` },
+          error: null,
+        })),
+      })),
+    },
+  }
+}
+
+const createServiceRoleClient = vi.fn(() => buildServiceRoleClient())
+
 // Mock 导出函数
 export const createClient = vi.fn(() => createMockSupabaseClient())
 export const createServerSupabaseClient = vi.fn(async () => createMockSupabaseClient())
 export const createRouteHandlerClient = vi.fn(async () => createMockSupabaseClient())
+export { createServiceRoleClient }
 
 // 默认导出用于模块替换
 export default {
   createClient,
   createServerSupabaseClient,
   createRouteHandlerClient,
+  createServiceRoleClient,
 }

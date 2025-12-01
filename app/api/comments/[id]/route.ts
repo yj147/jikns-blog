@@ -8,9 +8,10 @@ import { auditLogger, getClientIP, getClientUserAgent } from "@/lib/audit-log"
 import { commentsLogger, logCommentOperation } from "@/lib/utils/logger"
 import { measureOperation } from "@/lib/metrics/comments-metrics"
 import { respondWithCommentError } from "../comment-error-response"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 // DELETE /api/comments/[id] - 删除评论
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+async function handleDelete(request: NextRequest, { params }: { params: { id: string } }) {
   const startTime = performance.now()
   const requestId = generateRequestId()
   const ip = getClientIP(request) ?? undefined
@@ -175,3 +176,5 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     return handleApiError(error)
   }
 }
+
+export const DELETE = withApiResponseMetrics(handleDelete)

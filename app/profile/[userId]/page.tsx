@@ -6,39 +6,33 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { getCurrentUser } from "@/lib/actions/auth"
+import { getQuickStats, EMPTY_QUICK_STATS, type QuickStats } from "@/lib/profile/stats"
 import Link from "next/link"
 import { FollowButton } from "@/components/follow"
 import { ProfileActivitiesTab } from "@/components/profile/profile-activities-tab"
+import { ProfilePostsTab } from "@/components/profile/profile-posts-tab"
+import { ProfileLikesTab } from "@/components/profile/profile-likes-tab"
 import { prisma } from "@/lib/prisma"
+import { signAvatarUrl } from "@/lib/storage/signed-url"
+import { privacySettingsSchema, socialLinksSchema } from "@/types/user-settings"
 import { notFound } from "next/navigation"
+import type { LucideIcon } from "lucide-react"
 import {
-  MapPin,
   Calendar,
   LinkIcon,
   Settings,
   Heart,
-  MessageCircle,
-  Repeat2,
   BookOpen,
   Users,
   Clock,
   UserPlus,
+  Github,
+  Twitter,
+  Linkedin,
+  Mail,
+  MapPin,
+  Phone,
 } from "lucide-react"
-
-// Mock 数据仅用于静态展示
-const mockPosts = [
-  {
-    id: 1,
-    title: "现代Web开发的最佳实践与思考",
-    excerpt: "探讨现代Web开发中的关键技术栈选择、性能优化策略以及用户体验设计原则...",
-    publishedAt: "2024年1月15日",
-    readTime: "8分钟阅读",
-    views: 1250,
-    likes: 89,
-    comments: 23,
-    tags: ["技术", "Web开发", "最佳实践"],
-  },
-]
 
 interface ProfilePageProps {
   params: Promise<{
@@ -64,9 +58,13 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
       bio: true,
       status: true,
       role: true, // 仅用于显示管理员徽章
+      email: true,
+      location: true,
+      phone: true,
       createdAt: true,
       lastLoginAt: true, // 仅本人可见
       socialLinks: true,
+      privacySettings: true,
       _count: {
         select: {
           posts: true,
@@ -82,8 +80,26 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
     notFound()
   }
 
+  const targetAvatarSignedUrl = await signAvatarUrl(targetUser.avatarUrl)
+  const targetAvatarUrl = targetAvatarSignedUrl || targetUser.avatarUrl
+
   // 检查是否为当前用户的资料页
   const isOwnProfile = currentUser?.id === targetUser.id
+
+  // 解析隐私设置并进行访问控制检查
+  const parsedPrivacy = privacySettingsSchema.safeParse(targetUser.privacySettings ?? {})
+  const privacySettings = parsedPrivacy.success
+    ? parsedPrivacy.data
+    : privacySettingsSchema.parse({})
+  if (!parsedPrivacy.success) {
+    logger.warn("解析隐私设置失败:", parsedPrivacy.error)
+  }
+
+  // 访问控制：根据profileVisibility检查权限
+  if (!isOwnProfile && privacySettings.profileVisibility === "private") {
+    // private: 仅本人可见，其他人访问返回404
+    notFound()
+  }
 
   let viewerFollowsTarget = false
 
@@ -101,6 +117,14 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
     })
 
     viewerFollowsTarget = !!existingFollow
+
+    // followers: 仅粉丝可见，非粉丝访问返回404
+    if (privacySettings.profileVisibility === "followers" && !viewerFollowsTarget) {
+      notFound()
+    }
+  } else if (!currentUser && privacySettings.profileVisibility === "followers") {
+    // 未登录用户无法访问followers模式的资料
+    notFound()
   }
 
   // 格式化显示数据
@@ -121,19 +145,98 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
       })
     : null
 
-  // 解析社交链接
-  let socialLinks = {}
-  try {
-    if (targetUser.socialLinks && typeof targetUser.socialLinks === "object") {
-      socialLinks = targetUser.socialLinks as any
-    }
-  } catch (e) {
-    logger.warn("解析社交链接失败:", e as Error)
+  const parsedSocialLinks = socialLinksSchema.safeParse(targetUser.socialLinks ?? {})
+  const socialLinks: Partial<ReturnType<typeof socialLinksSchema.parse>> = parsedSocialLinks.success
+    ? parsedSocialLinks.data
+    : {}
+  if (!parsedSocialLinks.success) {
+    logger.warn("解析社交链接失败:", parsedSocialLinks.error)
   }
+
+  let quickStats: QuickStats = { ...EMPTY_QUICK_STATS }
+  try {
+    quickStats = await getQuickStats(targetUser.id)
+  } catch (error) {
+    logger.error(
+      "加载用户活动统计失败",
+      { module: "profile:target", targetUserId: targetUser.id },
+      error
+    )
+  }
+
+  const canShowEmail = isOwnProfile || privacySettings.showEmail
+  const resolvedEmailLink =
+    canShowEmail && (socialLinks.email || targetUser.email)
+      ? socialLinks.email ?? `mailto:${targetUser.email}`
+      : undefined
+
+  const getDisplayText = (href: string) =>
+    href.startsWith("mailto:") ? href.replace(/^mailto:/, "") : href
+
+  const socialLinkItems: {
+    key: string
+    label: string
+    href: string
+    displayText: string
+    Icon: LucideIcon
+  }[] = (
+    [
+      socialLinks.website
+        ? {
+            key: "website",
+            label: "网站",
+            href: socialLinks.website,
+            displayText: socialLinks.website,
+            Icon: LinkIcon,
+          }
+        : null,
+      socialLinks.github
+        ? {
+            key: "github",
+            label: "GitHub",
+            href: socialLinks.github,
+            displayText: socialLinks.github,
+            Icon: Github,
+          }
+        : null,
+      socialLinks.twitter
+        ? {
+            key: "twitter",
+            label: "Twitter",
+            href: socialLinks.twitter,
+            displayText: socialLinks.twitter,
+            Icon: Twitter,
+          }
+        : null,
+      socialLinks.linkedin
+        ? {
+            key: "linkedin",
+            label: "LinkedIn",
+            href: socialLinks.linkedin,
+            displayText: socialLinks.linkedin,
+            Icon: Linkedin,
+          }
+        : null,
+      resolvedEmailLink
+        ? {
+            key: "email",
+            label: "邮箱",
+            href: resolvedEmailLink,
+            displayText: getDisplayText(resolvedEmailLink),
+            Icon: Mail,
+          }
+        : null,
+    ] as const
+  ).filter(Boolean) as {
+    key: string
+    label: string
+    href: string
+    displayText: string
+    Icon: LucideIcon
+  }[]
 
   return (
     <div className="bg-background min-h-screen">
-
       <div className="container mx-auto px-4 py-8">
         <div className="grid gap-8 lg:grid-cols-4">
           {/* Profile Header */}
@@ -143,7 +246,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                 <div className="flex flex-col items-start space-y-4 md:flex-row md:items-center md:space-x-6 md:space-y-0">
                   <Avatar className="h-24 w-24 md:h-32 md:w-32">
                     <AvatarImage
-                      src={targetUser.avatarUrl || "/placeholder.svg"}
+                      src={targetAvatarUrl || "/placeholder.svg"}
                       alt={displayName}
                     />
                     <AvatarFallback className="text-2xl">
@@ -169,15 +272,30 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                     </p>
 
                     <div className="text-muted-foreground flex flex-wrap items-center gap-4 text-sm">
-                      {(socialLinks as any)?.website && (
+                      {socialLinkItems.map((item) => (
+                        <Link
+                          key={item.key}
+                          href={item.href}
+                          className="text-primary flex max-w-full items-center gap-1 hover:underline"
+                          target="_blank"
+                          rel="noreferrer"
+                          title={item.href}
+                        >
+                          <item.Icon className="h-4 w-4" />
+                          <span className="sr-only">{item.label}</span>
+                          <span className="truncate">{item.displayText}</span>
+                        </Link>
+                      ))}
+                      {(isOwnProfile || privacySettings.showLocation) && targetUser.location && (
                         <div className="flex items-center">
-                          <LinkIcon className="mr-1 h-4 w-4" />
-                          <Link
-                            href={(socialLinks as any).website}
-                            className="text-primary hover:underline"
-                          >
-                            {(socialLinks as any).website}
-                          </Link>
+                          <MapPin className="mr-1 h-4 w-4" />
+                          {targetUser.location}
+                        </div>
+                      )}
+                      {(isOwnProfile || privacySettings.showPhone) && targetUser.phone && (
+                        <div className="flex items-center">
+                          <Phone className="mr-1 h-4 w-4" />
+                          {targetUser.phone}
                         </div>
                       )}
                       <div className="flex items-center">
@@ -274,51 +392,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
 
               {/* Blog Posts Tab */}
               <TabsContent value="posts" className="space-y-6">
-                {mockPosts.length === 0 ? (
-                  <Card>
-                    <CardContent className="pt-6 text-center">
-                      <BookOpen className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
-                      <p className="text-muted-foreground">还没有发布博客文章</p>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  mockPosts.map((post) => (
-                    <Card key={post.id} className="transition-shadow hover:shadow-lg">
-                      <CardHeader>
-                        <div className="mb-2 flex flex-wrap gap-2">
-                          {post.tags.map((tag) => (
-                            <Badge key={tag} variant="secondary" className="text-xs">
-                              {tag}
-                            </Badge>
-                          ))}
-                        </div>
-                        <CardTitle className="line-clamp-2 text-xl">{post.title}</CardTitle>
-                        <CardDescription className="line-clamp-3 text-base">
-                          {post.excerpt}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-muted-foreground flex items-center justify-between text-sm">
-                          <div className="flex items-center space-x-4">
-                            <span className="flex items-center">
-                              <Calendar className="mr-1 h-3 w-3" />
-                              {post.publishedAt}
-                            </span>
-                            <span className="flex items-center">
-                              <Clock className="mr-1 h-3 w-3" />
-                              {post.readTime}
-                            </span>
-                          </div>
-                          <div className="flex items-center space-x-4">
-                            <span>{post.views} 阅读</span>
-                            <span>{post.likes} 点赞</span>
-                            <span>{post.comments} 评论</span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
+                <ProfilePostsTab userId={userId} />
               </TabsContent>
 
               {/* Activities Tab */}
@@ -328,12 +402,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
 
               {/* Likes Tab */}
               <TabsContent value="likes" className="space-y-6">
-                <Card>
-                  <CardContent className="pt-6 text-center">
-                    <Heart className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
-                    <p className="text-muted-foreground">还没有点赞的内容</p>
-                  </CardContent>
-                </Card>
+                <ProfileLikesTab userId={userId} />
               </TabsContent>
 
               {/* Media Tab */}
@@ -401,22 +470,22 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground text-sm">本月发布</span>
-                      <span className="font-semibold">0 篇</span>
+                      <span className="font-semibold">{quickStats.monthlyPosts} 篇</span>
                     </div>
                     <Separator />
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground text-sm">总阅读量</span>
-                      <span className="font-semibold">0</span>
+                      <span className="font-semibold">{quickStats.totalViews}</span>
                     </div>
                     <Separator />
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground text-sm">获得点赞</span>
-                      <span className="font-semibold">0</span>
+                      <span className="font-semibold">{quickStats.totalLikes}</span>
                     </div>
                     <Separator />
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground text-sm">评论互动</span>
-                      <span className="font-semibold">0</span>
+                      <span className="font-semibold">{quickStats.totalComments}</span>
                     </div>
                   </div>
                 </CardContent>

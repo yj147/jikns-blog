@@ -7,11 +7,15 @@ import { NextRequest, NextResponse } from "next/server"
 import { validateApiPermissions } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 import { authLogger } from "@/lib/utils/logger"
+import { signAvatarUrl } from "@/lib/storage/signed-url"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
+
+const PHONE_PATTERN = /^[0-9()+\-\.\s]*$/
 
 /**
  * 获取当前用户资料
  */
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   // 验证用户认证
   const { success, error, user } = await validateApiPermissions(request, "auth")
 
@@ -30,6 +34,10 @@ export async function GET(request: NextRequest) {
         bio: true,
         avatarUrl: true,
         socialLinks: true,
+        location: true,
+        phone: true,
+        notificationPreferences: true,
+        privacySettings: true,
         role: true,
         status: true,
         createdAt: true,
@@ -59,7 +67,10 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      data: userProfile,
+      data: {
+        ...userProfile,
+        avatarUrl: (await signAvatarUrl(userProfile.avatarUrl)) ?? userProfile.avatarUrl,
+      },
       message: "用户资料获取成功",
     })
   } catch (error) {
@@ -78,7 +89,7 @@ export async function GET(request: NextRequest) {
 /**
  * 更新当前用户资料
  */
-export async function PUT(request: NextRequest) {
+async function handlePut(request: NextRequest) {
   // 验证用户认证
   const { success, error, user } = await validateApiPermissions(request, "auth")
 
@@ -130,6 +141,36 @@ export async function PUT(request: NextRequest) {
         )
       }
       updateData.bio = bio || null
+    }
+
+    if (body.location !== undefined) {
+      const location = body.location?.toString().trim()
+      if (location && location.length > 200) {
+        return NextResponse.json(
+          {
+            error: "所在地不能超过200个字符",
+            code: "LOCATION_TOO_LONG",
+            field: "location",
+          },
+          { status: 400 }
+        )
+      }
+      updateData.location = location || null
+    }
+
+    if (body.phone !== undefined) {
+      const phone = body.phone?.toString().trim()
+      if (phone && (phone.length > 40 || !PHONE_PATTERN.test(phone))) {
+        return NextResponse.json(
+          {
+            error: "手机号格式不正确或长度超过限制",
+            code: "INVALID_PHONE",
+            field: "phone",
+          },
+          { status: 400 }
+        )
+      }
+      updateData.phone = phone || null
     }
 
     if (body.avatarUrl !== undefined) {
@@ -220,6 +261,9 @@ export async function PUT(request: NextRequest) {
     )
   }
 }
+
+export const GET = withApiResponseMetrics(handleGet)
+export const PUT = withApiResponseMetrics(handlePut)
 
 // 辅助函数：验证URL格式
 function isValidUrl(string: string): boolean {

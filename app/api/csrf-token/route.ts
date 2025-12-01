@@ -6,19 +6,28 @@
 import { NextRequest, NextResponse } from "next/server"
 import { CSRFProtection } from "@/lib/security"
 import { logger } from "@/lib/utils/logger"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 /**
  * 获取 CSRF 令牌
+ * 复用已有 Cookie token 避免多标签页竞态问题
  */
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   try {
-    const token = CSRFProtection.generateToken()
+    const refreshRequested = request.nextUrl.searchParams.get("refresh") === "1"
+    const existingToken = request.cookies.get("csrf-token")?.value
+
+    // 只有在显式请求刷新或没有现有 token 时才生成新 token
+    const token = !refreshRequested && existingToken ? existingToken : CSRFProtection.generateToken()
+    const rotated = !existingToken || refreshRequested
+
     const response = NextResponse.json({
       token,
-      message: "CSRF 令牌生成成功",
+      rotated,
+      message: rotated ? "CSRF 令牌生成成功" : "CSRF 令牌复用成功",
     })
 
-    // 设置 CSRF Cookie
+    // 设置/续期 CSRF Cookie
     CSRFProtection.setCsrfCookie(response, token)
 
     return response
@@ -38,7 +47,7 @@ export async function GET(request: NextRequest) {
 /**
  * 验证 CSRF 令牌
  */
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   try {
     const isValid = CSRFProtection.validateToken(request)
 
@@ -58,3 +67,6 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+export const GET = withApiResponseMetrics(handleGet)
+export const POST = withApiResponseMetrics(handlePost)

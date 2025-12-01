@@ -25,6 +25,7 @@ import { getOptionalViewer, assertPolicy, generateRequestId } from "@/lib/auth/s
 import { handleInteractionError } from "@/lib/api/interaction-error-handler"
 import { API_ERROR_MESSAGES } from "@/lib/api/error-messages"
 import { mapAuthErrorCode } from "@/lib/api/auth-error-mapper"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 /**
  * GET /api/bookmarks
@@ -32,7 +33,7 @@ import { mapAuthErrorCode } from "@/lib/api/auth-error-mapper"
  * - status: 获取收藏状态（公开）
  * - list: 获取用户收藏列表（需认证）
  */
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const action = searchParams.get("action")
 
@@ -164,7 +165,7 @@ export async function GET(request: NextRequest) {
  * POST /api/bookmarks
  * 切换收藏状态
  */
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const requestId = generateRequestId()
   try {
     const ip = getClientIP(request) ?? undefined
@@ -223,13 +224,18 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export const GET = withApiResponseMetrics(handleGet)
+export const POST = withApiResponseMetrics(handlePost)
+export const PUT = withApiResponseMetrics(handlePut)
+export const DELETE = withApiResponseMetrics(handleDelete)
+
 /**
  * PUT /api/bookmarks
  * 确保已收藏（幂等操作）
  *
  * 符合 HTTP PUT 语义：多次调用结果一致，最终状态为已收藏
  */
-export async function PUT(request: NextRequest) {
+async function handlePut(request: NextRequest) {
   const requestId = generateRequestId()
   try {
     const ip = getClientIP(request) ?? undefined
@@ -298,7 +304,7 @@ export async function PUT(request: NextRequest) {
  *
  * 符合 HTTP DELETE 语义：多次调用结果一致，最终状态为未收藏
  */
-export async function DELETE(request: NextRequest) {
+async function handleDelete(request: NextRequest) {
   const requestId = generateRequestId()
   try {
     const ip = getClientIP(request) ?? undefined

@@ -120,6 +120,71 @@ describe("Posts Server Actions 错误分类与审计", () => {
     )
   })
 
+  it("createPost 应使用自定义 slug 并返回成功响应", async () => {
+    const { createPost } = await import("@/lib/actions/posts")
+    const customSlug = "custom-slug"
+
+    postMock.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: "post-1",
+        slug: customSlug,
+        title: "测试文章",
+        content: "有效内容至少十个字符",
+        excerpt: null,
+        published: false,
+        isPinned: false,
+        canonicalUrl: null,
+        seoTitle: null,
+        seoDescription: null,
+        coverImage: null,
+        viewCount: 0,
+        createdAt: new Date("2025-01-01T00:00:00Z"),
+        updatedAt: new Date("2025-01-01T00:00:00Z"),
+        publishedAt: null,
+        authorId: "admin-1",
+        seriesId: null,
+        author: { id: "admin-1", name: "Admin", avatarUrl: null, bio: null },
+        series: null,
+        tags: [],
+        _count: { comments: 0, likes: 0, bookmarks: 0 },
+      })
+
+    postMock.create.mockResolvedValue({
+      id: "post-1",
+    })
+
+    const result = await createPost({
+      title: "测试文章",
+      content: "有效内容至少十个字符",
+      slug: customSlug,
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.data?.slug).toBe(customSlug)
+    expect(postMock.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ slug: customSlug }),
+      })
+    )
+  })
+
+  it("createPost 自定义 slug 冲突时返回 CONFLICT", async () => {
+    const { createPost } = await import("@/lib/actions/posts")
+    const customSlug = "duplicate-slug"
+
+    postMock.findUnique.mockResolvedValueOnce({ id: "existing-post" })
+
+    const result = await createPost({
+      title: "冲突文章",
+      content: "有效内容至少十个字符",
+      slug: customSlug,
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.error?.code).toBe("CONFLICT")
+  })
+
   it("publishPost 找不到文章时返回 NOT_FOUND 并记录失败审计", async () => {
     const { publishPost } = await import("@/lib/actions/posts")
     const { prisma } = await import("@/lib/prisma")

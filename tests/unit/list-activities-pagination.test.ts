@@ -16,6 +16,8 @@ vi.mock("@/lib/prisma", () => ({
     },
     comment: {
       findMany: vi.fn(),
+      count: vi.fn(),
+      groupBy: vi.fn(),
     },
   },
 }))
@@ -24,6 +26,8 @@ const mockedFindMany = vi.mocked(prisma.activity.findMany)
 const mockedCount = vi.mocked(prisma.activity.count)
 const mockedFollowFindMany = vi.mocked(prisma.follow.findMany)
 const mockedCommentFindMany = vi.mocked(prisma.comment.findMany)
+const mockedCommentCount = vi.mocked(prisma.comment.count)
+const mockedCommentGroupBy = vi.mocked(prisma.comment.groupBy)
 
 const baseAuthor = {
   id: "author-1",
@@ -66,6 +70,8 @@ describe("listActivities pagination & filters", () => {
     mockedCount.mockReset()
     mockedFollowFindMany.mockReset()
     mockedCommentFindMany.mockReset()
+    mockedCommentCount.mockReset()
+    mockedCommentGroupBy.mockReset()
   })
 
   it("returns ID-based nextCursor and trims to limit", async () => {
@@ -325,10 +331,19 @@ describe("listActivities pagination & filters", () => {
 describe("listComments pagination", () => {
   beforeEach(() => {
     mockedCommentFindMany.mockReset()
+    mockedCommentCount.mockReset()
+    mockedCommentGroupBy.mockReset()
+    mockedCommentCount.mockResolvedValue(0)
+    mockedCommentGroupBy.mockResolvedValue([])
   })
 
   it("returns deterministic cursor when multiple comments share timestamp", async () => {
     const now = new Date()
+    mockedCommentCount
+      .mockResolvedValueOnce(3)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(3)
+      .mockResolvedValueOnce(0)
     mockedCommentFindMany
       .mockResolvedValueOnce([
         makeComment("c-1", now),
@@ -344,6 +359,7 @@ describe("listComments pagination", () => {
 
     expect(first.hasMore).toBe(true)
     expect(first.nextCursor).toBe("c-2")
+    expect(first.totalCount).toBe(3)
 
     const firstCallArgs = mockedCommentFindMany.mock.calls[0]?.[0]
     expect(firstCallArgs?.where).toMatchObject({ parentId: null })
@@ -354,10 +370,30 @@ describe("listComments pagination", () => {
     const secondCallArgs = mockedCommentFindMany.mock.calls[1]?.[0]
     expect(secondCallArgs?.cursor).toEqual({ id: "c-2" })
     expect(secondCallArgs?.orderBy).toEqual([{ createdAt: "desc" }, { id: "desc" }])
+    expect(mockedCommentCount).toHaveBeenCalledTimes(4)
+    expect(mockedCommentCount).toHaveBeenNthCalledWith(1, {
+      where: {
+        postId: "post-1",
+        deletedAt: null,
+        parentId: null,
+      },
+    })
+    expect(mockedCommentCount).toHaveBeenNthCalledWith(2, {
+      where: {
+        postId: "post-1",
+        deletedAt: null,
+        parentId: { not: null },
+        parent: {
+          postId: "post-1",
+          deletedAt: null,
+        },
+      },
+    })
   })
 
   it("attaches replies when includeReplies is true", async () => {
     const now = new Date()
+    mockedCommentCount.mockResolvedValueOnce(2).mockResolvedValueOnce(0)
     mockedCommentFindMany
       .mockResolvedValueOnce([
         makeComment("top-1", now),
@@ -377,6 +413,7 @@ describe("listComments pagination", () => {
     expect(result.comments).toHaveLength(2)
     expect(result.comments[0].replies?.[0].id).toBe("reply-1")
     expect(result.comments[1].replies?.[0].id).toBe("reply-2")
+    expect(result.totalCount).toBe(2)
 
     const repliesCallArgs = mockedCommentFindMany.mock.calls[1]?.[0]
     expect(repliesCallArgs?.where).toMatchObject({ parentId: { in: ["top-1", "top-2"] } })

@@ -1,259 +1,212 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Loader2, Save } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
 import { Skeleton } from "@/components/ui/skeleton"
-import { fetchGet, fetchPost, FetchError } from "@/lib/api/fetch-json"
+import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
+import { FetchError, fetchGet, fetchPost } from "@/lib/api/fetch-json"
 import { useToast } from "@/components/ui/use-toast"
-import { Save, Loader2 } from "lucide-react"
+import type { RegistrationToggle, SeoMeta } from "@/lib/services/system-settings"
 
-type GeneralSettings = {
-  name: string
-  url: string
-  description: string
-  adminEmail: string
-  timezone: string
-}
+const SEO_KEY = "seo.meta"
+const REGISTRATION_KEY = "registration.toggle"
 
-type FeatureToggles = {
-  userRegistration: boolean
-  comments: boolean
-  activity: boolean
-  search: boolean
-}
-
-const DEFAULT_GENERAL: GeneralSettings = {
-  name: "",
-  url: "",
-  description: "",
-  adminEmail: "",
-  timezone: "Asia/Shanghai",
-}
-
-const DEFAULT_FEATURES: FeatureToggles = {
-  userRegistration: true,
-  comments: true,
-  activity: true,
-  search: true,
-}
+const DEFAULT_SEO: SeoMeta = { title: "", description: "", keywords: [] }
+const DEFAULT_REGISTRATION: RegistrationToggle = { enabled: true }
 
 export default function AdminSettingsPage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [general, setGeneral] = useState(DEFAULT_GENERAL)
-  const [features, setFeatures] = useState(DEFAULT_FEATURES)
+  const [seo, setSeo] = useState<SeoMeta>(DEFAULT_SEO)
+  const [keywordsInput, setKeywordsInput] = useState("")
+  const [registration, setRegistration] = useState<RegistrationToggle>(DEFAULT_REGISTRATION)
   const [savingKey, setSavingKey] = useState<string | null>(null)
 
   useEffect(() => {
+    let active = true
     async function loadSettings() {
       setLoading(true)
       setError(null)
       try {
-        const response = await fetchGet<{ data?: { settings: Record<string, any> } }>("/api/admin/settings")
+        const response = await fetchGet<{ data?: { settings?: Record<string, unknown> } }>("/api/admin/settings")
         const payload = (response as any)?.data ?? response
-        const settings = (payload?.settings ?? {}) as Record<string, any>
-        setGeneral({ ...DEFAULT_GENERAL, ...(settings["site.general"] ?? {}) })
-        setFeatures({ ...DEFAULT_FEATURES, ...(settings["features.toggles"] ?? {}) })
-      } catch (error) {
-        const message = error instanceof FetchError ? error.message : "加载设置失败"
+        const settings = (payload?.settings ?? {}) as Record<string, unknown>
+
+        const nextSeo = { ...DEFAULT_SEO, ...(settings[SEO_KEY] as Partial<SeoMeta> | undefined) }
+        const nextRegistration = {
+          ...DEFAULT_REGISTRATION,
+          ...(settings[REGISTRATION_KEY] as Partial<RegistrationToggle> | undefined),
+        }
+
+        if (!active) return
+        setSeo(nextSeo)
+        setKeywordsInput(formatKeywords(nextSeo.keywords))
+        setRegistration(nextRegistration)
+      } catch (err) {
+        if (!active) return
+        const message = err instanceof FetchError ? err.message : "加载设置失败"
         setError(message)
       } finally {
-        setLoading(false)
+        if (active) {
+          setLoading(false)
+        }
       }
     }
 
     loadSettings()
+    return () => {
+      active = false
+    }
   }, [])
 
-  const handleSave = async (key: string, value: unknown, successMessage: string) => {
+  const handleSaveSetting = async (key: string, value: unknown, successMessage: string) => {
     try {
       setSavingKey(key)
       const response = await fetchPost("/api/admin/settings", { key, value })
-      if ((response as any)?.success === false) {
-        throw new FetchError((response as any)?.error?.message ?? "保存失败", 400)
+      const payload = response as any
+      if (payload?.success === false) {
+        throw new FetchError(payload?.error?.message ?? "保存失败", payload?.error?.statusCode ?? 400)
       }
       toast({ title: successMessage })
-    } catch (error) {
-      const message = error instanceof FetchError ? error.message : "保存失败"
-      toast({ variant: "destructive", title: message })
+    } catch (err) {
+      const message = err instanceof FetchError ? err.message : "保存失败"
+      toast({ title: message, variant: "destructive" })
+      throw err
     } finally {
       setSavingKey(null)
     }
   }
 
+  const handleSaveSeo = async () => {
+    const keywords = parseKeywords(keywordsInput)
+    const payload: SeoMeta = { ...seo, keywords }
+    await handleSaveSetting(SEO_KEY, payload, "SEO 设置已保存")
+    setSeo(payload)
+    setKeywordsInput(formatKeywords(keywords))
+  }
+
+  const handleRegistrationToggle = async (enabled: boolean) => {
+    const previous = registration.enabled
+    setRegistration({ enabled })
+    try {
+      await handleSaveSetting(REGISTRATION_KEY, { enabled }, enabled ? "已启用注册" : "已禁用注册")
+    } catch (_err) {
+      setRegistration({ enabled: previous })
+    }
+  }
+
   return (
-    <div className="bg-background min-h-screen">
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="mb-1 text-3xl font-bold">系统设置</h1>
-          <p className="text-muted-foreground">所有设置会立即保存到数据库并记录审计日志</p>
-        </div>
-
-        {loading ? (
-          <SettingsSkeleton />
-        ) : error ? (
-          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-sm text-destructive">
-            {error}
-          </div>
-        ) : (
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>站点信息</CardTitle>
-                <CardDescription>用于 SEO、邮件通知等位置</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="site-name">网站名称</Label>
-                    <Input
-                      id="site-name"
-                      value={general.name}
-                      onChange={(event) => setGeneral((prev) => ({ ...prev, name: event.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="site-url">网站 URL</Label>
-                    <Input
-                      id="site-url"
-                      value={general.url}
-                      onChange={(event) => setGeneral((prev) => ({ ...prev, url: event.target.value }))}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="site-description">网站描述</Label>
-                  <Textarea
-                    id="site-description"
-                    value={general.description}
-                    onChange={(event) => setGeneral((prev) => ({ ...prev, description: event.target.value }))}
-                    className="min-h-[100px]"
-                  />
-                </div>
-
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="admin-email">管理员邮箱</Label>
-                    <Input
-                      id="admin-email"
-                      type="email"
-                      value={general.adminEmail}
-                      onChange={(event) => setGeneral((prev) => ({ ...prev, adminEmail: event.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="timezone">时区</Label>
-                    <Select value={general.timezone} onValueChange={(value) => setGeneral((prev) => ({ ...prev, timezone: value }))}>
-                      <SelectTrigger id="timezone">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Asia/Shanghai">Asia/Shanghai (UTC+8)</SelectItem>
-                        <SelectItem value="UTC">UTC</SelectItem>
-                        <SelectItem value="America/New_York">America/New_York</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <Button
-                  onClick={() => handleSave("site.general", general, "站点信息已保存")}
-                  disabled={savingKey === "site.general"}
-                >
-                  {savingKey === "site.general" ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="mr-2 h-4 w-4" />
-                  )}
-                  保存设置
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>功能开关</CardTitle>
-                <CardDescription>实时控制面向用户的核心能力</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <FeatureToggle
-                  label="用户注册"
-                  description="允许新用户注册账户"
-                  checked={features.userRegistration}
-                  onCheckedChange={(value) => setFeatures((prev) => ({ ...prev, userRegistration: value }))}
-                />
-                <FeatureToggle
-                  label="评论功能"
-                  description="启用文章评论与回复"
-                  checked={features.comments}
-                  onCheckedChange={(value) => setFeatures((prev) => ({ ...prev, comments: value }))}
-                />
-                <FeatureToggle
-                  label="社交动态"
-                  description="开放 Activity Feed 功能"
-                  checked={features.activity}
-                  onCheckedChange={(value) => setFeatures((prev) => ({ ...prev, activity: value }))}
-                />
-                <FeatureToggle
-                  label="全站搜索"
-                  description="允许访客使用搜索功能"
-                  checked={features.search}
-                  onCheckedChange={(value) => setFeatures((prev) => ({ ...prev, search: value }))}
-                />
-
-                <Button
-                  onClick={() => handleSave("features.toggles", features, "功能开关已更新")}
-                  disabled={savingKey === "features.toggles"}
-                >
-                  {savingKey === "features.toggles" ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="mr-2 h-4 w-4" />
-                  )}
-                  保存设置
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+    <section className="space-y-8">
+      <div>
+        <h1 className="text-3xl font-bold">系统设置</h1>
+        <p className="text-muted-foreground">SEO 配置与注册策略将立即保存并记录审计日志</p>
       </div>
-    </div>
+
+      {loading ? (
+        <SettingsSkeleton />
+      ) : error ? (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-sm text-destructive">
+          {error}
+        </div>
+      ) : (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>SEO 元数据</CardTitle>
+              <CardDescription>用于搜索引擎与分享卡片的基础信息</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="seo-title">站点标题</Label>
+                <Input
+                  id="seo-title"
+                  value={seo.title}
+                  onChange={(event) => setSeo((prev) => ({ ...prev, title: event.target.value }))}
+                  placeholder="例如：Jikns Blog"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="seo-description">站点描述</Label>
+                <Textarea
+                  id="seo-description"
+                  value={seo.description}
+                  onChange={(event) => setSeo((prev) => ({ ...prev, description: event.target.value }))}
+                  className="min-h-[100px]"
+                  placeholder="简要描述站点用途，80-160 字符为宜"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="seo-keywords">关键词</Label>
+                <Input
+                  id="seo-keywords"
+                  value={keywordsInput}
+                  onChange={(event) => setKeywordsInput(event.target.value)}
+                  placeholder="使用逗号分隔，如: blog, tech, nextjs"
+                />
+                <p className="text-muted-foreground text-sm">留空则不写入关键词元标签</p>
+              </div>
+
+              <Button onClick={handleSaveSeo} disabled={savingKey === SEO_KEY}>
+                {savingKey === SEO_KEY ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="mr-2 h-4 w-4" />
+                )}
+                保存 SEO 设置
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>注册开关</CardTitle>
+              <CardDescription>控制是否允许新用户创建账户</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div>
+                  <p className="font-medium">启用用户注册</p>
+                  <p className="text-muted-foreground text-sm">关闭后仅管理员可创建账号</p>
+                </div>
+                <Switch
+                  role="switch"
+                  aria-label="启用用户注册"
+                  checked={registration.enabled}
+                  disabled={savingKey === REGISTRATION_KEY}
+                  onCheckedChange={handleRegistrationToggle}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </section>
   )
 }
 
-function FeatureToggle({
-  label,
-  description,
-  checked,
-  onCheckedChange,
-}: {
-  label: string
-  description: string
-  checked: boolean
-  onCheckedChange: (value: boolean) => void
-}) {
-  return (
-    <div className="flex items-center justify-between rounded-lg border p-4">
-      <div>
-        <p className="font-medium">{label}</p>
-        <p className="text-muted-foreground text-sm">{description}</p>
-      </div>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} />
-    </div>
-  )
+function parseKeywords(value: string): string[] {
+  return value
+    .split(/[,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function formatKeywords(keywords: string[]): string {
+  return keywords.join(", ")
 }
 
 function SettingsSkeleton() {
   return (
-    <div className="space-y-6">
+    <div data-testid="settings-skeleton" className="space-y-6">
       {Array.from({ length: 2 }).map((_, index) => (
         <Card key={`settings-skeleton-${index}`}>
           <CardContent className="space-y-4 pt-6">

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { apiLogger } from "@/lib/utils/logger"
 import { createErrorResponse, ErrorCode } from "@/lib/api/unified-response"
 import { generateRequestId } from "@/lib/auth/session"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 /**
  * 获取用户公开资料
@@ -27,7 +28,7 @@ import { generateRequestId } from "@/lib/auth/session"
  * @returns {number} counts.followers - 粉丝数
  * @returns {number} counts.following - 关注数
  */
-export async function GET(
+async function handleGet(
   request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
@@ -104,3 +105,4 @@ export async function GET(
   }
 }
 
+export const GET = withApiResponseMetrics(handleGet)

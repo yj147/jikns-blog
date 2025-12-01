@@ -8,6 +8,7 @@ import { createServerClient } from "@supabase/ssr"
 import { withApiSecurity, createSuccessResponse } from "@/lib/security/api-security"
 import { z } from "zod"
 import { logger } from "@/lib/utils/logger"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 // 日志数据结构验证
 const logEntrySchema = z.object({
@@ -56,7 +57,7 @@ const requestSchema = z.object({
 /**
  * POST /api/logs/errors - 接收前端错误日志
  */
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   return withApiSecurity(
     async (req: NextRequest) => {
       try {
@@ -191,7 +192,7 @@ export async function POST(request: NextRequest) {
 /**
  * GET /api/logs/errors - 查询错误日志（仅管理员）
  */
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   return withApiSecurity(
     async (req: NextRequest) => {
       const { searchParams } = new URL(req.url)
@@ -270,3 +271,6 @@ export async function GET(request: NextRequest) {
     }
   )(request)
 }
+
+export const POST = withApiResponseMetrics(handlePost)
+export const GET = withApiResponseMetrics(handleGet)

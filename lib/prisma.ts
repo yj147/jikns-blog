@@ -68,6 +68,44 @@ function applyActivityTokens(data: MutableData, options: { forceAll: boolean }) 
   }
 }
 
+function applyTagTokens(data: MutableData, options: { forceAll: boolean }) {
+  if (!data) return
+  const record = data as Record<string, unknown>
+
+  if (hasOwn.call(record, "name")) {
+    const rawValue = extractScalarString(record["name"])
+    record["nameTokens"] = tokenizeText(rawValue)
+  } else if (options.forceAll) {
+    record["nameTokens"] = tokenizeText(undefined)
+  }
+
+  if (hasOwn.call(record, "description")) {
+    const rawValue = extractScalarString(record["description"])
+    record["descriptionTokens"] = tokenizeText(rawValue)
+  } else if (options.forceAll) {
+    record["descriptionTokens"] = tokenizeText(undefined)
+  }
+}
+
+function applyUserTokens(data: MutableData, options: { forceAll: boolean }) {
+  if (!data) return
+  const record = data as Record<string, unknown>
+
+  if (hasOwn.call(record, "name")) {
+    const rawValue = extractScalarString(record["name"])
+    record["nameTokens"] = tokenizeText(rawValue)
+  } else if (options.forceAll) {
+    record["nameTokens"] = tokenizeText(undefined)
+  }
+
+  if (hasOwn.call(record, "bio")) {
+    const rawValue = extractScalarString(record["bio"])
+    record["bioTokens"] = tokenizeText(rawValue)
+  } else if (options.forceAll) {
+    record["bioTokens"] = tokenizeText(undefined)
+  }
+}
+
 function applyTokensToInput(
   payload: MutableData | MutableData[] | undefined,
   applier: (data: MutableData, options: { forceAll: boolean }) => void,
@@ -139,6 +177,68 @@ const searchTokenExtension = Prisma.defineExtension({
       upsert({ args, query }) {
         applyActivityTokens(args.create, { forceAll: true })
         applyActivityTokens(args.update, { forceAll: false })
+        return query(args)
+      },
+    },
+    tag: {
+      create({ args, query }) {
+        applyTagTokens(args.data, { forceAll: true })
+        return query(args)
+      },
+      createMany({ args, query }) {
+        applyTokensToInput(
+          args.data as MutableData | MutableData[] | undefined,
+          applyTagTokens,
+          { forceAll: true }
+        )
+        return query(args)
+      },
+      update({ args, query }) {
+        applyTagTokens(args.data, { forceAll: false })
+        return query(args)
+      },
+      updateMany({ args, query }) {
+        applyTokensToInput(
+          args.data as MutableData | MutableData[] | undefined,
+          applyTagTokens,
+          { forceAll: false }
+        )
+        return query(args)
+      },
+      upsert({ args, query }) {
+        applyTagTokens(args.create, { forceAll: true })
+        applyTagTokens(args.update, { forceAll: false })
+        return query(args)
+      },
+    },
+    user: {
+      create({ args, query }) {
+        applyUserTokens(args.data, { forceAll: true })
+        return query(args)
+      },
+      createMany({ args, query }) {
+        applyTokensToInput(
+          args.data as MutableData | MutableData[] | undefined,
+          applyUserTokens,
+          { forceAll: true }
+        )
+        return query(args)
+      },
+      update({ args, query }) {
+        applyUserTokens(args.data, { forceAll: false })
+        return query(args)
+      },
+      updateMany({ args, query }) {
+        applyTokensToInput(
+          args.data as MutableData | MutableData[] | undefined,
+          applyUserTokens,
+          { forceAll: false }
+        )
+        return query(args)
+      },
+      upsert({ args, query }) {
+        applyUserTokens(args.create, { forceAll: true })
+        applyUserTokens(args.update, { forceAll: false })
         return query(args)
       },
     },

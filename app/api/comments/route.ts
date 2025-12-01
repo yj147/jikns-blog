@@ -4,8 +4,18 @@
  */
 
 import { NextRequest } from "next/server"
-import { createComment, listComments, CommentServiceError } from "@/lib/interactions"
-import { getOptionalViewer, assertPolicy, generateRequestId } from "@/lib/auth/session"
+import {
+  createComment,
+  listComments,
+  CommentServiceError,
+  type CommentWithAuthor,
+} from "@/lib/interactions"
+import {
+  getOptionalViewer,
+  assertPolicy,
+  generateRequestId,
+  type AuthenticatedUser,
+} from "@/lib/auth/session"
 import {
   createSuccessResponse,
   createErrorResponse,
@@ -23,15 +33,17 @@ import {
   CommentResponseDto,
   type CommentTargetType,
 } from "@/lib/dto/comments.dto"
+import { Role } from "@/lib/generated/prisma"
 import { respondWithCommentError } from "./comment-error-response"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 /**
  * GET /api/comments
  * 获取评论列表
  */
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const startTime = performance.now()
-  const requestId = generateRequestId()
+  const requestId = request.headers.get("x-request-id") ?? generateRequestId()
   let actorId: string | undefined
   let actorRole: string | undefined
   let actorStatus: string | undefined
@@ -98,7 +110,10 @@ export async function GET(request: NextRequest) {
       })
     })
 
-    const validatedComments = result.comments.map((comment) => CommentResponseDto.parse(comment))
+    const commentsWithPermissions = appendCommentPermissions(result.comments, user)
+    const validatedComments = commentsWithPermissions.map((comment) =>
+      CommentResponseDto.parse(comment)
+    )
 
     const duration = performance.now() - startTime
 
@@ -113,7 +128,7 @@ export async function GET(request: NextRequest) {
 
     return createPaginatedResponse(validatedComments, {
       limit,
-      total: null, // 游标分页不提供总数
+      total: result.totalCount,
       hasMore: result.hasMore,
       nextCursor: result.nextCursor,
     })
@@ -143,13 +158,45 @@ export async function GET(request: NextRequest) {
   }
 }
 
+type CommentWithPermissions = CommentWithAuthor & {
+  replies?: CommentWithPermissions[]
+  canEdit?: boolean
+  canDelete?: boolean
+}
+
+function appendCommentPermissions(
+  comments: CommentWithAuthor[],
+  viewer: AuthenticatedUser | null
+): CommentWithPermissions[] {
+  return comments.map((comment) => applyCommentPermissions(comment, viewer))
+}
+
+function applyCommentPermissions(
+  comment: CommentWithAuthor,
+  viewer: AuthenticatedUser | null
+): CommentWithPermissions {
+  const isAdmin = viewer?.role === Role.ADMIN
+  const isAuthor = viewer?.id === comment.authorId
+  const isDeleted = Boolean(comment.deletedAt)
+
+  const canDelete = Boolean(viewer && (isAdmin || isAuthor))
+  const canEdit = Boolean(viewer && isAuthor && !isDeleted)
+
+  return {
+    ...comment,
+    canDelete,
+    canEdit,
+    replies: comment.replies ? appendCommentPermissions(comment.replies, viewer) : undefined,
+  }
+}
+
 /**
  * POST /api/comments
  * 创建评论
  */
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const startTime = performance.now()
-  const requestId = generateRequestId()
+  const requestId = request.headers.get("x-request-id") ?? generateRequestId()
   const ip = getClientIP(request) ?? undefined
   const ua = getClientUserAgent(request) ?? undefined
   let actorId: string | undefined
@@ -318,6 +365,9 @@ export async function POST(request: NextRequest) {
     return handleApiError(error)
   }
 }
+
+export const GET = withApiResponseMetrics(handleGet)
+export const POST = withApiResponseMetrics(handlePost)
 
 /**
  * DELETE /api/comments/[id]

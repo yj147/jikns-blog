@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 export function SearchResultsSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="search-results-skeleton">
       {/* 搜索结果统计骨架 */}
       <div className="flex items-center justify-between">
         <Skeleton className="h-5 w-32" />

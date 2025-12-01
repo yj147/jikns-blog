@@ -27,6 +27,7 @@ vi.mock("@/lib/interactions", () => ({
     ],
     hasMore: false,
     nextCursor: null,
+    totalCount: 2,
   }),
   createComment: vi.fn().mockResolvedValue({
     id: "new-comment",

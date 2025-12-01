@@ -2,6 +2,7 @@ import type React from "react"
 import type { Metadata } from "next"
 import { geistSans, manrope } from "./fonts"
 import { AuthProvider } from "./providers/auth-provider"
+import { SwrProvider } from "./providers/swr-provider"
 import { Toaster } from "@/components/ui/toaster"
 // import { Toaster as SonnerToaster } from "sonner"
 import { AuthStateListener } from "@/components/auth-state-listener"
@@ -28,21 +29,24 @@ export default function RootLayout({
   return (
     <html
       lang="zh-CN"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistSans.className} ${manrope.variable} antialiased`}
     >
       <body className="bg-background min-h-screen font-sans antialiased">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <ErrorBoundary>
-            <AuthProvider>
-              <AuthStateListener />
-              <CSRFToken hidden />
-              <NavigationServer />
-              <main>{children}</main>
-            </AuthProvider>
-          </ErrorBoundary>
-          {/* Toast 通知系统 */}
-          <Toaster />
-        </ThemeProvider>
+        <SwrProvider>
+          <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+            <ErrorBoundary>
+              <AuthProvider>
+                <AuthStateListener />
+                <CSRFToken hidden />
+                <NavigationServer />
+                <main>{children}</main>
+              </AuthProvider>
+            </ErrorBoundary>
+            {/* Toast 通知系统 */}
+            <Toaster />
+          </ThemeProvider>
+        </SwrProvider>
         {/* Sonner Toast - 待安装完成后启用
         <SonnerToaster 
           position="top-right"

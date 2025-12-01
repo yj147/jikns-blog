@@ -31,7 +31,7 @@ async function recordCandidatePromotionAudit(params: {
   errorCode?: string
   errorMessage?: string
 }) {
-  const context = getServerContext()
+  const context = await getServerContext()
   const details = {
     ...(params.candidateId ? { candidateId: params.candidateId } : {}),
     ...(params.tagId ? { tagId: params.tagId } : {}),
@@ -252,6 +252,7 @@ export async function promoteTagCandidate(
           description: null,
           color: null,
           postsCount: 0,
+          activitiesCount: 0,
         },
         select: {
           id: true,
@@ -260,6 +261,7 @@ export async function promoteTagCandidate(
           description: true,
           color: true,
           postsCount: true,
+          activitiesCount: true,
           createdAt: true,
           updatedAt: true,
         },

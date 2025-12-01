@@ -96,11 +96,17 @@ export class ErrorHandler {
     }
 
     // 默认错误
+    // 序列化错误对象，避免 RSC 传递 Error 实例
     return {
       type: AuthErrorType.UNKNOWN_ERROR,
       message: error?.message || "发生未知错误",
       code: "UNKNOWN_ERROR",
-      details: error,
+      details:
+        error instanceof Error
+          ? { name: error.name, message: error.message }
+          : typeof error === "object"
+            ? JSON.parse(JSON.stringify(error))
+            : String(error),
     }
   }
 

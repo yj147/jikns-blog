@@ -24,10 +24,13 @@ import { auditLogger, getClientIP, getClientUserAgent } from "@/lib/audit-log"
 import { extractActivityHashtags, syncActivityTags } from "@/lib/services/activity-tags"
 import { getActivityFixture, shouldUseFixtureExplicitly } from "@/lib/fixtures/activity-fixture"
 import { logger } from "@/lib/utils/logger"
+import { signActivityListItems, signActivityListItem } from "@/lib/storage/signed-url"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
+import { generateRequestId } from "@/lib/utils/request-id"
 
 const DEFAULT_RATE_LIMIT_MESSAGE = "请求过于频繁，请稍后再试"
 
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   try {
     let user: Awaited<ReturnType<typeof getCurrentUser>> | null = null
     try {
@@ -124,6 +127,8 @@ export async function GET(request: NextRequest) {
       includeBannedAuthors: viewer?.role === "ADMIN",
     })
 
+    const signedItems = await signActivityListItems(repoResult.items)
+
     let likeStatusMap: Map<
       string,
       {
@@ -140,7 +145,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const data: ActivityWithAuthor[] = repoResult.items.map((item) =>
+    const data: ActivityWithAuthor[] = signedItems.map((item) =>
       mapActivityResponse(item, viewer, likeStatusMap?.get(item.id) ?? null)
     )
 
@@ -161,7 +166,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
+  const requestId = request.headers.get("x-request-id") ?? generateRequestId()
   try {
     const user = await getCurrentUser()
     if (!user) {
@@ -226,40 +232,45 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         ipAddress,
         userAgent: getClientUserAgent(request),
-        requestId: crypto.randomUUID(),
+        requestId,
       })
     }
 
     const hashtags = extractActivityHashtags(parsed.data.content)
     const normalizedImageUrls = parsed.data.imageUrls ?? []
 
-    const created = await prisma.activity.create({
-      data: {
-        authorId: user.id,
-        content: parsed.data.content,
-        imageUrls: normalizedImageUrls,
-        isPinned: canPin ? requestedPin : false,
-      },
-      include: {
-        author: {
-          select: {
-            id: true,
-            name: true,
-            avatarUrl: true,
-            role: true,
-            status: true,
+    const { activity: created } = await prisma.$transaction(async (tx) => {
+      const activity = await tx.activity.create({
+        data: {
+          authorId: user.id,
+          content: parsed.data.content,
+          imageUrls: normalizedImageUrls,
+          isPinned: canPin ? requestedPin : false,
+        },
+        include: {
+          author: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              avatarUrl: true,
+              role: true,
+              status: true,
+            },
           },
         },
-      },
-    })
-
-    if (hashtags.length > 0) {
-      await syncActivityTags({
-        tx: prisma,
-        activityId: created.id,
-        rawTagNames: hashtags,
       })
-    }
+
+      if (hashtags.length > 0) {
+        await syncActivityTags({
+          tx,
+          activityId: activity.id,
+          rawTagNames: hashtags,
+        })
+      }
+
+      return { activity }
+    })
 
     await auditLogger.logEvent({
       action: "CREATE_ACTIVITY",
@@ -288,20 +299,22 @@ export async function POST(request: NextRequest) {
       author: {
         id: created.author.id,
         name: created.author.name,
+        email: created.author.email,
         avatarUrl: created.author.avatarUrl,
         role: created.author.role,
         status: created.author.status,
       },
     }
 
-    const response = mapActivityResponse(listItem, viewer, null)
+    const signedItem = await signActivityListItem(listItem)
+    const response = mapActivityResponse(signedItem, viewer, null)
     return createSuccessResponse(response)
   } catch (error) {
     return handleApiError(error)
   }
 }
 
-export async function DELETE(request: NextRequest) {
+async function handleDelete(request: NextRequest) {
   const activityId = request.nextUrl.searchParams.get("id")?.trim()
 
   if (!activityId) {
@@ -402,12 +415,34 @@ export async function DELETE(request: NextRequest) {
 
     const deletedAt = new Date()
 
-    await prisma.activity.update({
-      where: { id: activity.id },
-      data: {
-        deletedAt,
-        isPinned: false,
-      },
+    await prisma.$transaction(async (tx) => {
+      const tagLinks = await tx.activityTag.findMany({
+        where: { activityId: activity.id },
+        select: { tagId: true },
+      })
+      const tagIds = Array.from(new Set(tagLinks.map((link) => link.tagId)))
+
+      if (tagIds.length > 0) {
+        await tx.activityTag.deleteMany({ where: { activityId: activity.id } })
+        await tx.tag.updateMany({
+          where: { id: { in: tagIds } },
+          data: { activitiesCount: { decrement: 1 } },
+        })
+      }
+
+      // 级联清理点赞，保持计数一致
+      await tx.like.deleteMany({
+        where: { activityId: activity.id },
+      })
+
+      await tx.activity.update({
+        where: { id: activity.id },
+        data: {
+          deletedAt,
+          isPinned: false,
+          likesCount: 0,
+        },
+      })
     })
 
     await auditLogger.logEvent({
@@ -465,6 +500,8 @@ function mapActivityResponse(
   const likesCount = typeof likeStatus?.count === "number" ? likeStatus.count : item.likesCount
   const isLiked = Boolean(likeStatus?.isLiked)
 
+  const authorDisplayName = deriveAuthorDisplayName(item.author)
+
   return {
     id: item.id,
     authorId: item.authorId,
@@ -478,7 +515,7 @@ function mapActivityResponse(
     updatedAt: item.updatedAt,
     author: {
       id: item.author.id,
-      name: item.author.name,
+      name: authorDisplayName,
       avatarUrl: item.author.avatarUrl,
       role: item.author.role === "ADMIN" ? "ADMIN" : "USER",
       status: item.author.status,
@@ -487,6 +524,22 @@ function mapActivityResponse(
     canEdit: ActivityPermissions.canUpdate(viewer, permissionSubject),
     canDelete: ActivityPermissions.canDelete(viewer, permissionSubject),
   }
+}
+
+function deriveAuthorDisplayName(author: ActivityListItem["author"]): string {
+  const trimmed = author.name?.trim()
+  if (trimmed) {
+    return trimmed
+  }
+
+  if (author.email) {
+    const emailLocal = author.email.split("@")[0]?.trim()
+    if (emailLocal) {
+      return emailLocal
+    }
+  }
+
+  return `用户${author.id.slice(0, 6)}`
 }
 
 function respondWithFixture(
@@ -522,3 +575,7 @@ function respondWithFixture(
     },
   })
 }
+
+export const GET = withApiResponseMetrics(handleGet)
+export const POST = withApiResponseMetrics(handlePost)
+export const DELETE = withApiResponseMetrics(handleDelete)

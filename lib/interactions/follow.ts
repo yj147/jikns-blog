@@ -12,6 +12,7 @@ import {
   CursorDecodeError,
   type CursorData,
 } from "@/lib/follow/cursor-utils"
+import { notify } from "@/lib/services/notification"
 
 const DEFAULT_LIST_LIMIT = 20
 const MAX_LIST_LIMIT = 50
@@ -345,6 +346,8 @@ export async function followUser(
         followingId: targetId,
       },
     })
+
+    await notify(targetId, "FOLLOW", { actorId: followerId })
 
     return {
       followerId: follow.followerId,

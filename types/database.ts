@@ -17,6 +17,10 @@ export type User = Prisma.UserGetPayload<{
     avatarUrl: true
     bio: true
     socialLinks: true
+    location: true
+    phone: true
+    notificationPreferences: true
+    privacySettings: true
     role: true
     status: true
     createdAt: true
@@ -306,6 +310,7 @@ export interface PostListItem {
   viewCount: number
   publishedAt: Date | null
   createdAt: Date
+  contentLength: number
   author: {
     id: string
     name: string | null
@@ -360,7 +365,7 @@ export interface Database {
       [_ in never]: never
     }
     Enums: {
-      Role: "USER" | "ADMIN"
+      Role: "USER" | "AUTHOR" | "ADMIN"
       UserStatus: "ACTIVE" | "BANNED"
     }
     CompositeTypes: {

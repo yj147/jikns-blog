@@ -6,8 +6,13 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/utils/logger"
+import { requireAdmin } from "@/lib/auth"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
-export async function GET() {
+async function handleGet() {
+  // 🔒 安全检查：仅管理员可访问系统健康信息
+  await requireAdmin()
+
   const startTime = Date.now()
 
   try {
@@ -49,11 +54,6 @@ export async function GET() {
       },
       数据统计: dataStats,
       系统信息: systemInfo,
-      种子数据: {
-        管理员账号: "admin@example.com",
-        普通用户账号: "user@example.com",
-        说明: "密码均为 账号前缀+123456",
-      },
     }
 
     return NextResponse.json(response, {
@@ -85,6 +85,8 @@ export async function GET() {
     await prisma.$disconnect()
   }
 }
+
+export const GET = withApiResponseMetrics(handleGet)
 
 /**
  * 检查数据库连接状态

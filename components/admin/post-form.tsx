@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils"
 import { normalizeTagSlug } from "@/lib/utils/tag"
 import { getOptimizedImageUrl } from "@/lib/images/optimizer"
 import { compressImage } from "@/lib/upload/image-utils"
+import { createSmartSlug } from "@/lib/utils/slug-english"
 
 // Post 表单验证 Schema
 function mapTagNamesToItems(tagNames: string[]): TagAutocompleteItem[] {
@@ -38,9 +39,21 @@ function mapTagNamesToItems(tagNames: string[]): TagAutocompleteItem[] {
   })
 }
 
+const slugSchema = z
+  .string()
+  .min(1, "URL路径不能为空")
+  .max(100, "URL路径最多100个字符")
+  .regex(/^[a-zA-Z0-9\-_]+$/, "URL路径只能包含字母、数字、连字符和下划线")
+  .refine((value) => !/^[-_]|[-_]$/.test(value), {
+    message: "URL路径不能以连字符或下划线开头或结尾",
+  })
+  .refine((value) => !/[-_]{2,}/.test(value), {
+    message: "URL路径不能包含连续的分隔符",
+  })
+
 const postFormSchema = z.object({
   title: z.string().min(1, "标题不能为空").max(200, "标题最多200个字符"),
-  slug: z.string().min(1, "URL路径不能为空").max(100, "URL路径最多100个字符"),
+  slug: slugSchema,
   content: z.string().min(1, "内容不能为空"),
   summary: z.string().max(500, "摘要最多500个字符").optional(),
   coverImage: z.string().url("请输入有效的图片URL").optional().or(z.literal("")),
@@ -178,12 +191,7 @@ export function PostForm({
 
   // 监听标题变化，自动生成 slug
   const title = watch("title")
-  const generateSlug = (title: string) => {
-    return title
-      .toLowerCase()
-      .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-  }
+  const generateSlug = (title: string) => createSmartSlug(title, 100)
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTitle = e.target.value

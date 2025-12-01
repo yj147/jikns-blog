@@ -1,8 +1,9 @@
 import { uploadImage } from "@/lib/actions/upload"
 import { logger } from "@/lib/utils/logger"
 import { NextRequest, NextResponse } from "next/server"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   try {
     const formData = await request.formData()
     const result = await uploadImage(formData)
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET() {
+async function handleGet() {
   return NextResponse.json(
     {
       success: false,
@@ -41,3 +42,6 @@ export async function GET() {
     { status: 405 }
   )
 }
+
+export const POST = withApiResponseMetrics(handlePost)
+export const GET = withApiResponseMetrics(handleGet)

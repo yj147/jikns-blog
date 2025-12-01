@@ -1,191 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { extractActivityHashtags, syncActivityTags } from "@/lib/services/activity-tags"
-
-interface TagRecord {
-  id: string
-  name: string
-  slug: string
-}
-
-interface ActivityTagRecord {
-  activityId: string
-  tagId: string
-}
-
-interface CandidateRecord {
-  id: string
-  name: string
-  slug: string
-  occurrences: number
-  lastSeenActivityId?: string | null
-  lastSeenAt?: Date
-}
-
-function createFakeTransactionClient(initial?: {
-  tags?: TagRecord[]
-  activityTags?: ActivityTagRecord[]
-}) {
-  const tags = new Map<string, TagRecord>()
-  const tagsBySlug = new Map<string, string>()
-  const activityTags = new Map<string, Set<string>>()
-  const activityTagCandidates = new Map<string, CandidateRecord>()
-  let nextId = 1
-
-  initial?.tags?.forEach((tag) => {
-    tags.set(tag.id, { ...tag })
-    tagsBySlug.set(tag.slug, tag.id)
-    const numeric = Number.parseInt(tag.id.replace(/\D+/g, ""), 10)
-    if (!Number.isNaN(numeric)) {
-      nextId = Math.max(nextId, numeric + 1)
-    }
-  })
-
-  initial?.activityTags?.forEach((relation) => {
-    if (!activityTags.has(relation.activityId)) {
-      activityTags.set(relation.activityId, new Set())
-    }
-    activityTags.get(relation.activityId)!.add(relation.tagId)
-  })
-
-  const tx = {
-    activityTag: {
-      findMany: async (args: any) => {
-        const activityId: string | undefined = args?.where?.activityId
-        const includeTag: boolean = Boolean(args?.include?.tag)
-        if (!activityId) return []
-        const set = activityTags.get(activityId)
-        if (!set) return []
-        return Array.from(set).map((tagId) => ({
-          activityId,
-          tagId,
-          tag: includeTag ? { ...tags.get(tagId)! } : undefined,
-        }))
-      },
-      deleteMany: async (args: any) => {
-        const activityId: string | undefined = args?.where?.activityId
-        const tagIds: string[] | undefined = args?.where?.tagId?.in
-        if (!activityId) return { count: 0 }
-        const set = activityTags.get(activityId)
-        if (!set) return { count: 0 }
-        if (Array.isArray(tagIds) && tagIds.length > 0) {
-          tagIds.forEach((id) => set.delete(id))
-          return { count: tagIds.length }
-        }
-        activityTags.delete(activityId)
-        return { count: set.size }
-      },
-      createMany: async (args: any) => {
-        const data: ActivityTagRecord[] = args?.data ?? []
-        data.forEach(({ activityId, tagId }) => {
-          if (!activityTags.has(activityId)) {
-            activityTags.set(activityId, new Set())
-          }
-          activityTags.get(activityId)!.add(tagId)
-        })
-        return { count: data.length }
-      },
-    },
-    tag: {
-      findMany: async (args: any) => {
-        const or: any[] = args?.where?.OR ?? []
-        const slugSet = new Set<string>()
-        const nameSet = new Set<string>()
-        const directSlugIn: string[] | undefined = args?.where?.slug?.in
-        const directNameIn: string[] | undefined = args?.where?.name?.in
-
-        if (Array.isArray(directSlugIn)) {
-          directSlugIn.forEach((slug) => slugSet.add(slug))
-        }
-        if (Array.isArray(directNameIn)) {
-          directNameIn.forEach((name) => nameSet.add(name))
-        }
-
-        or.forEach((condition) => {
-          if (condition?.slug?.in) {
-            condition.slug.in.forEach((slug: string) => slugSet.add(slug))
-          }
-          if (condition?.name?.in) {
-            condition.name.in.forEach((name: string) => nameSet.add(name))
-          }
-        })
-        return Array.from(tags.values()).filter(
-          (tag) => slugSet.has(tag.slug) || nameSet.has(tag.name)
-        )
-      },
-      create: async (args: any) => {
-        const id = args?.data?.id ?? `tag-${nextId++}`
-        const record: TagRecord = {
-          id,
-          name: args?.data?.name,
-          slug: args?.data?.slug,
-        }
-        tags.set(id, record)
-        tagsBySlug.set(record.slug, id)
-        return { ...record }
-      },
-      upsert: async (args: any) => {
-        const slug: string | undefined = args?.where?.slug
-        if (!slug) throw new Error("upsert requires slug")
-
-        const existingId = tagsBySlug.get(slug)
-        if (existingId) {
-          return { ...tags.get(existingId)! }
-        }
-
-        const id = args?.create?.id ?? `tag-${nextId++}`
-        const record: TagRecord = {
-          id,
-          name: args?.create?.name,
-          slug,
-        }
-        tags.set(id, record)
-        tagsBySlug.set(slug, id)
-        return { ...record }
-      },
-    },
-    activityTagCandidate: {
-      upsert: async (args: any) => {
-        const slug: string | undefined = args?.where?.slug
-        if (!slug) throw new Error("candidate upsert requires slug")
-
-        const existing = activityTagCandidates.get(slug)
-        if (existing) {
-          const increment: number = args?.update?.occurrences?.increment ?? 0
-          const updated: CandidateRecord = {
-            ...existing,
-            name: args?.update?.name ?? existing.name,
-            occurrences: existing.occurrences + increment,
-            lastSeenActivityId: args?.update?.lastSeenActivityId ?? existing.lastSeenActivityId,
-            lastSeenAt: args?.update?.lastSeenAt ?? existing.lastSeenAt,
-          }
-          activityTagCandidates.set(slug, updated)
-          return { ...updated }
-        }
-
-        const record: CandidateRecord = {
-          id: args?.create?.id ?? `candidate-${slug}`,
-          name: args?.create?.name,
-          slug,
-          occurrences: args?.create?.occurrences ?? 1,
-          lastSeenActivityId: args?.create?.lastSeenActivityId ?? null,
-          lastSeenAt: args?.create?.lastSeenAt ?? new Date(),
-        }
-        activityTagCandidates.set(slug, record)
-        return { ...record }
-      },
-    },
-  } as unknown as import("@/lib/generated/prisma").Prisma.TransactionClient
-
-  const snapshot = () => ({
-    tags: Array.from(tags.values()),
-    activityTags: Array.from(activityTags.entries()).flatMap(([activityId, set]) =>
-      Array.from(set).map((tagId) => ({ activityId, tagId }))
-    ),
-    activityTagCandidates: Array.from(activityTagCandidates.values()),
-  })
-
-  return { tx, snapshot }
-}
+import { createFakeTransactionClient } from "../helpers/fake-activity-tags-client"
 
 describe("activity tag helpers", () => {
   describe("extractActivityHashtags", () => {
@@ -209,8 +24,8 @@ describe("activity tag helpers", () => {
     beforeEach(() => {
       store = createFakeTransactionClient({
         tags: [
-          { id: "tag-1", name: "React", slug: "react" },
-          { id: "tag-2", name: "Vue", slug: "vue" },
+          { id: "tag-1", name: "React", slug: "react", activitiesCount: 0 },
+          { id: "tag-2", name: "Vue", slug: "vue", activitiesCount: 1 },
         ],
         activityTags: [{ activityId: "act-1", tagId: "tag-2" }],
       })
@@ -296,7 +111,53 @@ describe("activity tag helpers", () => {
       })
 
       expect(result.tagIds).toEqual([])
-      expect(store.snapshot().activityTags).toEqual([])
+      const snapshot = store.snapshot()
+      expect(snapshot.activityTags).toEqual([])
+      const removedTag = snapshot.tags.find((tag) => tag.slug === "vue")
+      expect(removedTag?.activitiesCount).toBe(0)
+    })
+
+    it("updates activitiesCount when replacing tags", async () => {
+      store = createFakeTransactionClient({
+        tags: [
+          { id: "tag-1", name: "React", slug: "react", activitiesCount: 1 },
+          { id: "tag-2", name: "Vue", slug: "vue", activitiesCount: 0 },
+        ],
+        activityTags: [{ activityId: "act-1", tagId: "tag-1" }],
+      })
+
+      await syncActivityTags({
+        tx: store.tx,
+        activityId: "act-1",
+        rawTagNames: ["Vue"],
+      })
+
+      const snapshot = store.snapshot()
+      const react = snapshot.tags.find((tag) => tag.slug === "react")
+      const vue = snapshot.tags.find((tag) => tag.slug === "vue")
+
+      expect(react?.activitiesCount).toBe(0)
+      expect(vue?.activitiesCount).toBe(1)
+      expect(snapshot.activityTags).toEqual([{ activityId: "act-1", tagId: "tag-2" }])
+    })
+
+    it("keeps activitiesCount unchanged when tags stay the same", async () => {
+      store = createFakeTransactionClient({
+        tags: [{ id: "tag-1", name: "React", slug: "react", activitiesCount: 2 }],
+        activityTags: [
+          { activityId: "act-1", tagId: "tag-1" },
+          { activityId: "act-2", tagId: "tag-1" },
+        ],
+      })
+
+      await syncActivityTags({
+        tx: store.tx,
+        activityId: "act-2",
+        rawTagNames: ["React"],
+      })
+
+      const react = store.snapshot().tags.find((tag) => tag.slug === "react")
+      expect(react?.activitiesCount).toBe(2)
     })
   })
 })

@@ -121,6 +121,27 @@ export type {
 } from "./api"
 
 // ============================================================================
+// 评论相关类型
+// ============================================================================
+export type {
+  CommentTargetType,
+  CommentAuthor,
+  CommentBase,
+  CommentCounts,
+  CommentStats,
+  CommentRelations,
+  CommentComputed,
+  Comment,
+  CommentRealtimePayload,
+} from "./comments"
+
+// ============================================================================
+// Feed 管理类型
+// ============================================================================
+export type { FeedAuthor, FeedItem, FeedListResponse, FeedActionResult, AdminFeedActionInput } from "./feed"
+export { adminFeedActionSchema } from "./feed"
+
+// ============================================================================
 // 组件相关类型
 // ============================================================================
 export type {

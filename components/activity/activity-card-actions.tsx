@@ -1,8 +1,10 @@
 "use client"
 
-import { memo, useCallback, useState } from "react"
+import { memo, useCallback, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Heart, MessageCircle, Share, Eye } from "lucide-react"
+import { MessageCircle, Share, Eye } from "lucide-react"
+import { LikeButton } from "@/components/blog/like-button"
+import { useRealtimeLikes } from "@/hooks/use-realtime-likes"
 
 export interface ActivityCardActionsProps {
   activityId: string
@@ -10,10 +12,9 @@ export interface ActivityCardActionsProps {
   initialLikesCount?: number
   commentsCount?: number
   viewsCount?: number
-  onLike?: (activityId: string) => void
+  onLike?: (activityId: string, nextState?: { isLiked: boolean; count: number }) => void
   onComment?: (activityId: string) => void
   onShare?: (activityId: string) => void
-  onCommentsChange?: () => void
 }
 
 function ActivityCardActionsComponent({
@@ -25,53 +26,91 @@ function ActivityCardActionsComponent({
   onLike,
   onComment,
   onShare,
-  onCommentsChange,
 }: ActivityCardActionsProps) {
-  const [isLiked, setIsLiked] = useState(Boolean(initialIsLiked))
-  const [likesCount, setLikesCount] = useState(initialLikesCount ?? 0)
+  const [likesCount, setLikesCount] = useState(initialLikesCount)
 
-  const handleLike = useCallback(() => {
-    setIsLiked((prev) => {
-      const nextLiked = !prev
-      setLikesCount((prevLikes) => (nextLiked ? prevLikes + 1 : Math.max(0, prevLikes - 1)))
-      onLike?.(activityId)
-      return nextLiked
-    })
-  }, [activityId, onLike])
+  useEffect(() => {
+    setLikesCount(initialLikesCount)
+  }, [initialLikesCount])
+
+  const handleRealtimeLike = useCallback(() => {
+    setLikesCount((prev) => prev + 1)
+  }, [])
+
+  const handleRealtimeUnlike = useCallback(() => {
+    setLikesCount((prev) => Math.max(0, prev - 1))
+  }, [])
+
+  const {
+    isSubscribed: isLikesSubscribed,
+    error: likesSubscriptionError,
+  } = useRealtimeLikes({
+    targetType: "activity",
+    targetId: activityId,
+    onLike: handleRealtimeLike,
+    onUnlike: handleRealtimeUnlike,
+  })
 
   const handleComment = useCallback(() => {
     onComment?.(activityId)
-    onCommentsChange?.()
-  }, [activityId, onComment, onCommentsChange])
+  }, [activityId, onComment])
 
   const handleShare = useCallback(() => {
     onShare?.(activityId)
   }, [activityId, onShare])
 
+  const handleLikeChange = useCallback(
+    (isLiked: boolean, count: number) => {
+      onLike?.(activityId, { isLiked, count })
+    },
+    [activityId, onLike]
+  )
+
   return (
-    <div className="mt-4 flex items-center justify-between border-t pt-2">
-      <div className="flex items-center space-x-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleLike}
-          className={isLiked ? "text-red-500 hover:text-red-600" : "hover:text-red-500"}
-        >
-          <Heart className={`mr-2 h-4 w-4 ${isLiked ? "fill-current" : ""}`} />
-          <span className="tabular-nums">{likesCount}</span>
-        </Button>
-        <Button variant="ghost" size="sm" onClick={handleComment} className="hover:text-blue-500">
-          <MessageCircle className="mr-2 h-4 w-4" />
-          <span className="tabular-nums">{commentsCount}</span>
-        </Button>
-        <Button variant="ghost" size="sm" onClick={handleShare} className="hover:text-blue-500">
-          <Share className="mr-2 h-4 w-4" />
-          分享
-        </Button>
+    <div className="mt-4 space-y-1 border-t pt-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <LikeButton
+            targetId={activityId}
+            targetType="activity"
+            initialIsLiked={initialIsLiked}
+            initialCount={likesCount}
+            variant="ghost"
+            size="sm"
+            onLikeChange={handleLikeChange}
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleComment}
+            className="hover:text-blue-500"
+          >
+            <MessageCircle className="mr-2 h-4 w-4" />
+            <span className="tabular-nums">{commentsCount}</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleShare}
+            className="hover:text-blue-500"
+          >
+            <Share className="mr-2 h-4 w-4" />
+            分享
+          </Button>
+        </div>
+        <div className="text-muted-foreground flex items-center gap-2 text-sm">
+          <Eye className="h-4 w-4" />
+          <span className="tabular-nums">{viewsCount}</span>
+        </div>
       </div>
-      <div className="text-muted-foreground flex items-center gap-2 text-sm">
-        <Eye className="h-4 w-4" />
-        <span className="tabular-nums">{viewsCount}</span>
+      <div className="text-muted-foreground flex items-center justify-between text-[11px]">
+        <span>
+          实时点赞：
+          <span className={isLikesSubscribed ? "text-emerald-600" : "text-amber-600"}>
+            {isLikesSubscribed ? "已连接" : "连接中..."}
+          </span>
+        </span>
+        {likesSubscriptionError && <span className="text-red-500">订阅失败</span>}
       </div>
     </div>
   )
@@ -87,8 +126,7 @@ export const ActivityCardActions = memo(
     prev.viewsCount === next.viewsCount &&
     prev.onLike === next.onLike &&
     prev.onComment === next.onComment &&
-    prev.onShare === next.onShare &&
-    prev.onCommentsChange === next.onCommentsChange
+    prev.onShare === next.onShare
 )
 
 ActivityCardActions.displayName = "ActivityCardActions"

@@ -4,10 +4,13 @@
  */
 
 import { prisma } from "@/lib/prisma"
-import { Prisma, type User } from "@/lib/generated/prisma"
+import { Prisma, type User, UserStatus, Role } from "@/lib/generated/prisma"
 import { logger } from "@/lib/utils/logger"
 import { PERFORMANCE_THRESHOLDS } from "@/lib/config/performance"
-import { InteractionTargetNotFoundError } from "./errors"
+import { notify } from "@/lib/services/notification"
+import type { AuthenticatedUser } from "@/lib/auth/session"
+import { ActivityPermissions } from "@/lib/permissions/activity-permissions"
+import { InteractionNotAllowedError, InteractionTargetNotFoundError } from "./errors"
 
 // 点赞目标类型
 export type LikeTargetType = "post" | "activity"
@@ -44,12 +47,184 @@ function isUniqueConstraintViolation(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
 }
 
+type LikeTargetInfo =
+  | {
+      type: "post"
+      id: string
+      authorId: string
+      authorStatus: UserStatus
+    }
+  | {
+      type: "activity"
+      id: string
+      authorId: string
+      authorStatus: UserStatus
+      authorRole: Role
+      deletedAt: Date | null
+      isPinned: boolean
+    }
+
+async function loadActor(userId: string): Promise<AuthenticatedUser> {
+  const actor = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      email: true,
+      role: true,
+      status: true,
+      name: true,
+      avatarUrl: true,
+    },
+  })
+
+  if (!actor) {
+    throw new InteractionNotAllowedError("ACTOR_NOT_FOUND", "用户不存在或未登录", 401)
+  }
+
+  if (actor.status !== UserStatus.ACTIVE) {
+    throw new InteractionNotAllowedError("ACTOR_INACTIVE", "账户状态异常，无法点赞", 403)
+  }
+
+  return actor
+}
+
+async function loadLikeTarget(targetType: LikeTargetType, targetId: string): Promise<LikeTargetInfo> {
+  if (targetType === "post") {
+    const post = await prisma.post.findFirst({
+      where: {
+        id: targetId,
+        published: true,
+      },
+      select: {
+        id: true,
+        authorId: true,
+        author: {
+          select: {
+            id: true,
+            status: true,
+            role: true,
+          },
+        },
+      },
+    })
+
+    if (!post || !post.author) {
+      throw new InteractionTargetNotFoundError("post", targetId)
+    }
+
+    return {
+      type: "post",
+      id: post.id,
+      authorId: post.authorId,
+      authorStatus: post.author.status,
+    }
+  }
+
+  const activity = await prisma.activity.findFirst({
+    where: { id: targetId },
+    select: {
+      id: true,
+      authorId: true,
+      deletedAt: true,
+      isPinned: true,
+      author: {
+        select: {
+          id: true,
+          status: true,
+          role: true,
+        },
+      },
+    },
+  })
+
+  if (!activity || !activity.author) {
+    throw new InteractionTargetNotFoundError("activity", targetId)
+  }
+
+  return {
+    type: "activity",
+    id: activity.id,
+    authorId: activity.authorId,
+    authorStatus: activity.author.status,
+    authorRole: activity.author.role,
+    deletedAt: activity.deletedAt,
+    isPinned: activity.isPinned,
+  }
+}
+
+async function assertCanLikeTarget(
+  targetType: LikeTargetType,
+  targetId: string,
+  actor: AuthenticatedUser
+): Promise<void> {
+  const target = await loadLikeTarget(targetType, targetId)
+
+  if (target.type === "post") {
+    if (target.authorStatus !== UserStatus.ACTIVE) {
+      throw new InteractionNotAllowedError("AUTHOR_INACTIVE", "作者状态异常，无法点赞", 403)
+    }
+    if (target.authorId === actor.id) {
+      throw new InteractionNotAllowedError("SELF_LIKE", "不能给自己的内容点赞", 400)
+    }
+    return
+  }
+
+  if (target.deletedAt) {
+    throw new InteractionNotAllowedError("TARGET_DELETED", "内容已删除，无法点赞", 400)
+  }
+
+  if (target.authorStatus !== UserStatus.ACTIVE) {
+    throw new InteractionNotAllowedError("AUTHOR_INACTIVE", "作者状态异常，无法点赞", 403)
+  }
+
+  const permissionSubject = {
+    id: target.id,
+    authorId: target.authorId,
+    deletedAt: target.deletedAt,
+    isPinned: target.isPinned,
+    author: {
+      id: target.authorId,
+      role: target.authorRole,
+      status: target.authorStatus,
+    },
+  }
+
+  if (!ActivityPermissions.canLike(actor, permissionSubject)) {
+    const reason = actor.id === target.authorId ? "SELF_LIKE" : "LIKE_NOT_ALLOWED"
+    throw new InteractionNotAllowedError(
+      reason,
+      reason === "SELF_LIKE" ? "不能给自己的内容点赞" : "当前操作被禁止",
+      reason === "SELF_LIKE" ? 400 : 403
+    )
+  }
+}
+
+/**
+ * 保底同步 Activity.likesCount，避免依赖触发器
+ * - 真实计数以 likes 表为准
+ * - 更新冗余列，方便列表页直接读取
+ */
+async function syncActivityLikeCount(activityId: string | null | undefined): Promise<number> {
+  if (!activityId) return 0
+
+  const count = await prisma.like.count({
+    where: { activityId },
+  })
+
+  await prisma.activity.updateMany({
+    where: { id: activityId },
+    data: { likesCount: count },
+  })
+
+  return count
+}
+
 /**
  * 辅助函数：删除点赞记录
  * 处理并发删除场景（P2025）
  *
  * 注：Prisma 单条 delete 操作本身是原子的，无需事务包裹
- * 触发器更新 activity.likesCount 在数据库层自动保证原子性
+ * 删除后通过 syncActivityLikeCount 立即回填计数，避免依赖触发器
  *
  * @param requestId - 可选的请求ID，用于跨层日志关联
  */
@@ -116,7 +291,7 @@ async function doDelete(
  * 处理并发创建场景（P2002）和外键约束（P2003）
  *
  * 注：Prisma 单条 create 操作本身是原子的，无需事务包裹
- * 触发器更新 activity.likesCount 在数据库层自动保证原子性
+ * 创建后通过 syncActivityLikeCount 立即回填计数，避免依赖触发器
  *
  * @param requestId - 可选的请求ID，用于跨层日志关联
  */
@@ -185,6 +360,33 @@ async function doCreate(
   }
 }
 
+async function maybeNotifyLike(
+  targetType: LikeTargetType,
+  targetId: string,
+  actorId: string
+): Promise<void> {
+  if (targetType === "post") {
+    const post = await prisma.post.findUnique({
+      where: { id: targetId },
+      select: { authorId: true },
+    })
+
+    if (!post || post.authorId === actorId) return
+
+    await notify(post.authorId, "LIKE", { actorId, postId: targetId })
+    return
+  }
+
+  const activity = await prisma.activity.findUnique({
+    where: { id: targetId },
+    select: { authorId: true },
+  })
+
+  if (!activity || activity.authorId === actorId) return
+
+  await notify(activity.authorId, "LIKE", { actorId, activityId: targetId })
+}
+
 /**
  * 切换点赞状态（点赞/取消点赞）
  *
@@ -205,6 +407,7 @@ export async function toggleLike(
   requestId?: string
 ): Promise<LikeStatus> {
   try {
+    const actor = await loadActor(userId)
     const targetFilter = buildLikeTargetFilter(targetType, targetId)
     const existingLike = await prisma.like.findFirst({
       where: { authorId: userId, ...targetFilter },
@@ -214,8 +417,9 @@ export async function toggleLike(
       const count = await doDelete(existingLike.id, targetType, targetId, userId, requestId)
       return { isLiked: false, count }
     } else {
-      await assertLikeTargetExists(targetType, targetId)
+      await assertCanLikeTarget(targetType, targetId, actor)
       const count = await doCreate(targetFilter, userId, targetType, targetId, requestId)
+      await maybeNotifyLike(targetType, targetId, userId)
       return { isLiked: true, count }
     }
   } catch (error) {
@@ -242,7 +446,8 @@ export async function setLike(
     const targetFilter = buildLikeTargetFilter(targetType, targetId)
 
     if (desired) {
-      await assertLikeTargetExists(targetType, targetId)
+      const actor = await loadActor(userId)
+      await assertCanLikeTarget(targetType, targetId, actor)
       const count = await doCreate(targetFilter, userId, targetType, targetId, requestId)
       return { isLiked: true, count }
     } else {
@@ -488,44 +693,11 @@ export async function getBatchLikeStatus(
 }
 
 /**
- * 验证点赞目标是否存在
- */
-async function assertLikeTargetExists(targetType: LikeTargetType, targetId: string): Promise<void> {
-  if (targetType === "post") {
-    const post = await prisma.post.findFirst({
-      where: {
-        id: targetId,
-        published: true,
-      },
-      select: { id: true },
-    })
-    if (!post) {
-      throw new InteractionTargetNotFoundError("post", targetId)
-    }
-  } else {
-    const activity = await prisma.activity.findFirst({
-      where: {
-        id: targetId,
-        deletedAt: null,
-      },
-      select: { id: true },
-    })
-    if (!activity) {
-      throw new InteractionTargetNotFoundError("activity", targetId)
-    }
-  }
-}
-
-/**
  * 获取点赞数量
  */
 export async function getLikeCount(targetType: LikeTargetType, targetId: string): Promise<number> {
   if (targetType === "activity") {
-    const activity = await prisma.activity.findUnique({
-      where: { id: targetId },
-      select: { likesCount: true },
-    })
-    return activity?.likesCount || 0
+    return syncActivityLikeCount(targetId)
   } else {
     // 文章侧无冗余计数，直接计算
     const count = await prisma.like.count({ where: { postId: targetId } })
@@ -539,9 +711,7 @@ export async function getLikeCount(targetType: LikeTargetType, targetId: string)
  *
  * 原子性保证：
  * - deleteMany 操作本身是原子的
- * - 数据库触发器（sync_activity_likes_count）会在每条记录删除后自动更新 activity.likesCount
- * - 触发器在数据库层保证原子性，无需应用层显式事务包裹
- * - 使用 GREATEST(likesCount - 1, 0) 防止计数变为负数
+ * - 删除完成后通过 syncActivityLikeCount 批量回填计数，避免依赖触发器
  */
 export async function clearUserLikes(userId: string): Promise<void> {
   try {
@@ -561,10 +731,15 @@ export async function clearUserLikes(userId: string): Promise<void> {
     })
 
     // 3. 删除所有点赞（包括 post 和 activity）
-    // 触发器会自动更新 activity.likesCount
     await prisma.like.deleteMany({
       where: { authorId: userId },
     })
+
+    if (affectedActivityIds.size > 0) {
+      await Promise.all(
+        Array.from(affectedActivityIds).map((activityId) => syncActivityLikeCount(activityId))
+      )
+    }
 
     logger.info("清理用户点赞成功", {
       userId,

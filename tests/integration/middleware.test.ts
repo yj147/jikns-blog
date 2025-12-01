@@ -39,7 +39,7 @@ vi.mock("next/server", () => ({
   })),
   NextResponse: {
     next: vi.fn(() => ({ status: 200 })),
-    redirect: vi.fn((url: string) => ({ status: 302, headers: { Location: url } })),
+    redirect: vi.fn((url: string) => ({ status: 307, headers: { Location: url } })),
     json: vi.fn((data: any, options?: { status?: number }) => ({
       status: options?.status || 200,
       json: async () => data,
@@ -590,7 +590,7 @@ async function simulateMiddleware(request: Request, useCache: boolean = false) {
         }
       } else {
         return {
-          status: 302,
+          status: 307,
           type: "redirect" as const,
           location: `/login?redirect=${encodeURIComponent(pathname)}`,
         }

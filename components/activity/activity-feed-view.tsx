@@ -165,7 +165,6 @@ export interface ActivityFeedViewProps {
   clearAllFilters: () => void
   onRetry: () => void
   onEdit: (activity: ActivityWithAuthor) => void
-  onCommentsChange: () => void
 }
 
 export function ActivityFeedView({
@@ -181,7 +180,6 @@ export function ActivityFeedView({
   clearAllFilters,
   onRetry,
   onEdit,
-  onCommentsChange,
 }: ActivityFeedViewProps) {
   const shouldShowEmpty = useMemo(
     () => !isLoading && !isError && activities.length === 0,
@@ -197,12 +195,7 @@ export function ActivityFeedView({
       <ActivityErrorState isError={isError} message={error?.message} onRetry={onRetry} />
 
       {activities.map((activity) => (
-        <ActivityCard
-          key={activity.id}
-          activity={activity}
-          onEdit={onEdit}
-          onCommentsChange={onCommentsChange}
-        />
+        <ActivityCard key={activity.id} activity={activity} onEdit={onEdit} />
       ))}
 
       {isLoading && <ActivitySkeletonList />}

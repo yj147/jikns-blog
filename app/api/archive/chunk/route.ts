@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getArchiveData, getArchiveYears } from "@/lib/actions/archive"
 import { apiLogger } from "@/lib/utils/logger"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 const DEFAULT_LIMIT = 3
 const MAX_LIMIT = 12
 
 export const revalidate = 0
 
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const startTime = performance.now()
   const url = new URL(request.url)
   const offsetParam = url.searchParams.get("offset")
@@ -62,3 +63,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "ARCHIVE_CHUNK_FAILED" }, { status: 500 })
   }
 }
+
+export const GET = withApiResponseMetrics(handleGet)

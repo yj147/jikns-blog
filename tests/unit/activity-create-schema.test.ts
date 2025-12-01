@@ -22,7 +22,7 @@ describe("activityCreateSchema imageUrls 安全验证", () => {
 
     expect(result.success).toBe(false)
     if (!result.success) {
-      expect(result.error.issues[0]?.message).toBe("图片URL必须使用HTTPS地址")
+      expect(result.error.issues[0]?.message).toBe("图片URL必须使用HTTPS地址（本地开发环境除外）")
     }
   })
 
@@ -34,7 +34,7 @@ describe("activityCreateSchema imageUrls 安全验证", () => {
 
     expect(result.success).toBe(false)
     if (!result.success) {
-      expect(result.error.issues[0]?.message).toBe("图片URL必须使用HTTPS地址")
+      expect(result.error.issues[0]?.message).toBe("图片URL必须使用HTTPS地址（本地开发环境除外）")
     }
   })
 })

@@ -6,7 +6,14 @@ import bundleAnalyzer from "@next/bundle-analyzer"
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-const allowedDevOrigins = ["127.0.0.1:3000", "localhost:3000", "172.29.144.193:3000"]
+const allowedDevOrigins = [
+  "127.0.0.1:3000",
+  "localhost:3000",
+  "172.29.144.193:3000",
+  // dev server extra ports
+  "127.0.0.1:3999",
+  "localhost:3999",
+]
 
 const normalizeOrigin = (origin) =>
   origin && /^https?:\/\//i.test(origin) ? origin : `http://${origin}`
@@ -87,6 +94,15 @@ const supabaseRemotePatterns = [
     port: "54321",
     pathname: "/storage/v1/object/public/**",
   },
+  // 开发/测试环境的外部图片源
+  {
+    protocol: "https",
+    hostname: "picsum.photos",
+  },
+  {
+    protocol: "https",
+    hostname: "api.dicebear.com",
+  },
 ]
 
 const supabaseImageDomains = Array.from(
@@ -131,6 +147,7 @@ const nextConfig = {
     formats: ["image/avif", "image/webp"],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    qualities: [50, 70, 75, 80, 90, 100],
     minimumCacheTTL: 60,
     domains: supabaseImageDomains,
     remotePatterns: supabaseRemotePatterns,
@@ -177,7 +194,7 @@ const nextConfig = {
               "default-src 'self'",
               "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://unpkg.com",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-              "img-src 'self' data: blob: https://*.supabase.co https://avatars.githubusercontent.com https://github.com",
+              "img-src 'self' data: blob: https://*.supabase.co http://localhost:* http://127.0.0.1:* https://avatars.githubusercontent.com https://github.com https://api.dicebear.com https://picsum.photos",
               "font-src 'self' https://fonts.gstatic.com",
               "connect-src 'self' https://*.supabase.co http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* wss://*.supabase.co",
               "frame-ancestors 'none'",

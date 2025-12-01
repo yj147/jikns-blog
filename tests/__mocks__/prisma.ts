@@ -13,7 +13,9 @@ const mockDatabase = {
   posts: new Map<string, any>(),
   comments: new Map<string, any>(),
   activities: new Map<string, any>(),
+  likes: new Map<string, any>(),
   tags: new Map<string, any>(),
+  performanceMetrics: [] as any[],
 }
 
 // 初始化测试用户数据
@@ -361,6 +363,125 @@ const mockActivityOperations = {
 }
 
 /**
+ * Mock Like 模型操作
+ */
+const mockLikeOperations = {
+  findMany: createMockPrismaMethod(async ({ where = {}, take, skip, orderBy }: any = {}) => {
+    let likes = [...mockDatabase.likes.values()]
+
+    if (where.authorId) {
+      likes = likes.filter((like) => like.authorId === where.authorId)
+    }
+
+    if (where.OR) {
+      likes = likes.filter((like) =>
+        where.OR.some((condition: any) => {
+          if (condition.activity?.is) {
+            return Boolean(like.activity) && like.activity?.deletedAt === condition.activity.is.deletedAt
+          }
+          if (condition.post?.is) {
+            return Boolean(like.post) && like.post?.published === condition.post.is.published
+          }
+          return true
+        })
+      )
+    }
+
+    if (orderBy) {
+      const field = Object.keys(orderBy)[0]
+      const direction = orderBy[field]
+      likes.sort((a: any, b: any) => {
+        const aVal = (a as any)[field]
+        const bVal = (b as any)[field]
+        if (direction === "desc") {
+          return bVal > aVal ? 1 : -1
+        }
+        return aVal > bVal ? 1 : -1
+      })
+    }
+
+    if (skip) {
+      likes = likes.slice(skip)
+    }
+    if (take) {
+      likes = likes.slice(0, take)
+    }
+
+    return likes
+  }),
+
+  count: createMockPrismaMethod(async ({ where = {} }: any = {}) => {
+    let likes = [...mockDatabase.likes.values()]
+
+    if (where.authorId) {
+      likes = likes.filter((like) => like.authorId === where.authorId)
+    }
+
+    if (where.OR) {
+      likes = likes.filter((like) =>
+        where.OR.some((condition: any) => {
+          if (condition.activity?.is) {
+            return Boolean(like.activity) && like.activity?.deletedAt === condition.activity.is.deletedAt
+          }
+          if (condition.post?.is) {
+            return Boolean(like.post) && like.post?.published === condition.post.is.published
+          }
+          return true
+        })
+      )
+    }
+
+    return likes.length
+  }),
+
+  groupBy: createMockPrismaMethod(async ({ where = {}, _count }: any = {}) => {
+    const likes = [...mockDatabase.likes.values()].filter((like) => {
+      if (where.postId?.in) {
+        return where.postId.in.includes(like.postId)
+      }
+      return true
+    })
+
+    const groups = new Map<string, number>()
+    likes.forEach((like) => {
+      if (like.postId) {
+        groups.set(like.postId, (groups.get(like.postId) || 0) + 1)
+      }
+    })
+
+    return Array.from(groups.entries()).map(([postId, count]) => ({
+      postId,
+      _count: {
+        _all: _count?._all ? count : 0,
+      },
+    }))
+  }),
+
+  create: createMockPrismaMethod(async ({ data }: any) => {
+    const newLike = {
+      id: data.id || `mock-like-${Date.now()}`,
+      createdAt: data.createdAt || new Date(),
+      authorId: data.authorId,
+      postId: data.postId || null,
+      activityId: data.activityId || null,
+      activity: data.activity,
+      post: data.post,
+    }
+    mockDatabase.likes.set(newLike.id, newLike)
+    return newLike
+  }),
+
+  delete: createMockPrismaMethod(async ({ where }: any) => {
+    const like = mockDatabase.likes.get(where.id)
+    if (!like) {
+      throw new Error("Like not found")
+    }
+    mockDatabase.likes.delete(where.id)
+    return like
+  }),
+}
+
+/**
  * Mock Tag 模型操作
  */
 const mockTagOperations = {
@@ -418,6 +539,14 @@ const mockTagOperations = {
   }),
 }
 
+const mockPerformanceMetricOperations = {
+  createMany: createMockPrismaMethod(async ({ data }: { data: any[] }) => {
+    const metrics = Array.isArray(data) ? data : []
+    mockDatabase.performanceMetrics.push(...metrics)
+    return { count: metrics.length }
+  }),
+}
+
 /**
  * Mock Prisma 客户端
  */
@@ -430,8 +559,11 @@ export const mockPrisma = {
   comments: mockCommentOperations,
   activity: mockActivityOperations,
   activities: mockActivityOperations,
+  like: mockLikeOperations,
+  likes: mockLikeOperations,
   tag: mockTagOperations,
   tags: mockTagOperations,
+  performanceMetric: mockPerformanceMetricOperations,
 
   // 事务支持
   $transaction: vi.fn(async (operations: any[]) => {
@@ -469,7 +601,9 @@ export function resetPrismaMocks() {
   mockDatabase.posts.clear()
   mockDatabase.comments.clear()
   mockDatabase.activities.clear()
+  mockDatabase.likes.clear()
   mockDatabase.tags.clear()
+  mockDatabase.performanceMetrics = []
 
   // 重新初始化测试用户
   Object.values(TEST_USERS).forEach((user) => {

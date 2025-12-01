@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { runViewCountSync } from "@/lib/cron/sync-view-counts"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic"
  *   }]
  * }
  */
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   // 验证 Vercel Cron Secret（生产环境）
   const authHeader = request.headers.get("authorization")
   const cronSecret = process.env.CRON_SECRET
@@ -46,3 +47,5 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+
+export const GET = withApiResponseMetrics(handleGet)

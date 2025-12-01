@@ -6,7 +6,7 @@ import { memo, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { MoreHorizontal } from "lucide-react"
+import { MoreHorizontal, Pin } from "lucide-react"
 import type { ActivityCardProps } from "@/types/activity"
 import { getOptimizedImageUrl } from "@/lib/images/optimizer"
 
@@ -24,7 +24,6 @@ function ActivityCardComponent(props: ActivityCardProps) {
     onLike,
     onComment,
     onShare,
-    onCommentsChange,
     showActions = true,
     compact = false,
     priority = false,
@@ -42,6 +41,7 @@ function ActivityCardComponent(props: ActivityCardProps) {
   const images = activity.imageUrls ?? []
   const commentsCount = activity.commentsCount ?? 0
   const viewsCount = activity.viewsCount ?? 0
+  const isPinned = activity.isPinned ?? false
 
   return (
     <Card
@@ -49,6 +49,12 @@ function ActivityCardComponent(props: ActivityCardProps) {
         compact ? "transition-shadow hover:shadow-sm" : "transition-shadow hover:shadow-md"
       }
     >
+      {isPinned && (
+        <div className="flex items-center gap-1.5 border-b bg-amber-50 px-6 py-2 text-amber-700">
+          <Pin className="h-3.5 w-3.5" />
+          <span className="text-xs font-medium">置顶</span>
+        </div>
+      )}
       <CardContent className={compact ? "pt-4" : "pt-6"}>
         <div className="flex items-start space-x-3">
           <Avatar className="h-10 w-10">
@@ -116,7 +122,6 @@ function ActivityCardComponent(props: ActivityCardProps) {
             onLike={onLike}
             onComment={onComment}
             onShare={onShare}
-            onCommentsChange={onCommentsChange}
           />
         )}
       </CardContent>
@@ -140,8 +145,7 @@ export const ActivityCard = memo(ActivityCardComponent, (prev, next) => {
     prev.priority === next.priority &&
     prev.onLike === next.onLike &&
     prev.onComment === next.onComment &&
-    prev.onShare === next.onShare &&
-    prev.onCommentsChange === next.onCommentsChange
+    prev.onShare === next.onShare
   )
 })
 

@@ -14,16 +14,15 @@ import {
   createTag,
   updateTag,
   deleteTag,
+  mergeTags,
 } from "@/lib/actions/tags"
 import { withTagSearchRateLimit } from "@/lib/actions/tags/queries"
 import { createSuccessResponse } from "@/lib/actions/tags/response-helpers"
-import { prisma } from "@/lib/prisma"
 import * as permissions from "@/lib/permissions"
 import { AuthError } from "@/lib/error-handling/auth-error"
 
-// Mock Prisma
-vi.mock("@/lib/prisma", () => ({
-  prisma: {
+const prisma = vi.hoisted(() => {
+  const client = {
     tag: {
       count: vi.fn(),
       findMany: vi.fn(),
@@ -33,14 +32,37 @@ vi.mock("@/lib/prisma", () => ({
       update: vi.fn(),
       delete: vi.fn(),
     },
+    postTag: {
+      findMany: vi.fn(),
+      deleteMany: vi.fn(),
+      createMany: vi.fn(),
+      groupBy: vi.fn(),
+    },
+    activityTag: {
+      findMany: vi.fn(),
+      deleteMany: vi.fn(),
+      createMany: vi.fn(),
+      groupBy: vi.fn(),
+    },
     activityTagCandidate: {
       count: vi.fn(),
       findMany: vi.fn(),
       findUnique: vi.fn(),
       delete: vi.fn(),
     },
-    $transaction: vi.fn(async (operations: Promise<any>[]) => Promise.all(operations)),
-  },
+    $transaction: vi.fn(async (arg: any) => {
+      if (typeof arg === "function") {
+        return arg(client as any)
+      }
+      return Promise.all(arg)
+    }),
+  }
+  return client
+})
+
+// Mock Prisma
+vi.mock("@/lib/prisma", () => ({
+  prisma,
 }))
 
 // Mock permissions
@@ -182,6 +204,7 @@ describe("标签查询 API", () => {
           description: "JS 相关",
           color: "#f7df1e",
           postsCount: 10,
+          activitiesCount: 0,
           createdAt: new Date(),
         },
         {
@@ -191,6 +214,7 @@ describe("标签查询 API", () => {
           description: "TS 相关",
           color: "#3178c6",
           postsCount: 5,
+          activitiesCount: 0,
           createdAt: new Date(),
         },
       ]
@@ -219,6 +243,7 @@ describe("标签查询 API", () => {
           description: "",
           color: "#43853d",
           postsCount: 3,
+          activitiesCount: 0,
           createdAt: new Date(),
         },
       ]
@@ -453,8 +478,22 @@ describe("标签查询 API", () => {
   describe("getPopularTags", () => {
     it("应该返回热门标签", async () => {
       const mockTags = [
-        { id: "tag1", name: "JavaScript", slug: "javascript", color: null, postsCount: 100 },
-        { id: "tag2", name: "TypeScript", slug: "typescript", color: null, postsCount: 50 },
+        {
+          id: "tag1",
+          name: "JavaScript",
+          slug: "javascript",
+          color: null,
+          postsCount: 100,
+          activitiesCount: 0,
+        },
+        {
+          id: "tag2",
+          name: "TypeScript",
+          slug: "typescript",
+          color: null,
+          postsCount: 50,
+          activitiesCount: 0,
+        },
       ]
 
       vi.mocked(prisma.tag.findMany).mockResolvedValue(mockTags)
@@ -798,6 +837,7 @@ describe("标签管理 API", () => {
         description: "JS 相关",
         color: "#f7df1e",
         postsCount: 0,
+        activitiesCount: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       })
@@ -850,6 +890,7 @@ describe("标签管理 API", () => {
         description: null,
         color: null,
         postsCount: 0,
+        activitiesCount: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       })
@@ -929,6 +970,7 @@ describe("标签管理 API", () => {
         description: null,
         color: null,
         postsCount: 10,
+        activitiesCount: 3,
         createdAt: new Date(),
         updatedAt: new Date(),
       })
@@ -939,6 +981,7 @@ describe("标签管理 API", () => {
         description: "Updated",
         color: null,
         postsCount: 10,
+        activitiesCount: 3,
         createdAt: new Date(),
         updatedAt: new Date(),
       })
@@ -991,6 +1034,7 @@ describe("标签管理 API", () => {
         description: null,
         color: null,
         postsCount: 0,
+        activitiesCount: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       })
@@ -1002,6 +1046,7 @@ describe("标签管理 API", () => {
         description: null,
         color: null,
         postsCount: 0,
+        activitiesCount: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       })
@@ -1050,6 +1095,7 @@ describe("标签管理 API", () => {
         description: null,
         color: null,
         postsCount: 0,
+        activitiesCount: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       } as any)
@@ -1077,9 +1123,12 @@ describe("标签管理 API", () => {
         description: null,
         color: null,
         postsCount: 5,
+        activitiesCount: 2,
         createdAt: new Date(),
         updatedAt: new Date(),
       })
+      vi.mocked(prisma.postTag.deleteMany).mockResolvedValue({ count: 2 } as any)
+      vi.mocked(prisma.activityTag.deleteMany).mockResolvedValue({ count: 1 } as any)
       vi.mocked(prisma.tag.delete).mockResolvedValue({} as any)
 
       const result = await deleteTag("tag1")
@@ -1088,6 +1137,8 @@ describe("标签管理 API", () => {
       expect(result.data?.message).toContain("JavaScript")
       expect(permissions.requireAdmin).toHaveBeenCalled()
       expect(prisma.tag.delete).toHaveBeenCalledWith({ where: { id: "tag1" } })
+      expect(prisma.postTag.deleteMany).toHaveBeenCalledWith({ where: { tagId: "tag1" } })
+      expect(prisma.activityTag.deleteMany).toHaveBeenCalledWith({ where: { tagId: "tag1" } })
       expect(rateLimitMocks.enforce).toHaveBeenCalledWith("mutation", "admin1")
 
       // 验证缓存失效逻辑
@@ -1141,6 +1192,89 @@ describe("标签管理 API", () => {
       expect(result.success).toBe(false)
       expect(result.error?.code).toBe("FORBIDDEN")
       expect(result.error?.details?.statusCode).toBe(403)
+    })
+  })
+
+  describe("mergeTags", () => {
+    it("应该成功迁移文章与动态关联并删除源标签", async () => {
+      vi.mocked(permissions.requireAdmin).mockResolvedValue({ id: "admin1" } as any)
+      vi.mocked(prisma.tag.findMany).mockResolvedValue([
+        { id: "source", name: "Old", slug: "old" },
+        { id: "target", name: "New", slug: "new" },
+      ] as any)
+      vi.mocked(prisma.postTag.findMany).mockResolvedValue([
+        { postId: "post-1" },
+        { postId: "post-2" },
+      ] as any)
+      vi.mocked(prisma.activityTag.findMany).mockResolvedValue([{ activityId: "act-1" }] as any)
+      vi.mocked(prisma.postTag.groupBy).mockResolvedValue([
+        { tagId: "target", _count: { _all: 2 } },
+      ] as any)
+      vi.mocked(prisma.activityTag.groupBy).mockResolvedValue([
+        { tagId: "target", _count: { _all: 1 } },
+      ] as any)
+      vi.mocked(prisma.tag.update).mockResolvedValue({} as any)
+      vi.mocked(prisma.tag.delete).mockResolvedValue({} as any)
+      vi.mocked(prisma.tag.findUnique).mockResolvedValue({
+        id: "target",
+        name: "New",
+        slug: "new",
+        description: null,
+        color: null,
+        postsCount: 2,
+        activitiesCount: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any)
+
+      const result = await mergeTags("source", "target")
+
+      expect(result.success).toBe(true)
+      expect(prisma.postTag.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: [
+            { postId: "post-1", tagId: "target" },
+            { postId: "post-2", tagId: "target" },
+          ],
+          skipDuplicates: true,
+        })
+      )
+      expect(prisma.activityTag.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: [{ activityId: "act-1", tagId: "target" }],
+          skipDuplicates: true,
+        })
+      )
+      expect(prisma.tag.delete).toHaveBeenCalledWith({ where: { id: "source" } })
+      expect(auditLogMocks.logEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "TAG_MERGE",
+          success: true,
+          userId: "admin1",
+        })
+      )
+    })
+
+    it("应该校验源与目标标签ID", async () => {
+      vi.mocked(permissions.requireAdmin).mockResolvedValue({ id: "admin1" } as any)
+
+      const result = await mergeTags("", "")
+
+      expect(result.success).toBe(false)
+      expect(result.error?.code).toBe("VALIDATION_ERROR")
+      expect(auditLogMocks.logEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ action: "TAG_MERGE", success: false })
+      )
+    })
+
+    it("找不到标签时返回 NOT_FOUND", async () => {
+      vi.mocked(permissions.requireAdmin).mockResolvedValue({ id: "admin1" } as any)
+      vi.mocked(prisma.tag.findMany).mockResolvedValue([{ id: "target", name: "New", slug: "new" }] as any)
+
+      const result = await mergeTags("source", "target")
+
+      expect(result.success).toBe(false)
+      expect(result.error?.code).toBe("NOT_FOUND")
     })
   })
 })

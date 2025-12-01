@@ -1,4 +1,4 @@
-import { Prisma, PrismaClient } from "@/lib/generated/prisma"
+import { Prisma } from "@/lib/generated/prisma"
 import { normalizeTagNames } from "@/lib/repos/tag-repo"
 
 const HASHTAG_REGEX = /#([\p{L}\p{N}_\-.]{1,32})/gu
@@ -22,7 +22,7 @@ export function extractActivityHashtags(content: string | null | undefined): str
 }
 
 interface SyncActivityTagsParams {
-  tx: Prisma.TransactionClient | PrismaClient
+  tx: Prisma.TransactionClient
   activityId: string
   rawTagNames: string[]
   maxTags?: number
@@ -31,15 +31,15 @@ interface SyncActivityTagsParams {
 /**
  * 同步 Activity 的标签关联
  *
- * 简化策略（Linus "好品味" 原则）：
- * 1. 先删除所有现有关联
- * 2. 仅连接已存在的标签
- * 3. 将未知 hashtag 写入候选池，等待管理员审核
+ * 策略（保持简单但计数实时）：
+ * 1. 读取现有关联，删除需要去除的标签并下调计数
+ * 2. 仅连接已存在的标签，对新增关联上调计数
+ * 3. 未知 hashtag 写入候选池，等待管理员审核
  *
  * 优点：
  * - 用户无法突破管理员独占的标签治理
  * - 候选池保留了热门 hashtag 线索，方便后台审核
- * - 逻辑仍保持“删除 + 重建”的简单路径
+ * - 保持删除/新增对称，计数与 ActivityTag 实时一致
  */
 export async function syncActivityTags({
   tx,
@@ -50,13 +50,21 @@ export async function syncActivityTags({
   // 标准化标签名称
   const normalizedTags = normalizeTagNames(rawTagNames, maxTags)
 
-  // 步骤 1：删除所有现有关联（简单直接）
-  await tx.activityTag.deleteMany({
+  const existingLinks = await tx.activityTag.findMany({
     where: { activityId },
+    select: { tagId: true },
   })
+  const existingTagIds = new Set(existingLinks.map((link) => link.tagId))
 
-  // 如果没有标签，直接返回
   if (normalizedTags.length === 0) {
+    if (existingTagIds.size > 0) {
+      const tagIds = Array.from(existingTagIds)
+      await tx.activityTag.deleteMany({ where: { activityId } })
+      await tx.tag.updateMany({
+        where: { id: { in: tagIds } },
+        data: { activitiesCount: { decrement: 1 } },
+      })
+    }
     return { tagIds: [] }
   }
 
@@ -107,14 +115,75 @@ export async function syncActivityTags({
   )
 
   if (uniqueTagIds.length === 0) {
+    if (existingTagIds.size > 0) {
+      const tagIds = Array.from(existingTagIds)
+      await tx.activityTag.deleteMany({ where: { activityId } })
+      await tx.tag.updateMany({
+        where: { id: { in: tagIds } },
+        data: { activitiesCount: { decrement: 1 } },
+      })
+    }
     return { tagIds: [] }
   }
 
-  // 步骤 2：批量创建新的关联，只连接现有标签
-  await tx.activityTag.createMany({
-    data: uniqueTagIds.map((tagId) => ({ activityId, tagId })),
-    skipDuplicates: true,
-  })
+  const newTagIdSet = new Set(uniqueTagIds)
+  const tagsToRemove = Array.from(existingTagIds).filter((id) => !newTagIdSet.has(id))
+  const tagsToAdd = uniqueTagIds.filter((id) => !existingTagIds.has(id))
+
+  if (tagsToRemove.length > 0) {
+    await tx.activityTag.deleteMany({
+      where: { activityId, tagId: { in: tagsToRemove } },
+    })
+
+    await tx.tag.updateMany({
+      where: { id: { in: tagsToRemove } },
+      data: { activitiesCount: { decrement: 1 } },
+    })
+  }
+
+  if (tagsToAdd.length > 0) {
+    await tx.activityTag.createMany({
+      data: tagsToAdd.map((tagId) => ({ activityId, tagId })),
+      skipDuplicates: true,
+    })
+
+    await tx.tag.updateMany({
+      where: { id: { in: tagsToAdd } },
+      data: { activitiesCount: { increment: 1 } },
+    })
+  }
 
   return { tagIds: uniqueTagIds }
+}
+
+/**
+ * 批量调节指定活动下所有标签的 activitiesCount
+ */
+export async function adjustTagActivitiesCountForActivities(
+  tx: Prisma.TransactionClient,
+  activityIds: string[],
+  direction: "increment" | "decrement"
+) {
+  if (!activityIds.length) return
+
+  const tagCounts = await tx.activityTag.groupBy({
+    by: ["tagId"],
+    where: { activityId: { in: activityIds } },
+    _count: { _all: true },
+  })
+
+  if (tagCounts.length === 0) return
+
+  const modifier: "increment" | "decrement" = direction === "increment" ? "increment" : "decrement"
+
+  await Promise.all(
+    tagCounts.map((entry) =>
+      tx.tag.update({
+        where: { id: entry.tagId },
+        data: {
+          activitiesCount: { [modifier]: entry._count._all },
+        },
+      })
+    )
+  )
 }

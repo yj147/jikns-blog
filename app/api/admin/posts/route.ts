@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma"
 import { XSSProtection } from "@/lib/security"
 import type { User } from "@/lib/generated/prisma"
 import { logger } from "@/lib/utils/logger"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 /**
  * 获取所有文章列表（管理员视图）
@@ -356,10 +357,15 @@ async function deletePostHandler(request: NextRequest, admin: User) {
 }
 
 // 导出 HTTP 方法处理器
-export const GET = withApiAuth(getPostsHandler, "admin")
-export const POST = withApiAuth(createPostHandler, "admin")
-export const PUT = withApiAuth(updatePostStatusHandler, "admin")
-export const DELETE = withApiAuth(deletePostHandler, "admin")
+const getPosts = withApiAuth(getPostsHandler, "admin")
+const createPost = withApiAuth(createPostHandler, "admin")
+const updatePostStatus = withApiAuth(updatePostStatusHandler, "admin")
+const deletePost = withApiAuth(deletePostHandler, "admin")
+
+export const GET = withApiResponseMetrics(getPosts)
+export const POST = withApiResponseMetrics(createPost)
+export const PUT = withApiResponseMetrics(updatePostStatus)
+export const DELETE = withApiResponseMetrics(deletePost)
 
 // 处理 CORS 预检请求
 export async function OPTIONS() {

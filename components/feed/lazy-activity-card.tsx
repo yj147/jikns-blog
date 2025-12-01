@@ -8,7 +8,7 @@ import type { ActivityCardProps } from "@/types/activity"
 
 type ForwardedProps = Pick<
   ActivityCardProps,
-  "onLike" | "onComment" | "onShare" | "onCommentsChange" | "showActions" | "compact"
+  "onLike" | "onComment" | "onShare" | "showActions" | "compact"
 >
 
 interface LazyActivityCardProps extends ForwardedProps {
@@ -49,7 +49,6 @@ function LazyActivityCardComponent({
   onLike,
   onComment,
   onShare,
-  onCommentsChange,
 }: LazyActivityCardProps) {
   const [ref, isIntersecting] = useIntersectionObserver<HTMLDivElement>({
     once: true,
@@ -66,7 +65,6 @@ function LazyActivityCardComponent({
           onLike={onLike}
           onComment={onComment}
           onShare={onShare}
-          onCommentsChange={onCommentsChange}
         />
       ) : (
         <ActivityCardSkeleton />

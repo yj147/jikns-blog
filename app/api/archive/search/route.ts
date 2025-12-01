@@ -5,12 +5,13 @@ import {
   ARCHIVE_SEARCH_MAX_QUERY_LENGTH,
   ARCHIVE_SEARCH_MIN_QUERY_LENGTH,
 } from "@/lib/constants/archive-search"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 export const revalidate = 0
 
 const MIN_QUERY_LENGTH = ARCHIVE_SEARCH_MIN_QUERY_LENGTH
 
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const startTime = performance.now()
   const url = new URL(request.url)
   const query = url.searchParams.get("q")?.trim() ?? ""
@@ -58,3 +59,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ results: [], message: "SEARCH_FAILED" }, { status: 500 })
   }
 }
+
+export const GET = withApiResponseMetrics(handleGet)

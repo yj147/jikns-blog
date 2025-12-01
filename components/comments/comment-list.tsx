@@ -12,37 +12,13 @@ import { zhCN } from "date-fns/locale"
 import { Trash2, MessageCircle } from "lucide-react"
 import CommentForm, { CommentFormSuccessContext } from "./comment-form"
 import { getOptimizedImageUrl } from "@/lib/images/optimizer"
+import { useRealtimeComments } from "@/hooks/use-realtime-comments"
+import type { Comment as CommentModel } from "@/types/comments"
 
 const PAGE_SIZE = 10
 const REPLY_PAGE_SIZE = 20
 
-export interface Comment {
-  id: string
-  content: string
-  createdAt: string
-  updatedAt: string
-  deletedAt: string | null
-  isDeleted: boolean
-  authorId: string
-  postId?: string | null
-  activityId?: string | null
-  author: {
-    id: string
-    name: string | null
-    email: string
-    avatarUrl: string | null
-    role: "USER" | "ADMIN"
-  } | null
-  targetType: "post" | "activity"
-  targetId: string
-  parentId?: string | null
-  replies?: Comment[]
-  _count?: {
-    replies: number
-  }
-  childrenCount?: number
-  canDelete?: boolean
-}
+export type Comment = CommentModel
 
 type CommentsApiResponse = {
   success: boolean
@@ -71,9 +47,13 @@ export interface CommentListProps {
   onCommentDeleted?: () => void
   onCommentAdded?: () => void
   showComposer?: boolean
+  showTitle?: boolean
+  initialCount?: number
 }
 
 type ReplyCache = Record<string, ReplyState>
+
+const EMPTY_REPLIES: Comment[] = []
 
 function useReplyManager(targetType: CommentListProps["targetType"], targetId: string) {
   const [replyCache, setReplyCache] = useState<ReplyCache>({})
@@ -197,6 +177,72 @@ function useReplyManager(targetType: CommentListProps["targetType"], targetId: s
     [loadReplies]
   )
 
+  // 当展开集合变更时，确保已展开的评论会自动加载/补齐回复（避免某些环境下事件未触发导致不请求）
+  useEffect(() => {
+    openReplies.forEach((commentId) => {
+      const state = cacheRef.current[commentId]
+      const shouldFetch = !state || state.data.length === 0 || !!state.error
+      if (shouldFetch) {
+        void loadReplies(commentId)
+      }
+    })
+  }, [openReplies, loadReplies])
+
+  const prependReply = useCallback((parentId: string, reply: Comment) => {
+    setReplyCache((prev) => {
+      const existing = prev[parentId]
+      if (existing?.data?.some((item) => item.id === reply.id)) {
+        return prev
+      }
+
+      const nextState: ReplyState = existing
+        ? {
+            ...existing,
+            data: [reply, ...existing.data],
+            loading: false,
+            error: null,
+          }
+        : {
+            data: [reply],
+            loading: false,
+            error: null,
+            hasMore: false,
+            nextCursor: null,
+          }
+
+      return {
+        ...prev,
+        [parentId]: nextState,
+      }
+    })
+  }, [])
+
+  const removeReply = useCallback((replyId: string) => {
+    setReplyCache((prev) => {
+      let changed = false
+      const next: ReplyCache = {}
+
+      Object.entries(prev).forEach(([key, state]) => {
+        if (!state) {
+          return
+        }
+
+        const filtered = state.data.filter((reply) => reply.id !== replyId)
+        if (filtered.length !== state.data.length) {
+          changed = true
+          next[key] = {
+            ...state,
+            data: filtered,
+          }
+        } else {
+          next[key] = state
+        }
+      })
+
+      return changed ? next : prev
+    })
+  }, [])
+
   return {
     replyCache,
     loadReplies,
@@ -204,6 +250,8 @@ function useReplyManager(targetType: CommentListProps["targetType"], targetId: s
     isShowing,
     resetAll,
     invalidate,
+    prependReply,
+    removeReply,
   }
 }
 
@@ -214,6 +262,8 @@ const CommentList: React.FC<CommentListProps> = ({
   onCommentDeleted,
   onCommentAdded,
   showComposer = true,
+  showTitle = false,
+  initialCount = 0,
 }) => {
   const { user } = useAuth()
   const [replyingTo, setReplyingTo] = useState<string | null>(null)
@@ -225,6 +275,8 @@ const CommentList: React.FC<CommentListProps> = ({
     isShowing,
     resetAll: resetReplies,
     invalidate,
+    prependReply,
+    removeReply,
   } = useReplyManager(targetType, targetId)
 
   const fetcher = useCallback(async (url: string) => fetchGet(url), [])
@@ -259,6 +311,21 @@ const CommentList: React.FC<CommentListProps> = ({
 
   const pages = data ?? []
   const comments = useMemo(() => pages.flatMap((page) => page?.data ?? []), [pages])
+
+  // 计算当前评论总数（用于标题显示）
+  const totalComments = useMemo(() => {
+    const total = pages[0]?.meta?.pagination?.total
+
+    if (typeof total === "number") {
+      return total
+    }
+
+    if (comments.length > 0) {
+      return comments.length
+    }
+
+    return initialCount
+  }, [comments.length, pages, initialCount])
 
   const hasMore = useMemo(() => {
     if (pages.length === 0) return false
@@ -356,6 +423,108 @@ const CommentList: React.FC<CommentListProps> = ({
     [loadRepliesForComment]
   )
 
+  const addTopLevelComment = useCallback(
+    (incoming: Comment) => {
+      mutate((currentPages) => {
+        if (!currentPages || currentPages.length === 0) {
+          return [
+            {
+              success: true,
+              data: [incoming],
+              meta: {
+                pagination: {
+                  total: 1,
+                  hasMore: false,
+                  nextCursor: null,
+                },
+              },
+            },
+          ]
+        }
+
+        const exists = currentPages.some((page) => page?.data?.some((comment) => comment.id === incoming.id))
+        if (exists) {
+          return currentPages
+        }
+
+        let updated = false
+        const nextPages = currentPages.map((page, index) => {
+          if (!page?.data) {
+            return page
+          }
+          if (index === 0) {
+            updated = true
+            return {
+              ...page,
+              data: [incoming, ...page.data],
+            }
+          }
+          return page
+        })
+
+        return updated ? nextPages : currentPages
+      }, false)
+    },
+    [mutate]
+  )
+
+  const removeTopLevelComment = useCallback(
+    (commentId: string) => {
+      mutate((currentPages) => {
+        if (!currentPages) {
+          return currentPages
+        }
+
+        let removed = false
+        const nextPages = currentPages.map((page) => {
+          if (!page?.data) {
+            return page
+          }
+          const filtered = page.data.filter((comment) => comment.id !== commentId)
+          if (filtered.length !== page.data.length) {
+            removed = true
+            return {
+              ...page,
+              data: filtered,
+            }
+          }
+          return page
+        })
+
+        return removed ? nextPages : currentPages
+      }, false)
+    },
+    [mutate]
+  )
+
+  const handleRealtimeInsert = useCallback(
+    (incoming: Comment) => {
+      if (incoming.parentId) {
+        prependReply(incoming.parentId, incoming)
+        return
+      }
+
+      addTopLevelComment(incoming)
+    },
+    [addTopLevelComment, prependReply]
+  )
+
+  const handleRealtimeDelete = useCallback(
+    (commentId: string) => {
+      removeTopLevelComment(commentId)
+      removeReply(commentId)
+    },
+    [removeReply, removeTopLevelComment]
+  )
+
+  const { isSubscribed: isCommentsSubscribed, error: commentsRealtimeError } = useRealtimeComments({
+    targetType,
+    targetId,
+    enabled: Boolean(targetId),
+    onInsert: handleRealtimeInsert,
+    onDelete: handleRealtimeDelete,
+  })
+
   if (isInitialLoading) {
     return (
       <div className={`space-y-4 ${className}`} data-testid="loading-skeleton">
@@ -380,6 +549,24 @@ const CommentList: React.FC<CommentListProps> = ({
 
   return (
     <div className={`space-y-4 ${className}`}>
+      {showTitle && (
+        <h2 className="mb-6 text-2xl font-bold">评论 ({totalComments})</h2>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        <span>
+          实时评论：
+          <span className={isCommentsSubscribed ? "text-emerald-600" : "text-amber-600"}>
+            {isCommentsSubscribed ? "已连接" : "连接中..."}
+          </span>
+        </span>
+        {commentsRealtimeError && (
+          <span className="text-red-500">
+            订阅失败：{commentsRealtimeError.message || "请稍后重试"}
+          </span>
+        )}
+      </div>
+
       {isEmpty && <p className="text-sm text-gray-500">暂无评论，快来抢沙发吧！</p>}
 
       {comments.map((comment) => (
@@ -393,7 +580,7 @@ const CommentList: React.FC<CommentListProps> = ({
           onReplyCancel={handleReplyCancel}
           isReplying={replyingTo === comment.id}
           replyState={replyCache[comment.id]}
-          replies={replyCache[comment.id]?.data ?? []}
+          replies={replyCache[comment.id]?.data ?? EMPTY_REPLIES}
           isRepliesOpen={isShowing(comment.id)}
           onToggleReplies={handleReplyToggle}
           onLoadReplies={handleLoadReplies}
@@ -441,7 +628,8 @@ interface CommentItemProps {
   onCommentAdded: (context?: CommentFormSuccessContext) => void
 }
 
-function CommentItem({
+// 使用 React.memo 将展开/收起的重渲染限制在当前评论，避免大列表阻塞交互
+const CommentItem = React.memo(function CommentItem({
   comment,
   isReply = false,
   currentUserId,
@@ -459,6 +647,31 @@ function CommentItem({
   targetId,
   onCommentAdded,
 }: CommentItemProps) {
+  // 缓存头像地址和时间文案，避免列表滚动时反复计算
+  const avatarUrl = useMemo(
+    () =>
+      getOptimizedImageUrl(comment.author?.avatarUrl, {
+        width: 96,
+        height: 96,
+        format: "webp",
+      }) ?? comment.author?.avatarUrl ?? "/placeholder.svg",
+    [comment.author?.avatarUrl]
+  )
+  // dicebear 返回 SVG，Next Image 优化器不支持，必须跳过以避免 400
+  const shouldUnoptimizeAvatar = useMemo(
+    () => avatarUrl.includes("api.dicebear.com") || /\.svg(\?|$)/i.test(avatarUrl),
+    [avatarUrl]
+  )
+
+  const formattedDate = useMemo(
+    () =>
+      formatDistanceToNow(new Date(comment.createdAt), {
+        locale: zhCN,
+        addSuffix: true,
+      }),
+    [comment.createdAt]
+  )
+
   const isAuthor = currentUserId === comment.authorId
   const isAdmin = currentUserRole === "ADMIN"
   const allowDelete = (comment.canDelete ?? false) || isAuthor || isAdmin
@@ -472,19 +685,14 @@ function CommentItem({
       <div className="flex items-start space-x-3">
         <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-gray-200">
           <Image
-            src={
-              getOptimizedImageUrl(comment.author?.avatarUrl, {
-                width: 96,
-                height: 96,
-                format: "webp",
-              }) ?? comment.author?.avatarUrl ?? "/placeholder.svg"
-            }
+            src={avatarUrl}
             alt={comment.author?.name || comment.author?.email || "用户"}
             fill
             sizes="40px"
             className="object-cover"
             loading="lazy"
             quality={70}
+            unoptimized={shouldUnoptimizeAvatar}
           />
         </div>
 
@@ -495,10 +703,7 @@ function CommentItem({
                 {comment.author?.name || comment.author?.email || "匿名用户"}
               </span>
               <span className="text-sm text-gray-500">
-                {formatDistanceToNow(new Date(comment.createdAt), {
-                  locale: zhCN,
-                  addSuffix: true,
-                })}
+                {formattedDate}
               </span>
             </div>
 
@@ -589,7 +794,7 @@ function CommentItem({
                     onReplyClick={onReplyClick}
                     onReplyCancel={onReplyCancel}
                     isReplying={false}
-                    replies={[]}
+                    replies={EMPTY_REPLIES}
                     isRepliesOpen={false}
                     onToggleReplies={onToggleReplies}
                     onLoadReplies={onLoadReplies}
@@ -622,4 +827,36 @@ function CommentItem({
       </div>
     </div>
   )
+}, areCommentsEqual)
+
+// 谨慎比对关键字段，避免不必要重渲染同时确保状态更新可见
+function areCommentsEqual(prevProps: CommentItemProps, nextProps: CommentItemProps) {
+  if (prevProps.comment.id !== nextProps.comment.id) return false
+  if (prevProps.comment.updatedAt !== nextProps.comment.updatedAt) return false
+  if (prevProps.comment.content !== nextProps.comment.content) return false
+  if (prevProps.comment.isDeleted !== nextProps.comment.isDeleted) return false
+  if ((prevProps.comment.canDelete ?? false) !== (nextProps.comment.canDelete ?? false)) return false
+  if ((prevProps.comment._count?.replies ?? 0) !== (nextProps.comment._count?.replies ?? 0))
+    return false
+  if (prevProps.comment.author?.avatarUrl !== nextProps.comment.author?.avatarUrl) return false
+  if (prevProps.comment.author?.name !== nextProps.comment.author?.name) return false
+  if (prevProps.comment.author?.email !== nextProps.comment.author?.email) return false
+  if (prevProps.comment.createdAt !== nextProps.comment.createdAt) return false
+
+  if (prevProps.isReply !== nextProps.isReply) return false
+  if (prevProps.isReplying !== nextProps.isReplying) return false
+  if (prevProps.isRepliesOpen !== nextProps.isRepliesOpen) return false
+  if (prevProps.currentUserId !== nextProps.currentUserId) return false
+  if (prevProps.currentUserRole !== nextProps.currentUserRole) return false
+
+  if (prevProps.replies !== nextProps.replies) return false
+
+  const prevState = prevProps.replyState
+  const nextState = nextProps.replyState
+  if ((prevState?.loading ?? false) !== (nextState?.loading ?? false)) return false
+  if ((prevState?.error ?? null) !== (nextState?.error ?? null)) return false
+  if ((prevState?.hasMore ?? false) !== (nextState?.hasMore ?? false)) return false
+  if ((prevState?.nextCursor ?? null) !== (nextState?.nextCursor ?? null)) return false
+
+  return true
 }

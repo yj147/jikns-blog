@@ -3,7 +3,7 @@
  * 使用 Playwright 测试完整的用户登录到资料页查看流程
  */
 
-import { test, expect } from "@playwright/test"
+import { test, expect, Page } from "@playwright/test"
 
 test.describe("用户资料页实时同步 E2E 测试", () => {
   test.beforeEach(async ({ page }) => {
@@ -23,8 +23,8 @@ test.describe("用户资料页实时同步 E2E 测试", () => {
     // 注意：这里需要配置测试环境的 mock GitHub OAuth 流程
     await page.goto("/auth/callback?code=test-auth-code")
 
-    // 等待重定向到首页
-    await page.waitForURL("/")
+    // 等待重定向到首页并完成会话
+    await waitForAuthReady(page)
 
     // 验证登录成功：应该看到用户菜单
     await expect(page.locator('button[aria-haspopup="menu"]')).toBeVisible({ timeout: 1000 })
@@ -56,7 +56,7 @@ test.describe("用户资料页实时同步 E2E 测试", () => {
     await page.goto("/login")
     await page.getByText("使用 GitHub 登录").click()
     await page.goto("/auth/callback?code=test-auth-code-1")
-    await page.waitForURL("/")
+    await waitForAuthReady(page)
 
     // 查看初始资料
     await page.locator('button[aria-haspopup="menu"]').click()
@@ -76,7 +76,7 @@ test.describe("用户资料页实时同步 E2E 测试", () => {
     await page.getByText("登录").click()
     await page.getByText("使用 GitHub 登录").click()
     await page.goto("/auth/callback?code=test-auth-code-2&avatar_updated=true")
-    await page.waitForURL("/")
+    await waitForAuthReady(page)
 
     // 立即查看资料页
     await page.locator('button[aria-haspopup="menu"]').click()
@@ -100,7 +100,7 @@ test.describe("用户资料页实时同步 E2E 测试", () => {
     await page.goto("/login")
     await page.getByText("使用 GitHub 登录").click()
     await page.goto("/auth/callback?code=test-auth-code")
-    await page.waitForURL("/")
+    await waitForAuthReady(page)
 
     // 点击用户菜单
     await page.locator('button[aria-haspopup="menu"]').click()
@@ -118,7 +118,7 @@ test.describe("用户资料页实时同步 E2E 测试", () => {
   test("管理员用户应显示特殊徽章和权限", async ({ page }) => {
     // 模拟管理员登录
     await page.goto("/auth/callback?code=admin-user-code&role=admin")
-    await page.waitForURL("/")
+    await waitForAuthReady(page)
 
     // 查看资料页
     await page.locator('button[aria-haspopup="menu"]').click()
@@ -144,7 +144,7 @@ test.describe("用户资料页实时同步 E2E 测试", () => {
   test("用户登出后应立即更新导航状态", async ({ page }) => {
     // 先登录
     await page.goto("/auth/callback?code=test-auth-code")
-    await page.waitForURL("/")
+    await waitForAuthReady(page)
 
     // 验证已登录状态
     await expect(page.locator('button[aria-haspopup="menu"]')).toBeVisible()
@@ -164,7 +164,7 @@ test.describe("用户资料页实时同步 E2E 测试", () => {
 
     // 登录并访问资料页
     await page.goto("/auth/callback?code=test-database-priority")
-    await page.waitForURL("/")
+    await waitForAuthReady(page)
 
     await page.locator('button[aria-haspopup="menu"]').click()
     await page.getByText("个人资料").click()
@@ -182,7 +182,7 @@ test.describe("性能要求验证", () => {
   test("页面加载性能应满足 ≤1s 要求", async ({ page }) => {
     // 登录
     await page.goto("/auth/callback?code=perf-test-code")
-    await page.waitForURL("/")
+    await waitForAuthReady(page)
 
     // 测量导航到 profile 页面的时间
     const startTime = Date.now()
@@ -203,3 +203,16 @@ test.describe("性能要求验证", () => {
     console.log(`Profile page load time: ${loadTime}ms`)
   })
 })
+
+async function waitForAuthReady(page: Page, targetPath = "/") {
+  await page.waitForSelector('text="登录成功"', { timeout: 30_000 }).catch(() => {})
+
+  if (page.url().includes("/auth/") || page.url().includes("/login")) {
+    await page.waitForTimeout(1200)
+  }
+
+  await page.waitForURL((url) => url.pathname === targetPath, { timeout: 30_000 })
+
+  const userMenu = page.locator('button[aria-haspopup="menu"]').first()
+  await userMenu.waitFor({ timeout: 5_000 }).catch(() => {})
+}

@@ -8,6 +8,9 @@ import { beforeAll, beforeEach, afterEach, afterAll, vi } from "vitest"
 import { cleanup } from "@testing-library/react"
 import { setupTestEnv, cleanupTestEnv } from "./helpers/test-env"
 
+// 让 Testing Library 能识别 Vitest 的 fake timers
+;(globalThis as any).jest = vi
+
 // 清理 React 测试环境
 afterEach(() => {
   cleanup()

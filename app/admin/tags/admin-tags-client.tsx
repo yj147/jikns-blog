@@ -109,9 +109,8 @@ export function AdminTagsClient({
   const openDeleteDialog = useCallback((tag: TagData) => setDeletingTag(tag), [])
 
   return (
-    <div className="bg-background min-h-screen">
-
-      <div className="container mx-auto px-4 py-8">
+    <>
+      <div className="space-y-8">
         <TagQueryPanel
           totalItems={totalItems}
           searchValue={searchInput}
@@ -170,6 +169,6 @@ export function AdminTagsClient({
           }
         }}
       />
-    </div>
+    </>
   )
 }

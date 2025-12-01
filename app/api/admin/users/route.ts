@@ -1,127 +1,134 @@
-/**
- * 管理员用户管理 API
- * 演示管理员权限保护的实现
- */
-
 import { NextRequest, NextResponse } from "next/server"
-import { validateApiPermissions } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
-import { logger } from "@/lib/utils/logger"
-import { createSuccessResponse, createErrorResponse, ErrorCode } from "@/lib/api/unified-response"
+import { requireAdmin, generateRequestId } from "@/lib/auth/session"
+import { apiLogger, logger } from "@/lib/utils/logger"
+import { AuthError } from "@/lib/error-handling/auth-error"
+import { validateApiPermissions } from "@/lib/permissions"
+import {
+  ADMIN_USERS_DEFAULT_LIMIT,
+  ADMIN_USERS_DEFAULT_PAGE,
+  getAdminUsersPayload,
+  type RoleFilter,
+  type StatusFilter,
+} from "@/lib/services/admin-users"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
-/**
- * 获取所有用户列表（管理员专用）
- */
-export async function GET(request: NextRequest) {
-  // 验证管理员权限
-  const { success, error, user } = await validateApiPermissions(request, "admin")
+function parsePositiveInt(value: string | null, fallback: number): number {
+  const parsed = Number.parseInt(value ?? "", 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
 
-  if (!success) {
-    return createErrorResponse(
-      error?.code ?? ErrorCode.FORBIDDEN,
-      error?.message || "无权查看用户列表",
-      undefined,
-      error?.statusCode ?? 403
-    )
+function normalizeStatus(value: string | null): StatusFilter {
+  const normalized = value?.trim().toUpperCase()
+  if (normalized === "ACTIVE" || normalized === "BANNED" || normalized === "INACTIVE") {
+    return normalized as StatusFilter
   }
+  return "all"
+}
+
+function normalizeRole(value: string | null): RoleFilter {
+  const normalized = value?.trim().toUpperCase()
+  if (normalized === "USER" || normalized === "ADMIN") {
+    return normalized as RoleFilter
+  }
+  return "all"
+}
+
+async function handleGet(request: NextRequest) {
+  const requestId = request.headers.get("x-request-id") ?? generateRequestId()
 
   try {
-    // 获取查询参数
-    const { searchParams } = new URL(request.url)
-    const page = Math.max(1, parseInt(searchParams.get("page") || "1"))
-    const limit = Math.min(50, Math.max(1, parseInt(searchParams.get("limit") || "10")))
-    const search = searchParams.get("search")
-    const status = searchParams.get("status") as "ACTIVE" | "BANNED" | null
-    const role = searchParams.get("role") as "USER" | "ADMIN" | null
+    await requireAdmin(request)
+  } catch (error) {
+    const message =
+      error instanceof Error && error.message ? error.message : "需要管理员权限"
 
-    // 构建查询条件
-    const where: any = {}
+    apiLogger.warn("admin users list forbidden", {
+      requestId,
+      path: request.nextUrl.pathname,
+      message,
+      errorCode: error instanceof AuthError ? error.code : undefined,
+    })
 
-    if (search) {
-      where.OR = [
-        { name: { contains: search, mode: "insensitive" } },
-        { email: { contains: search, mode: "insensitive" } },
-      ]
-    }
-
-    if (status) {
-      where.status = status
-    }
-
-    if (role) {
-      where.role = role
-    }
-
-    // 执行查询
-    const requestId = crypto.randomUUID()
-
-    const [users, totalCount, totalUsers, activeUsers, bannedUsers, adminUsers] = await Promise.all([
-      prisma.user.findMany({
-        where,
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          status: true,
-          avatarUrl: true,
-          createdAt: true,
-          lastLoginAt: true,
-          _count: {
-            select: {
-              posts: true,
-              activities: true,
-              comments: true,
-            },
-          },
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.user.count({ where }),
-      prisma.user.count(),
-      prisma.user.count({ where: { status: "ACTIVE" } }),
-      prisma.user.count({ where: { status: "BANNED" } }),
-      prisma.user.count({ where: { role: "ADMIN" } }),
-    ])
-
-    // 计算分页信息
-    const totalPages = Math.ceil(totalCount / limit)
-
-    return createSuccessResponse(
+    return NextResponse.json(
       {
-        users,
-        pagination: {
-          page,
-          limit,
-          totalCount,
-          totalPages,
-          hasNext: page < totalPages,
-          hasPrev: page > 1,
-        },
-        summary: {
-          totalUsers,
-          activeUsers,
-          bannedUsers,
-          adminUsers,
+        success: false,
+        error: {
+          message: "需要管理员权限",
+          requestId,
         },
       },
-      { requestId }
+      { status: 403 }
     )
+  }
+
+  const searchParams = request.nextUrl.searchParams
+  const requestedPage = parsePositiveInt(searchParams.get("page"), ADMIN_USERS_DEFAULT_PAGE)
+  const requestedLimit = parsePositiveInt(searchParams.get("limit"), ADMIN_USERS_DEFAULT_LIMIT)
+  const statusFilter = normalizeStatus(searchParams.get("status"))
+  const roleFilter = normalizeRole(searchParams.get("role"))
+  const rawSearch = searchParams.get("search")?.trim()
+  const search = rawSearch && rawSearch.length > 0 ? rawSearch : null
+
+  try {
+    const payload = await getAdminUsersPayload({
+      page: requestedPage,
+      limit: requestedLimit,
+      status: statusFilter,
+      role: roleFilter,
+      search,
+    })
+    const { pagination, users } = payload
+
+    apiLogger.info("admin users list fetched", {
+      requestId,
+      page: pagination.page,
+      limit: pagination.limit,
+      status: statusFilter,
+      role: roleFilter,
+      search,
+      total: pagination.total,
+      returned: users.length,
+    })
+
+    return NextResponse.json({
+      success: true,
+      data: payload,
+    })
   } catch (error) {
-    logger.error("获取用户列表失败", { module: "api/admin/users" }, error)
-    return createErrorResponse(ErrorCode.INTERNAL_ERROR, "获取用户列表失败")
+    apiLogger.error(
+      "admin users list fetch failed",
+      {
+        requestId,
+        page: requestedPage,
+        limit: requestedLimit,
+        status: statusFilter,
+        role: roleFilter,
+        search,
+      },
+      error
+    )
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          message: "获取用户列表失败",
+          requestId,
+        },
+      },
+      { status: 500 }
+    )
   }
 }
+
+export const GET = withApiResponseMetrics(handleGet)
+export const POST = withApiResponseMetrics(handlePost)
 
 /**
  * 创建新用户（管理员专用）
  */
-export async function POST(request: NextRequest) {
-  // 验证管理员权限
+async function handlePost(request: NextRequest) {
   const { success, error } = await validateApiPermissions(request, "admin")
 
   if (!success) {
@@ -130,8 +137,6 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-
-    // 输入验证
     const { email, name, role = "USER", status = "ACTIVE" } = body
 
     if (!email || !email.includes("@")) {
@@ -167,7 +172,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 检查邮箱是否已存在
     const existingUser = await prisma.user.findUnique({
       where: { email: email.toLowerCase() },
     })
@@ -183,7 +187,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 创建用户
     const newUser = await prisma.user.create({
       data: {
         email: email.toLowerCase(),

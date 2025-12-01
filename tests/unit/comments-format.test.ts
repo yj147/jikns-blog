@@ -1,7 +1,7 @@
 /**
  * formatComment 函数单元测试
  *
- * 验证软删除占位符替换逻辑的正确性
+ * 验证软删除标记与可见性逻辑
  */
 
 import { describe, it, expect } from "vitest"
@@ -31,7 +31,7 @@ describe("formatComment", () => {
   }
 
   describe("软删除评论", () => {
-    it("应该将 content 替换为占位符", () => {
+    it("应该保留原始 content", () => {
       const deletedComment: PrismaCommentWithAuthor = {
         ...baseComment,
         deletedAt: new Date("2025-01-02T00:00:00Z"),
@@ -39,7 +39,7 @@ describe("formatComment", () => {
 
       const formatted = formatComment(deletedComment)
 
-      expect(formatted.content).toBe("[该评论已删除]")
+      expect(formatted.content).toBe(deletedComment.content)
     })
 
     it("应该设置 isDeleted 为 true", () => {
@@ -187,7 +187,7 @@ describe("formatComment", () => {
       expect(formatted.isDeleted).toBe(false)
     })
 
-    it("软删除时应该忽略原始 content 的长度", () => {
+    it("软删除时应该保留原始 content 长度", () => {
       const longContent = "a".repeat(10000)
       const deletedLongComment: PrismaCommentWithAuthor = {
         ...baseComment,
@@ -197,8 +197,8 @@ describe("formatComment", () => {
 
       const formatted = formatComment(deletedLongComment)
 
-      expect(formatted.content).toBe("[该评论已删除]")
-      expect(formatted.content.length).toBeLessThan(longContent.length)
+      expect(formatted.content).toBe(longContent)
+      expect(formatted.content.length).toBe(longContent.length)
     })
 
     it("应该处理特殊字符 content", () => {

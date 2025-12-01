@@ -126,7 +126,9 @@ export function useActivities(
     revalidateAll: false,
     parallel: false,
     fallbackData: options.initialPages,
-    revalidateOnMount: !options.initialPages,
+    revalidateOnMount: true,
+    revalidateOnFocus: true,
+    revalidateOnReconnect: true,
   })
 
   // 处理数据

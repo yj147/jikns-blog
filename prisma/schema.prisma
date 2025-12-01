@@ -11,97 +11,93 @@ datasource db {
 }
 
 model Activity {
-  @@map("activities")
-
-  id            String     @id @default(uuid())
+  id            String                   @id @default(uuid())
   content       String
-  contentTokens String?
-  imageUrls     String[]   @default([])
-  search_vector Unsupported("tsvector")?
-  isPinned      Boolean    @default(false)
+  isPinned      Boolean                  @default(false)
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  authorId      String
+  commentsCount Int                      @default(0)
   deletedAt     DateTime?
-  likesCount    Int        @default(0)
-  commentsCount Int        @default(0)
-  viewsCount    Int        @default(0)
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
-  authorId      String     @db.Uuid
-
+  likesCount    Int                      @default(0)
+  viewsCount    Int                      @default(0)
+  imageUrls     String[]                 @default([])
+  contentTokens String?
+  search_vector Unsupported("tsvector")? @default(dbgenerated("setweight(to_tsvector('simple'::regconfig, COALESCE(\"contentTokens\", ''::text)), 'A'::\"char\")"))
   author        User                     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   tagCandidates ActivityTagCandidate[]
   tags          ActivityTag[]
   comments      Comment[]
   likes         Like[]
+  notifications Notification[]
 
-  @@index([authorId])
   @@index([createdAt(sort: Desc)])
   @@index([deletedAt, createdAt(sort: Desc)])
+  @@index([authorId, createdAt(sort: Desc)])
+  @@index([isPinned, createdAt(sort: Desc)])
+  @@index([search_vector], type: Gin)
+  @@map("activities")
 }
 
 model ActivityTagCandidate {
-  @@map("activity_tag_candidates")
-
-  id                 String   @id @default(uuid())
+  id                 String    @id @default(uuid())
   name               String
-  slug               String   @unique
-  occurrences        Int      @default(1)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  lastSeenAt         DateTime @default(now())
+  slug               String    @unique
+  occurrences        Int       @default(1)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @default(now()) @updatedAt
+  lastSeenAt         DateTime  @default(now())
   lastSeenActivityId String?
+  activity           Activity? @relation(fields: [lastSeenActivityId], references: [id], onUpdate: NoAction, map: "activity_tag_candidates_last_seen_activity_id_fkey")
 
-  activity Activity? @relation(fields: [lastSeenActivityId], references: [id])
-
-  @@index([lastSeenAt(sort: Desc)])
+  @@index([lastSeenAt(sort: Desc)], map: "activity_tag_candidates_last_seen_idx")
+  @@map("activity_tag_candidates")
 }
 
 model ActivityTag {
-  @@map("activity_tags")
-
   activityId String
   tagId      String
   createdAt  DateTime @default(now())
-
-  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
-  tag      Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([activityId, tagId])
+  @@index([activityId])
+  @@index([tagId])
+  @@map("activity_tags")
 }
 
 model Bookmark {
-  @@map("bookmarks")
-
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
-  userId    String   @db.Uuid
+  userId    String
   postId    String
-
-  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, postId])
   @@index([postId])
   @@index([userId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("bookmarks")
 }
 
 model Comment {
-  @@map("comments")
-
-  id         String    @id @default(uuid())
-  content    String
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  deletedAt  DateTime?
-  authorId   String    @db.Uuid
-  postId     String?
-  activityId String?
-  parentId   String?
-
-  activity Activity? @relation(fields: [activityId], references: [id], onDelete: Cascade)
-  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  post     Post?     @relation(fields: [postId], references: [id], onDelete: Cascade)
-  parent   Comment?  @relation("commentsTocomments", fields: [parentId], references: [id], onDelete: NoAction)
-  replies  Comment[] @relation("commentsTocomments")
+  id            String         @id @default(uuid())
+  content       String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  authorId      String
+  postId        String?
+  activityId    String?
+  parentId      String?
+  deletedAt     DateTime?      @db.Timestamp(6)
+  activity      Activity?      @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  author        User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent        Comment?       @relation("commentsTocomments", fields: [parentId], references: [id], onDelete: NoAction)
+  replies       Comment[]      @relation("commentsTocomments")
+  post          Post?          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  notifications Notification[] @relation("NotificationComment")
 
   @@index([activityId])
   @@index([authorId])
@@ -109,97 +105,96 @@ model Comment {
   @@index([deletedAt])
   @@index([parentId])
   @@index([postId])
+  @@index([activityId, parentId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([parentId, createdAt, id], map: "comments_parentId_createdAt_id_asc_idx")
+  @@index([postId, parentId, createdAt(sort: Desc), id(sort: Desc)])
+  @@map("comments")
 }
 
 model Follow {
-  @@map("follows")
-
-  followerId  String   @db.Uuid
-  followingId String   @db.Uuid
+  followerId  String
+  followingId String
   createdAt   DateTime @default(now())
-
-  follower  User @relation("follows_followerIdTousers", fields: [followerId], references: [id], onDelete: Cascade)
-  following User @relation("follows_followingIdTousers", fields: [followingId], references: [id], onDelete: Cascade)
+  follower    User     @relation("follows_followerIdTousers", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("follows_followingIdTousers", fields: [followingId], references: [id], onDelete: Cascade)
 
   @@id([followerId, followingId])
-  @@index([followerId])
-  @@index([followingId])
+  @@index([followerId, createdAt])
+  @@index([followingId, createdAt])
+  @@map("follows")
 }
 
 model Like {
-  @@map("likes")
-
-  id         String   @id @default(uuid())
-  createdAt  DateTime @default(now())
-  authorId   String   @db.Uuid
+  id         String    @id @default(uuid())
+  createdAt  DateTime  @default(now())
+  authorId   String
   postId     String?
   activityId String?
-
-  activity Activity? @relation(fields: [activityId], references: [id], onDelete: Cascade)
-  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  post     Post?     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  activity   Activity? @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  author     User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  post       Post?     @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@unique([authorId, activityId])
   @@unique([authorId, postId])
-  @@index([activityId])
   @@index([authorId])
-  @@index([postId])
+  @@map("likes")
 }
 
 model PostTag {
-  @@map("post_tags")
-
   postId    String
   tagId     String
   createdAt DateTime @default(now())
-
-  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
-  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([postId, tagId])
+  @@map("post_tags")
 }
 
 model Post {
-  @@map("posts")
-
-  id                   String      @id @default(uuid())
-  slug                 String      @unique
+  id                   String                   @id @default(uuid())
+  slug                 String                   @unique
   title                String
-  titleTokens          String?
   content              String
-  contentTokens        String?
   excerpt              String?
-  excerptTokens        String?
-  search_vector        Unsupported("tsvector")?
-  published            Boolean     @default(false)
-  isPinned             Boolean     @default(false)
+  published            Boolean                  @default(false)
+  isPinned             Boolean                  @default(false)
   canonicalUrl         String?
   seoTitle             String?
   seoDescription       String?
-  seoDescriptionTokens String?
-  viewCount            Int         @default(0)
-  createdAt            DateTime    @default(now())
-  updatedAt            DateTime    @updatedAt
+  viewCount            Int                      @default(0)
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
   publishedAt          DateTime?
-  authorId             String      @db.Uuid
+  authorId             String
   seriesId             String?
   coverImage           String?
-
-  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  series    Series?   @relation(fields: [seriesId], references: [id])
-  tags      PostTag[]
-  bookmarks Bookmark[]
-  comments  Comment[]
-  likes     Like[]
+  titleTokens          String?
+  excerptTokens        String?
+  seoDescriptionTokens String?
+  contentTokens        String?
+  search_vector        Unsupported("tsvector")? @default(dbgenerated("(((setweight(to_tsvector('simple'::regconfig, COALESCE(\"titleTokens\", ''::text)), 'A'::\"char\") || setweight(to_tsvector('simple'::regconfig, COALESCE(\"excerptTokens\", ''::text)), 'B'::\"char\")) || setweight(to_tsvector('simple'::regconfig, COALESCE(\"seoDescriptionTokens\", ''::text)), 'B'::\"char\")) || setweight(to_tsvector('simple'::regconfig, COALESCE(\"contentTokens\", ''::text)), 'C'::\"char\"))"))
+  bookmarks            Bookmark[]
+  comments             Comment[]
+  likes                Like[]
+  notifications        Notification[]           @relation("NotificationPost")
+  tags                 PostTag[]
+  author               User                     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  series               Series?                  @relation(fields: [seriesId], references: [id])
 
   @@index([authorId])
   @@index([published, publishedAt(sort: Desc)])
   @@index([seriesId])
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@index([isPinned])
+  @@index([published, createdAt(sort: Desc)])
+  @@index([search_vector], type: Gin)
+  @@index([viewCount(sort: Desc)])
+  @@map("posts")
 }
 
 model Series {
-  @@map("series")
-
   id          String   @id
   title       String
   slug        String   @unique
@@ -208,72 +203,121 @@ model Series {
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime
-  authorId    String   @db.Uuid
-
-  author User  @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  posts  Post[]
+  authorId    String
+  posts       Post[]
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
   @@index([authorId])
+  @@map("series")
 }
 
 model Tag {
-  @@map("tags")
-
-  id          String    @id @default(uuid())
-  name        String    @unique @db.VarChar(50)
-  slug        String    @unique @db.VarChar(50)
-  description String?   @db.VarChar(200)
-  color       String?   @db.VarChar(7)
-  postsCount  Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  activities ActivityTag[]
-  posts      PostTag[]
+  id                String                   @id @default(uuid())
+  name              String                   @unique
+  slug              String                   @unique
+  description       String?
+  color             String?
+  postsCount        Int                      @default(0)
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  activitiesCount   Int                      @default(0)
+  nameTokens        String?
+  descriptionTokens String?
+  search_vector     Unsupported("tsvector")? @default(dbgenerated("(setweight(to_tsvector('simple'::regconfig, COALESCE(\"nameTokens\", ''::text)), 'A'::\"char\") || setweight(to_tsvector('simple'::regconfig, COALESCE(\"descriptionTokens\", ''::text)), 'B'::\"char\"))"))
+  activities        ActivityTag[]
+  posts             PostTag[]
 
   @@index([postsCount(sort: Desc)])
-}
-
-model SystemSetting {
-  @@map("system_settings")
-
-  id          String   @id @default(uuid())
-  key         String   @unique
-  value       Json
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  updatedById String?  @db.Uuid
-
-  updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
-
-  @@index([key])
+  @@index([search_vector], type: Gin)
+  @@map("tags")
 }
 
 model User {
+  id                      String                   @id @default(uuid())
+  email                   String                   @unique
+  name                    String?
+  avatarUrl               String?
+  bio                     String?
+  socialLinks             Json?
+  role                    Role                     @default(USER)
+  status                  UserStatus               @default(ACTIVE)
+  passwordHash            String?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  lastLoginAt             DateTime?
+  nameTokens              String?
+  bioTokens               String?
+  search_vector           Unsupported("tsvector")? @default(dbgenerated("((setweight(to_tsvector('simple'::regconfig, COALESCE(\"nameTokens\", ''::text)), 'A'::\"char\") || setweight(to_tsvector('simple'::regconfig, regexp_replace(COALESCE(email, ''::text), '[^a-zA-Z0-9]+'::text, ' '::text, 'g'::text)), 'B'::\"char\")) || setweight(to_tsvector('simple'::regconfig, COALESCE(\"bioTokens\", ''::text)), 'C'::\"char\"))"))
+  location                String?
+  notificationPreferences Json                     @default("{}")
+  phone                   String?
+  privacySettings         Json                     @default("{}")
+  activities              Activity[]
+  bookmarks               Bookmark[]
+  comments                Comment[]
+  following               Follow[]                 @relation("follows_followerIdTousers")
+  followers               Follow[]                 @relation("follows_followingIdTousers")
+  likes                   Like[]
+  notificationsSent       Notification[]           @relation("NotificationActor")
+  notificationsReceived   Notification[]           @relation("NotificationRecipient")
+  posts                   Post[]
+  series                  Series[]
+  systemSettingsUpdated   SystemSetting[]          @relation("SystemSettingUpdatedBy")
+
+  @@index([bio(ops: raw("gin_trgm_ops"))], map: "idx_users_bio_trgm", type: Gin)
+  @@index([name(ops: raw("gin_trgm_ops"))], map: "idx_users_name_trgm", type: Gin)
+  @@index([email(ops: raw("gin_trgm_ops"))], map: "users_email_trgm_idx", type: Gin)
+  @@index([search_vector], type: Gin)
   @@map("users")
+}
 
-  id        String    @id @db.Uuid @default(uuid())
-  email     String    @unique
-  name      String?
-  avatarUrl String?
-  bio       String?
-  socialLinks Json?
-  role      Role       @default(USER)
-  status    UserStatus @default(ACTIVE)
-  passwordHash String?
-  createdAt DateTime   @default(now())
-  updatedAt DateTime @updatedAt
-  lastLoginAt DateTime?
+model Notification {
+  id          String           @id @default(uuid())
+  recipientId String
+  actorId     String
+  type        NotificationType
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+  postId      String?
+  commentId   String?
+  activityId  String?
+  actor       User             @relation("NotificationActor", fields: [actorId], references: [id], onDelete: Cascade)
+  comment     Comment?         @relation("NotificationComment", fields: [commentId], references: [id])
+  post        Post?            @relation("NotificationPost", fields: [postId], references: [id])
+  activity    Activity?        @relation(fields: [activityId], references: [id])
+  recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
 
-  activities  Activity[]
-  bookmarks   Bookmark[]
-  comments    Comment[]
-  following   Follow[] @relation("follows_followerIdTousers")
-  followers   Follow[] @relation("follows_followingIdTousers")
-  likes       Like[]
-  posts       Post[]
-  series      Series[]
-  systemSettings SystemSetting[]
+  @@index([recipientId, readAt])
+  @@map("notifications")
+}
+
+model PerformanceMetric {
+  id        String     @id @default(cuid())
+  type      MetricType
+  value     Float
+  unit      String
+  timestamp DateTime   @default(now())
+  context   Json?
+  tags      String[]   @default([])
+  requestId String?
+  userId    String?
+
+  @@index([type, timestamp(sort: Desc)])
+  @@index([tags])
+  @@map("performance_metrics")
+}
+
+model SystemSetting {
+  key         String   @id
+  value       Json
+  category    String?
+  description String?
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  updatedBy   User?    @relation(name: "SystemSettingUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("system_settings")
 }
 
 enum Role {
@@ -284,4 +328,21 @@ enum Role {
 enum UserStatus {
   ACTIVE
   BANNED
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT
+  FOLLOW
+  SYSTEM
+}
+
+enum MetricType {
+  api_response
+  db_query
+  cache_hit
+  external_api
+  auth_login
+  auth_session
+  permission_check
 }

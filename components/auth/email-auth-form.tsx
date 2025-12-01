@@ -116,16 +116,22 @@ export function EmailAuthForm({ redirect = "/", mode = "login" }: EmailAuthFormP
           text: result.message || "登录成功！正在跳转...",
         })
 
+        // 尝试设置 Supabase 会话（失败时静默处理，不阻止重定向）
         if (result.data?.session?.access_token && result.data?.session?.refresh_token) {
-          await supabase.auth.setSession({
-            access_token: result.data.session.access_token,
-            refresh_token: result.data.session.refresh_token,
-          })
+          try {
+            await supabase.auth.setSession({
+              access_token: result.data.session.access_token,
+              refresh_token: result.data.session.refresh_token,
+            })
+          } catch (err) {
+            console.warn("设置 Supabase 会话失败，使用 cookie 会话继续", err)
+          }
         }
 
+        // 使用 window.location 确保完整页面导航
+        const targetUrl = result.data?.redirectTo || redirect
         setTimeout(() => {
-          router.push(result.data?.redirectTo || redirect)
-          router.refresh()
+          window.location.href = targetUrl
         }, 1000)
       } else {
         const csrf = await ensureCsrfToken()

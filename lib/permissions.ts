@@ -6,59 +6,19 @@
 import { getCurrentUser, getAuthenticatedUser } from "./auth"
 import type { User } from "./generated/prisma"
 import { AuthErrors, isAuthError } from "@/lib/error-handling/auth-error"
+import { performanceMonitor, MetricType } from "@/lib/performance-monitor"
 import { logger } from "./utils/logger"
 
-// 权限缓存类型定义
-interface PermissionCacheEntry {
-  user: User | null
-  timestamp: number
+// NOTE(Linus): 角色/状态变化必须实时生效，拒绝长时间缓存带来的越权风险。
+// 因此移除之前的 5 分钟缓存，所有权限判断直接读取最新的用户快照。
+export function clearPermissionCache(_userId?: string) {
+  // 缓存已移除，保留空实现以兼容旧调用方
 }
 
-// 内存缓存（用于性能优化）
-const userPermissionCache = new Map<string, PermissionCacheEntry>()
-const CACHE_DURATION = 5 * 60 * 1000 // 5分钟缓存
-
-/**
- * 清除权限缓存
- */
-export function clearPermissionCache(userId?: string) {
-  if (userId) {
-    userPermissionCache.delete(userId)
-  } else {
-    userPermissionCache.clear()
-  }
-}
-
-/**
- * 获取缓存的用户信息
- * 使用经过身份验证的用户数据确保安全性
- */
-async function getCachedUser(): Promise<User | null> {
+async function getFreshUser(): Promise<User | null> {
   const { user: authUser } = await getAuthenticatedUser()
-
-  if (!authUser?.id) {
-    return null
-  }
-
-  const userId = authUser.id
-  const now = Date.now()
-  const cached = userPermissionCache.get(userId)
-
-  // 检查缓存是否有效
-  if (cached && now - cached.timestamp < CACHE_DURATION) {
-    return cached.user
-  }
-
-  // 获取最新用户信息
-  const user = await getCurrentUser()
-
-  // 更新缓存
-  userPermissionCache.set(userId, {
-    user,
-    timestamp: now,
-  })
-
-  return user
+  if (!authUser?.id) return null
+  return await getCurrentUser()
 }
 
 /**
@@ -66,7 +26,7 @@ async function getCachedUser(): Promise<User | null> {
  * 检查用户登录状态和账户状态
  */
 export async function requireAuth(): Promise<User> {
-  const user = await getCachedUser()
+  const user = await getFreshUser()
 
   if (!user) {
     throw AuthErrors.unauthorized()
@@ -86,7 +46,7 @@ export async function requireAuth(): Promise<User> {
  * 检查用户登录状态、账户状态和管理员权限
  */
 export async function requireAdmin(): Promise<User> {
-  const user = await getCachedUser()
+  const user = await getFreshUser()
 
   if (!user) {
     throw AuthErrors.unauthorized()
@@ -111,17 +71,19 @@ export async function requireAdmin(): Promise<User> {
 export async function checkUserStatus(): Promise<{
   isAuthenticated: boolean
   isAdmin: boolean
+  isAuthor: boolean
   isActive: boolean
   user: User | null
   error?: string
 }> {
   try {
-    const user = await getCachedUser()
+    const user = await getFreshUser()
 
     if (!user) {
       return {
         isAuthenticated: false,
         isAdmin: false,
+        isAuthor: false,
         isActive: false,
         user: null,
         error: "用户未登录",
@@ -130,10 +92,12 @@ export async function checkUserStatus(): Promise<{
 
     const isActive = user.status === "ACTIVE"
     const isAdmin = user.role === "ADMIN" && isActive
+    const isAuthor = !isAdmin && isActive
 
     return {
       isAuthenticated: true,
       isAdmin,
+      isAuthor,
       isActive,
       user,
       error: isActive ? undefined : "账户已被封禁",
@@ -142,6 +106,7 @@ export async function checkUserStatus(): Promise<{
     return {
       isAuthenticated: false,
       isAdmin: false,
+      isAuthor: false,
       isActive: false,
       user: null,
       error: error instanceof Error ? error.message : "权限检查失败",
@@ -180,6 +145,34 @@ export async function canAccessResource(resource: string): Promise<boolean> {
 }
 
 /**
+ * 针对 Feed/资源对象的访问控制（作者 / 管理员 / 公开资源）
+ */
+export async function canAccessObject(resource: {
+  ownerId?: string | null
+  authorId?: string | null
+  visibility?: "PUBLIC" | "PRIVATE" | string | null
+  deletedAt?: Date | null
+}): Promise<boolean> {
+  const { isAuthenticated, isAdmin, isActive, user } = await checkUserStatus()
+
+  const authorId = resource.authorId || resource.ownerId
+  const isPublic = (resource.visibility || "PUBLIC").toUpperCase() === "PUBLIC"
+
+  // 未登录仅可访问公开资源
+  if (!isAuthenticated) return isPublic
+
+  // 封禁用户不可访问
+  if (!isActive) return false
+
+  if (isAdmin) return true
+
+  // 作者可访问自己的资源
+  if (authorId && user && user.id === authorId) return true
+
+  return isPublic
+}
+
+/**
  * 判断是否为公开资源
  */
 function isPublicResource(resource: string): boolean {
@@ -212,8 +205,9 @@ export async function getUserPermissions(): Promise<{
   canComment: boolean
   canLike: boolean
   canFollow: boolean
+  isAuthor: boolean
 }> {
-  const { isAuthenticated, isAdmin, isActive } = await checkUserStatus()
+  const { isAuthenticated, isAdmin, isActive, isAuthor } = await checkUserStatus()
 
   return {
     // 文章管理权限（仅管理员）
@@ -228,7 +222,132 @@ export async function getUserPermissions(): Promise<{
     canComment: isAuthenticated && isActive,
     canLike: isAuthenticated && isActive,
     canFollow: isAuthenticated && isActive,
+    isAuthor,
   }
+}
+
+/**
+ * 当前用户是否拥有指定角色
+ */
+export async function hasRole(role: "ADMIN" | "USER"): Promise<boolean> {
+  const user = await getFreshUser()
+  if (!user) return false
+  return user.role === role && user.status === "ACTIVE"
+}
+
+/**
+ * 检查当前用户是否为资源所有者（或管理员）
+ */
+export async function isResourceOwner(resourceAuthorId: string): Promise<boolean> {
+  const user = await getFreshUser()
+  if (!user || user.status !== "ACTIVE") return false
+  if (user.role === "ADMIN") return true
+  return user.id === resourceAuthorId
+}
+
+/**
+ * 检查路由访问权限
+ * - adminOnlyPaths: 仅管理员
+ * - authorAllowedAdminPaths: 管理入口但允许作者（用于 Feed 管理）
+ * - authenticatedPaths: 任何登录用户
+ * - publicPaths: 公开
+ */
+const publicPaths = [
+  "/",
+  "/blog",
+  "/search",
+  "/archive",
+  "/login",
+  "/register",
+  "/auth",
+  "/unauthorized",
+]
+
+const authenticatedPaths = [
+  "/profile",
+  "/settings",
+  "/api/user",
+  "/api/user/profile",
+  "/api/user/settings",
+]
+
+const adminOnlyPaths = [
+  "/admin",
+  "/admin/dashboard",
+  "/admin/users",
+  "/admin/posts",
+  "/admin/settings",
+  "/api/admin/users",
+  "/api/admin/settings",
+]
+
+const authorAllowedAdminPaths = [
+  "/api/admin/feeds",
+  "/api/admin/feeds/*",
+  "/admin/feeds",
+  "/admin/feeds/*",
+]
+
+function routeMatches(pathname: string, patterns: string[]): boolean {
+  return patterns.some((pattern) => {
+    if (pattern.endsWith("/*")) {
+      return pathname.startsWith(pattern.slice(0, -2))
+    }
+    return pathname === pattern || pathname.startsWith(pattern + "/")
+  })
+}
+
+export async function checkRoutePermission(route: string, user?: User | null): Promise<boolean> {
+  const requester = user ?? (await getFreshUser())
+  const isAuthenticated = Boolean(requester)
+  const isAdmin = requester?.role === "ADMIN" && requester?.status === "ACTIVE"
+  const isActive = requester?.status === "ACTIVE"
+
+  // 公开路由
+  if (routeMatches(route, publicPaths)) return true
+
+  // 管理员专属
+  if (routeMatches(route, adminOnlyPaths) || (route.startsWith("/api/admin") && !routeMatches(route, authorAllowedAdminPaths))) {
+    return Boolean(isAdmin)
+  }
+
+  // 作者允许的管理路由：需要登录 & 活跃
+  if (routeMatches(route, authorAllowedAdminPaths)) {
+    return isAuthenticated && Boolean(isActive)
+  }
+
+  // 需认证路径
+  if (routeMatches(route, authenticatedPaths)) {
+    return isAuthenticated && Boolean(isActive)
+  }
+
+  // 默认允许
+  return true
+}
+
+/**
+ * 检查当前用户是否为作者（非管理员的活跃用户）
+ */
+export async function isAuthor(): Promise<boolean> {
+  const status = await checkUserStatus()
+  return Boolean(status.isAuthor)
+}
+
+/**
+ * 作者或管理员才能操作其资源
+ */
+export async function requireAuthorOrAdmin(resourceAuthorId: string): Promise<User> {
+  const user = await requireAuth()
+
+  if (user.status !== "ACTIVE") {
+    throw AuthErrors.accountBanned({ userId: user.id })
+  }
+
+  if (user.role === "ADMIN" || user.id === resourceAuthorId) {
+    return user
+  }
+
+  throw AuthErrors.forbidden("需要作者或管理员权限", { userId: user.id })
 }
 
 /**
@@ -310,69 +429,107 @@ export async function validateApiPermissions(
   request: Request,
   requiredPermission: "auth" | "admin"
 ): Promise<{ success: boolean; error?: any; user?: User }> {
+  const timerId = `permission-check-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  const path =
+    (() => {
+      try {
+        return new URL(request.url).pathname
+      } catch {
+        return request.url
+      }
+    })() || undefined
+
+  performanceMonitor.startTimer(timerId, { path, requiredPermission })
+
   try {
     if (requiredPermission === "admin") {
       const user = await requireAdmin()
+      performanceMonitor.endTimer(timerId, MetricType.PERMISSION_CHECK_TIME, {
+        success: true,
+        requiredPermission,
+        userId: user.id,
+        path,
+      })
       return { success: true, user }
     } else {
       const user = await requireAuth()
+      performanceMonitor.endTimer(timerId, MetricType.PERMISSION_CHECK_TIME, {
+        success: true,
+        requiredPermission,
+        userId: user.id,
+        path,
+      })
       return { success: true, user }
     }
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "权限验证失败"
+    let response: { success: false; error: any }
+
     if (isAuthError(error)) {
       if (error.code === "UNAUTHORIZED") {
-        return {
+        response = {
           success: false,
           error: createPermissionError("AUTHENTICATION_REQUIRED"),
         }
-      }
-
-      if (error.code === "FORBIDDEN") {
-        return {
+      } else if (error.code === "FORBIDDEN") {
+        response = {
           success: false,
           error: createPermissionError("INSUFFICIENT_PERMISSIONS"),
         }
-      }
-
-      if (error.code === "ACCOUNT_BANNED") {
-        return {
+      } else if (error.code === "ACCOUNT_BANNED") {
+        response = {
           success: false,
           error: createPermissionError("ACCOUNT_BANNED"),
+        }
+      } else {
+        response = {
+          success: false,
+          error: {
+            error: "权限验证失败",
+            code: "PERMISSION_CHECK_FAILED",
+            statusCode: 500,
+            timestamp: new Date().toISOString(),
+          },
+        }
+      }
+    } else {
+      const message = errorMessage
+
+      if (message === "用户未登录" || message === "未登录用户") {
+        response = {
+          success: false,
+          error: createPermissionError("AUTHENTICATION_REQUIRED"),
+        }
+      } else if (message === "需要管理员权限") {
+        response = {
+          success: false,
+          error: createPermissionError("INSUFFICIENT_PERMISSIONS"),
+        }
+      } else if (message === "账户已被封禁") {
+        response = {
+          success: false,
+          error: createPermissionError("ACCOUNT_BANNED"),
+        }
+      } else {
+        response = {
+          success: false,
+          error: {
+            error: "权限验证失败",
+            code: "PERMISSION_CHECK_FAILED",
+            statusCode: 500,
+            timestamp: new Date().toISOString(),
+          },
         }
       }
     }
 
-    const message = (error as Error).message
-
-    if (message === "用户未登录" || message === "未登录用户") {
-      return {
-        success: false,
-        error: createPermissionError("AUTHENTICATION_REQUIRED"),
-      }
-    }
-
-    if (message === "需要管理员权限") {
-      return {
-        success: false,
-        error: createPermissionError("INSUFFICIENT_PERMISSIONS"),
-      }
-    }
-
-    if (message === "账户已被封禁") {
-      return {
-        success: false,
-        error: createPermissionError("ACCOUNT_BANNED"),
-      }
-    }
-
-    return {
+    performanceMonitor.endTimer(timerId, MetricType.PERMISSION_CHECK_TIME, {
       success: false,
-      error: {
-        error: "权限验证失败",
-        code: "PERMISSION_CHECK_FAILED",
-        statusCode: 500,
-        timestamp: new Date().toISOString(),
-      },
-    }
+      requiredPermission,
+      path,
+      error: errorMessage,
+    })
+
+    return response
   }
 }

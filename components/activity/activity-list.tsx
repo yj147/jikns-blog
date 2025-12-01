@@ -205,10 +205,6 @@ export function ActivityList({
     [onActivityUpdate, refresh]
   )
 
-  const handleCommentsChange = useCallback(() => {
-    refresh()
-  }, [refresh])
-
   const handleApplySearch = useCallback(() => {
     const result = applySearch()
     if (!result.success && result.reason === "too-short") {
@@ -283,7 +279,6 @@ export function ActivityList({
         clearAllFilters={clearAllFilters}
         onRetry={refresh}
         onEdit={handleEditActivity}
-        onCommentsChange={handleCommentsChange}
       />
 
       <ActivityEditorDialog

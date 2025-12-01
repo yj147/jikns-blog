@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { Prisma, UserStatus, Role } from "@/lib/generated/prisma"
 import { normalizeTagNames } from "@/lib/repos/tag-repo"
-import { buildTsQuery } from "@/lib/search/rank-utils"
 
 const MAX_FILTER_TAGS = 10
 
@@ -13,6 +12,7 @@ type ActivityWithAuthorPayload = Prisma.ActivityGetPayload<{
       select: {
         id: true
         name: true
+        email: true
         avatarUrl: true
         role: true
         status: true
@@ -53,6 +53,7 @@ export interface ActivityListItem {
   author: {
     id: string
     name: string | null
+    email: string | null
     avatarUrl: string | null
     role: Role
     status: UserStatus
@@ -114,11 +115,10 @@ export async function listActivities(params: ListActivitiesParams): Promise<List
   let searchMatchedIds: string[] | null = null
 
   if (searchTerm) {
-    const tsQuery = buildTsQuery(searchTerm)
     const searchRows = await prisma.$queryRaw<Array<{ id: string }>>`
       SELECT id
       FROM "activities"
-      WHERE "search_vector" @@ ${tsQuery}
+      WHERE "search_vector" @@ plainto_tsquery('simple', ${searchTerm})::tsquery
     `
 
     if (searchRows.length === 0) {
@@ -204,13 +204,18 @@ export async function listActivities(params: ListActivitiesParams): Promise<List
   let orderByClause: Prisma.ActivityOrderByWithRelationInput[] = []
   switch (orderBy) {
     case "trending":
-      orderByClause = [{ likesCount: "desc" }, { createdAt: "desc" }, { id: "desc" }]
+      orderByClause = [
+        { isPinned: "desc" },
+        { likesCount: "desc" },
+        { createdAt: "desc" },
+        { id: "desc" },
+      ]
       break
     case "following":
-      orderByClause = [{ createdAt: "desc" }, { id: "desc" }]
+      orderByClause = [{ isPinned: "desc" }, { createdAt: "desc" }, { id: "desc" }]
       break
     default:
-      orderByClause = [{ createdAt: "desc" }, { id: "desc" }]
+      orderByClause = [{ isPinned: "desc" }, { createdAt: "desc" }, { id: "desc" }]
       break
   }
 
@@ -235,6 +240,7 @@ export async function listActivities(params: ListActivitiesParams): Promise<List
           select: {
             id: true,
             name: true,
+            email: true,
             avatarUrl: true,
             role: true,
             status: true,
@@ -264,6 +270,7 @@ export async function listActivities(params: ListActivitiesParams): Promise<List
       author: {
         id: activity.author.id,
         name: activity.author.name,
+        email: activity.author.email,
         avatarUrl: activity.author.avatarUrl,
         role: activity.author.role,
         status: activity.author.status,

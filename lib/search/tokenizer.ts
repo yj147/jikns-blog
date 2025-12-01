@@ -57,8 +57,49 @@ export function tokenizeText(value: string | null | undefined): string {
 
   if (jieba) {
     try {
-      const words = jieba.cut(trimmed, true)
-      return words
+      // 策略：分离中英文，分别处理后合并
+      const allTokens: string[] = []
+      const parts: Array<{ type: "english" | "chinese"; text: string }> = []
+
+      // 拆分中英文部分
+      let lastIndex = 0
+      const englishPattern = /[a-zA-Z]+(?:\.[a-zA-Z]+)*/g
+      let match: RegExpExecArray | null
+
+      while ((match = englishPattern.exec(trimmed)) !== null) {
+        // 添加之前的中文部分
+        if (match.index > lastIndex) {
+          const chinesePart = trimmed.slice(lastIndex, match.index).trim()
+          if (chinesePart) {
+            parts.push({ type: "chinese", text: chinesePart })
+          }
+        }
+        // 添加英文部分
+        parts.push({ type: "english", text: match[0] })
+        lastIndex = match.index + match[0].length
+      }
+
+      // 添加剩余的中文部分
+      if (lastIndex < trimmed.length) {
+        const remaining = trimmed.slice(lastIndex).trim()
+        if (remaining) {
+          parts.push({ type: "chinese", text: remaining })
+        }
+      }
+
+      // 分别处理
+      for (const part of parts) {
+        if (part.type === "english") {
+          // 英文直接小写化
+          allTokens.push(part.text.toLowerCase())
+        } else {
+          // 中文用 nodejieba 分词
+          const chineseTokens = jieba.cutForSearch(part.text)
+          allTokens.push(...chineseTokens)
+        }
+      }
+
+      return allTokens
         .map(normalizeToken)
         .filter((token): token is string => Boolean(token))
         .join(" ")

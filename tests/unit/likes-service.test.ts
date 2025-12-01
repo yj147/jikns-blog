@@ -5,8 +5,8 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { prisma } from "@/lib/prisma"
-import { Prisma } from "@/lib/generated/prisma"
-import { InteractionTargetNotFoundError } from "@/lib/interactions/errors"
+import { Prisma, UserStatus, Role } from "@/lib/generated/prisma"
+import { InteractionNotAllowedError, InteractionTargetNotFoundError } from "@/lib/interactions/errors"
 import {
   toggleLike,
   getLikeStatus,
@@ -40,6 +40,10 @@ vi.mock("@/lib/prisma", () => ({
       findUnique: vi.fn(),
       findMany: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
+    },
+    user: {
+      findUnique: vi.fn(),
     },
     $transaction: vi.fn(async (fn: any) => {
       // Mock transaction: 直接执行回调并传入 prisma 对象
@@ -75,6 +79,15 @@ vi.mock("@/lib/utils/logger", () => ({
 describe("Likes Service", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+
+    vi.mocked(prisma.user.findUnique).mockImplementation(async ({ where }: any) => ({
+      id: where.id,
+      email: `${where.id}@example.com`,
+      role: Role.USER,
+      status: UserStatus.ACTIVE,
+      name: "Test User",
+      avatarUrl: null,
+    }))
   })
 
   describe("toggleLike", () => {
@@ -83,7 +96,11 @@ describe("Likes Service", () => {
       const userId = "user-1"
 
       // Mock: 文章存在
-      vi.mocked(prisma.post.findFirst).mockResolvedValue({ id: postId } as any)
+      vi.mocked(prisma.post.findFirst).mockResolvedValue({
+        id: postId,
+        authorId: "author-1",
+        author: { id: "author-1", status: UserStatus.ACTIVE, role: Role.USER },
+      } as any)
 
       // Mock: 用户未点赞
       vi.mocked(prisma.like.findFirst).mockResolvedValue(null)
@@ -114,12 +131,6 @@ describe("Likes Service", () => {
       const userId = "user-1"
       const likeId = "like-1"
 
-      // Mock: 当前动态 likesCount（删除后查询得到 9）
-      vi.mocked(prisma.activity.findUnique).mockResolvedValue({
-        id: activityId,
-        likesCount: 9,
-      } as any)
-
       // Mock: 用户已点赞
       vi.mocked(prisma.like.findFirst).mockResolvedValue({
         id: likeId,
@@ -131,6 +142,9 @@ describe("Likes Service", () => {
 
       // Mock: 直接删除点赞（已去除事务包裹）
       vi.mocked(prisma.like.delete).mockResolvedValue({} as any)
+
+      // Mock: 删除后重新统计点赞表（syncActivityLikeCount 使用 likes 表）
+      vi.mocked(prisma.like.count).mockResolvedValue(9)
 
       const result = await toggleLike("activity", activityId, userId)
 
@@ -195,7 +209,11 @@ describe("Likes Service", () => {
       vi.mocked(prisma.like.findFirst).mockResolvedValue(null)
 
       // Mock: 文章存在（验证通过）
-      vi.mocked(prisma.post.findFirst).mockResolvedValue({ id: postId } as any)
+      vi.mocked(prisma.post.findFirst).mockResolvedValue({
+        id: postId,
+        authorId: "author-1",
+        author: { id: "author-1", status: UserStatus.ACTIVE, role: Role.USER },
+      } as any)
 
       // Mock: 创建时抛出 P2003（外键约束失败）
       const foreignKeyError = new Prisma.PrismaClientKnownRequestError(
@@ -241,7 +259,11 @@ describe("Likes Service", () => {
       const userId = "user-1"
 
       // Mock: 文章存在
-      vi.mocked(prisma.post.findFirst).mockResolvedValue({ id: postId } as any)
+      vi.mocked(prisma.post.findFirst).mockResolvedValue({
+        id: postId,
+        authorId: "author-1",
+        author: { id: "author-1", status: UserStatus.ACTIVE, role: Role.USER },
+      } as any)
 
       // Mock: 用户未点赞（准备创建）
       vi.mocked(prisma.like.findFirst).mockResolvedValue(null)
@@ -260,6 +282,149 @@ describe("Likes Service", () => {
 
       // 幂等处理：即使冲突也返回已点赞
       expect(result).toEqual({ isLiked: true, count: 5 })
+    })
+
+    it("点赞-取消点赞-再次点赞流程保持计数正确（post）", async () => {
+      const postId = "post-flow"
+      const userId = "user-flow"
+
+      vi.mocked(prisma.like.findFirst)
+        // 初次：未点赞
+        .mockResolvedValueOnce(null)
+        // 第二次：已点赞（准备取消）
+        .mockResolvedValueOnce({
+          id: "like-flow",
+          authorId: userId,
+          postId,
+          activityId: null,
+          createdAt: new Date(),
+        } as any)
+        // 第三次：取消后再次点赞，视为未点赞
+        .mockResolvedValueOnce(null)
+
+      vi.mocked(prisma.post.findFirst).mockResolvedValue({
+        id: postId,
+        authorId: "author-1",
+        author: { id: "author-1", status: UserStatus.ACTIVE, role: Role.USER },
+      } as any)
+
+      vi.mocked(prisma.like.create).mockResolvedValue({} as any)
+      vi.mocked(prisma.like.delete).mockResolvedValue({} as any)
+
+      vi.mocked(prisma.like.count)
+        .mockResolvedValueOnce(1) // 点赞后
+        .mockResolvedValueOnce(0) // 取消后
+        .mockResolvedValueOnce(1) // 再次点赞
+
+      const first = await toggleLike("post", postId, userId)
+      const second = await toggleLike("post", postId, userId)
+      const third = await toggleLike("post", postId, userId)
+
+      expect(first).toEqual({ isLiked: true, count: 1 })
+      expect(second).toEqual({ isLiked: false, count: 0 })
+      expect(third).toEqual({ isLiked: true, count: 1 })
+    })
+
+    it("应该拒绝被封禁用户执行点赞", async () => {
+      const postId = "post-1"
+      const userId = "banned-user"
+
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
+        id: userId,
+        email: `${userId}@example.com`,
+        role: Role.USER,
+        status: UserStatus.BANNED,
+        name: "banned",
+        avatarUrl: null,
+      } as any)
+
+      vi.mocked(prisma.post.findFirst).mockResolvedValue({
+        id: postId,
+        authorId: "author-1",
+        author: { id: "author-1", status: UserStatus.ACTIVE, role: Role.USER },
+      } as any)
+      vi.mocked(prisma.like.findFirst).mockResolvedValue(null)
+
+      await expect(toggleLike("post", postId, userId)).rejects.toBeInstanceOf(
+        InteractionNotAllowedError
+      )
+    })
+
+    it("应该拒绝用户给自己的动态点赞", async () => {
+      const activityId = "activity-self"
+      const userId = "user-self"
+
+      vi.mocked(prisma.like.findFirst).mockResolvedValue(null)
+      vi.mocked(prisma.activity.findFirst).mockResolvedValue({
+        id: activityId,
+        authorId: userId,
+        deletedAt: null,
+        isPinned: false,
+        author: { id: userId, status: UserStatus.ACTIVE, role: Role.USER },
+      } as any)
+
+      await expect(toggleLike("activity", activityId, userId)).rejects.toBeInstanceOf(
+        InteractionNotAllowedError
+      )
+    })
+
+    it("应该拒绝点赞已删除的动态", async () => {
+      const activityId = "activity-deleted"
+      const userId = "user-1"
+
+      vi.mocked(prisma.like.findFirst).mockResolvedValue(null)
+      vi.mocked(prisma.activity.findFirst).mockResolvedValue({
+        id: activityId,
+        authorId: "author-1",
+        deletedAt: new Date(),
+        isPinned: false,
+        author: { id: "author-1", status: UserStatus.ACTIVE, role: Role.USER },
+      } as any)
+
+      await expect(toggleLike("activity", activityId, userId)).rejects.toBeInstanceOf(
+        InteractionNotAllowedError
+      )
+    })
+
+    it("应该拒绝点赞被封禁作者的文章", async () => {
+      const postId = "post-banned-author"
+      const userId = "user-1"
+
+      vi.mocked(prisma.like.findFirst).mockResolvedValue(null)
+      vi.mocked(prisma.post.findFirst).mockResolvedValue({
+        id: postId,
+        authorId: "banned-author",
+        author: { id: "banned-author", status: UserStatus.BANNED, role: Role.USER },
+      } as any)
+
+      await expect(toggleLike("post", postId, userId)).rejects.toBeInstanceOf(
+        InteractionNotAllowedError
+      )
+    })
+
+    it("应该拒绝被封禁用户执行点赞", async () => {
+      const postId = "post-1"
+      const userId = "banned-user"
+
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
+        id: userId,
+        email: `${userId}@example.com`,
+        role: Role.USER,
+        status: UserStatus.BANNED,
+        name: "banned",
+        avatarUrl: null,
+      } as any)
+
+      vi.mocked(prisma.post.findFirst).mockResolvedValue({
+        id: postId,
+        authorId: "author-1",
+        author: { id: "author-1", status: UserStatus.ACTIVE, role: Role.USER },
+      } as any)
+      vi.mocked(prisma.like.findFirst).mockResolvedValue(null)
+
+      await expect(toggleLike("post", postId, userId)).rejects.toBeInstanceOf(
+        InteractionNotAllowedError
+      )
     })
   })
 
@@ -303,16 +468,13 @@ describe("Likes Service", () => {
     it("应该正确获取动态的点赞数（使用冗余计数）", async () => {
       const activityId = "activity-1"
 
-      // Mock: 从 Activity 表读取冗余计数
-      vi.mocked(prisma.activity.findUnique).mockResolvedValue({
-        id: activityId,
-        likesCount: 25,
-      } as any)
+      // Mock: 直接统计点赞表（syncActivityLikeCount 会写回冗余列）
+      vi.mocked(prisma.like.count).mockResolvedValue(25)
 
       const result = await getLikeStatus("activity", activityId)
 
       expect(result).toEqual({ isLiked: false, count: 25 })
-      expect(prisma.like.count).not.toHaveBeenCalled() // 不应该查询 Like 表
+      expect(prisma.like.count).toHaveBeenCalledWith({ where: { activityId } })
     })
   })
 
@@ -576,15 +738,12 @@ describe("Likes Service", () => {
     it("应该从 Activity 表读取冗余计数", async () => {
       const activityId = "activity-1"
 
-      vi.mocked(prisma.activity.findUnique).mockResolvedValue({
-        id: activityId,
-        likesCount: 42,
-      } as any)
+      vi.mocked(prisma.like.count).mockResolvedValue(42)
 
       const count = await getLikeCount("activity", activityId)
 
       expect(count).toBe(42)
-      expect(prisma.like.count).not.toHaveBeenCalled()
+      expect(prisma.like.count).toHaveBeenCalledWith({ where: { activityId } })
     })
 
     it("应该从 Like 表计算文章点赞数", async () => {
@@ -601,7 +760,7 @@ describe("Likes Service", () => {
     it("应该在目标不存在时返回 0", async () => {
       const activityId = "non-existent"
 
-      vi.mocked(prisma.activity.findUnique).mockResolvedValue(null)
+      vi.mocked(prisma.like.count).mockResolvedValue(0)
 
       const count = await getLikeCount("activity", activityId)
 
@@ -677,7 +836,11 @@ describe("Likes Service", () => {
       const userId = "user-1"
 
       // Mock: 文章存在
-      vi.mocked(prisma.post.findFirst).mockResolvedValue({ id: postId } as any)
+      vi.mocked(prisma.post.findFirst).mockResolvedValue({
+        id: postId,
+        authorId: "author-1",
+        author: { id: "author-1", status: UserStatus.ACTIVE, role: Role.USER },
+      } as any)
 
       // Mock: 用户未点赞
       vi.mocked(prisma.like.findFirst).mockResolvedValue(null)
@@ -703,7 +866,11 @@ describe("Likes Service", () => {
       const userId = "user-1"
 
       // Mock: 文章存在
-      vi.mocked(prisma.post.findFirst).mockResolvedValue({ id: postId } as any)
+      vi.mocked(prisma.post.findFirst).mockResolvedValue({
+        id: postId,
+        authorId: "author-1",
+        author: { id: "author-1", status: UserStatus.ACTIVE, role: Role.USER },
+      } as any)
 
       // Mock: 用户未点赞
       vi.mocked(prisma.like.findFirst).mockResolvedValue(null)
@@ -722,7 +889,11 @@ describe("Likes Service", () => {
       const userId = "user-1"
 
       // Mock: 文章存在
-      vi.mocked(prisma.post.findFirst).mockResolvedValue({ id: postId } as any)
+      vi.mocked(prisma.post.findFirst).mockResolvedValue({
+        id: postId,
+        authorId: "author-1",
+        author: { id: "author-1", status: UserStatus.ACTIVE, role: Role.USER },
+      } as any)
 
       // Mock: 用户未点赞（准备创建）
       vi.mocked(prisma.like.findFirst).mockResolvedValue(null)
@@ -771,7 +942,11 @@ describe("Likes Service", () => {
       const likeId = "like-1"
 
       // Mock: 文章存在
-      vi.mocked(prisma.post.findFirst).mockResolvedValue({ id: postId } as any)
+      vi.mocked(prisma.post.findFirst).mockResolvedValue({
+        id: postId,
+        authorId: "author-1",
+        author: { id: "author-1", status: UserStatus.ACTIVE, role: Role.USER },
+      } as any)
 
       // Mock: 用户已点赞（准备删除）
       vi.mocked(prisma.like.findFirst).mockResolvedValue({
@@ -827,7 +1002,11 @@ describe("Likes Service", () => {
       const userId = "user-1"
 
       // Mock: 文章存在
-      vi.mocked(prisma.post.findFirst).mockResolvedValue({ id: postId } as any)
+      vi.mocked(prisma.post.findFirst).mockResolvedValue({
+        id: postId,
+        authorId: "author-1",
+        author: { id: "author-1", status: UserStatus.ACTIVE, role: Role.USER },
+      } as any)
 
       // Mock: 第一次创建成功，后续抛出 P2002（直接 mock prisma.like.create）
       let createCount = 0

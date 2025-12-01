@@ -15,14 +15,17 @@ import {
 } from "react"
 import { useActivities } from "@/hooks/use-activities"
 import { useAuth } from "@/hooks/use-auth"
+import { useRealtimeActivities } from "@/hooks/use-realtime-activities"
 import { ActivityCard } from "@/components/activity-card"
+import { CommentList } from "@/components/activity/comment-list"
 import { LazyActivityCard } from "./lazy-activity-card"
-import { Users, Clock } from "lucide-react"
-import type { ActivityApiResponse, ActivityWithAuthor } from "@/types/activity"
+import { Users } from "lucide-react"
+import type { ActivityApiResponse, ActivityLikeState, ActivityWithAuthor } from "@/types/activity"
 import type { ClientFeatureFlags } from "@/lib/config/client-feature-flags"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 type FeedTab = "latest" | "trending" | "following"
+
 
 interface FeedPageClientProps {
   featureFlags: ClientFeatureFlags
@@ -34,6 +37,7 @@ interface FeedPageClientProps {
     nextCursor: string | null
   }
   initialTab: FeedTab
+  highlightActivityId?: string
 }
 
 const SuggestedUsersCard = dynamic(() => import("./suggested-users-card"), {
@@ -120,7 +124,9 @@ const measureUserTiming = (measureName: string, startLabel: string, endLabel: st
   }
 }
 
-const PostComposer = dynamic(() => import("./post-composer"), {
+const ActivityComposer = dynamic(
+  () => import("@/components/activity/activity-form").then((mod) => mod.ActivityForm),
+  {
   ssr: false,
   loading: () => (
     <Card className="mb-6 animate-pulse">
@@ -150,6 +156,7 @@ export default function FeedPageClient({
   initialActivities,
   initialPagination,
   initialTab,
+  highlightActivityId,
 }: FeedPageClientProps) {
   const [activeTab, setActiveTab] = useState<FeedTab>(initialTab)
   const [isComposerVisible, setComposerVisible] = useState(false)
@@ -159,6 +166,7 @@ export default function FeedPageClient({
 
   // 获取当前用户信息
   const { user } = useAuth()
+  const canPinComposer = user?.role === "ADMIN"
 
   // 使用真实的 Activities API
   const resolvedOrderBy =
@@ -201,6 +209,14 @@ export default function FeedPageClient({
     }
   )
 
+  const [repostedPosts, setRepostedPosts] = useState<Set<string>>(new Set())
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set())
+  const [realtimeActivities, setRealtimeActivities] = useState<ActivityWithAuthor[]>([])
+  const activitiesRef = useRef<ActivityWithAuthor[]>([])
+  const [highlightedActivityIds, setHighlightedActivityIds] = useState<Set<string>>(new Set())
+  const highlightTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const handledHighlightIdRef = useRef<string | null>(null)
+
   useInsertionEffect(() => {
     if (feedMeasurementRecordedRef.current) return
     markUserTiming(PERFORMANCE_LABELS.feedStart)
@@ -239,8 +255,25 @@ export default function FeedPageClient({
     }
   }, [user, activeTab])
 
-  const [repostedPosts, setRepostedPosts] = useState<Set<string>>(new Set())
-  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    activitiesRef.current = activities
+  }, [activities])
+
+  useEffect(() => {
+    return () => {
+      Object.values(highlightTimersRef.current).forEach((timer) => {
+        clearTimeout(timer)
+      })
+    }
+  }, [])
+
+  const activityIds = useMemo(() => new Set(activities.map((a) => a.id)), [activities.length])
+
+  useEffect(() => {
+    setRealtimeActivities((prev) =>
+      prev.filter((activity) => !activityIds.has(activity.id))
+    )
+  }, [activityIds])
 
   const handleRepost = (id: string) => {
     setRepostedPosts((prev) => {
@@ -255,7 +288,6 @@ export default function FeedPageClient({
   }
 
   const handleComment = useCallback((id: string) => {
-    // 展开/收起评论区 - 所有用户都可以查看
     setExpandedComments((prev) => {
       const newSet = new Set(prev)
       if (newSet.has(id)) {
@@ -266,6 +298,176 @@ export default function FeedPageClient({
       return newSet
     })
   }, [])
+
+  const handleLike = useCallback(
+    (_activityId: string, _nextState?: ActivityLikeState) => {
+      refresh()
+    },
+    [refresh]
+  )
+
+  const handleCommentsChange = useCallback(() => {
+    refresh()
+  }, [refresh])
+
+  const triggerHighlight = useCallback((activityId: string) => {
+    setHighlightedActivityIds((prev) => {
+      if (prev.has(activityId)) {
+        return prev
+      }
+      const next = new Set(prev)
+      next.add(activityId)
+      return next
+    })
+
+    if (highlightTimersRef.current[activityId]) {
+      clearTimeout(highlightTimersRef.current[activityId])
+    }
+
+    highlightTimersRef.current[activityId] = setTimeout(() => {
+      setHighlightedActivityIds((prev) => {
+        if (!prev.has(activityId)) {
+          return prev
+        }
+        const next = new Set(prev)
+        next.delete(activityId)
+        return next
+      })
+      delete highlightTimersRef.current[activityId]
+    }, 4000)
+  }, [])
+
+  const clearHighlight = useCallback((activityId: string) => {
+    setHighlightedActivityIds((prev) => {
+      if (!prev.has(activityId)) {
+        return prev
+      }
+      const next = new Set(prev)
+      next.delete(activityId)
+      return next
+    })
+
+    if (highlightTimersRef.current[activityId]) {
+      clearTimeout(highlightTimersRef.current[activityId])
+      delete highlightTimersRef.current[activityId]
+    }
+  }, [])
+
+  const resolveAuthorSnapshot = useCallback(
+    (authorId: string) => {
+      const existing = activitiesRef.current.find((activity) => activity.author?.id === authorId)
+      if (existing?.author) {
+        return existing.author
+      }
+
+      return {
+        id: authorId,
+        name: null,
+        avatarUrl: null,
+        role: "USER" as const,
+      }
+    },
+    []
+  )
+
+  const handleRealtimeActivityInsert = useCallback(
+    (activity: any) => {
+      if (activity.deletedAt) {
+        return
+      }
+
+      const normalized: ActivityWithAuthor = {
+        ...activity,
+        imageUrls: activity.imageUrls ?? [],
+        likesCount: activity.likesCount ?? 0,
+        commentsCount: activity.commentsCount ?? 0,
+        viewsCount: activity.viewsCount ?? 0,
+        author: activity.author ?? resolveAuthorSnapshot(activity.authorId),
+      }
+
+      setRealtimeActivities((prev) => {
+        if (prev.some((item) => item.id === normalized.id)) {
+          return prev
+        }
+        if (activitiesRef.current.some((item) => item.id === normalized.id)) {
+          return prev
+        }
+        return [normalized, ...prev].slice(0, 10)
+      })
+
+      triggerHighlight(normalized.id)
+    },
+    [resolveAuthorSnapshot, triggerHighlight]
+  )
+
+  const handleRealtimeActivityDelete = useCallback(
+    (activityId: string) => {
+      setRealtimeActivities((prev) => prev.filter((activity) => activity.id !== activityId))
+      clearHighlight(activityId)
+
+      if (activitiesRef.current.some((activity) => activity.id === activityId)) {
+        refresh()
+      }
+    },
+    [clearHighlight, refresh]
+  )
+
+  const handleRealtimeActivityUpdate = useCallback(
+    (activity: any) => {
+      if (activity.deletedAt) {
+        handleRealtimeActivityDelete(activity.id)
+        return
+      }
+
+      setRealtimeActivities((prev) => {
+        const index = prev.findIndex((item) => item.id === activity.id)
+        if (index === -1) {
+          return prev
+        }
+
+        const previous = prev[index]
+        const next = [...prev]
+        next[index] = {
+          ...previous,
+          ...activity,
+          imageUrls: activity.imageUrls ?? previous.imageUrls,
+          likesCount:
+            typeof activity.likesCount === "number" ? activity.likesCount : previous.likesCount,
+          commentsCount:
+            typeof activity.commentsCount === "number"
+              ? activity.commentsCount
+              : previous.commentsCount,
+          viewsCount:
+            typeof activity.viewsCount === "number" ? activity.viewsCount : previous.viewsCount,
+          author: previous.author ?? resolveAuthorSnapshot(activity.authorId),
+        }
+        return next
+      })
+
+      if (activitiesRef.current.some((item) => item.id === activity.id)) {
+        refresh()
+      }
+    },
+    [handleRealtimeActivityDelete, refresh, resolveAuthorSnapshot]
+  )
+
+  const {
+    isSubscribed: isRealtimeSubscribed,
+    error: realtimeActivitiesError,
+  } = useRealtimeActivities({
+    onInsert: handleRealtimeActivityInsert,
+    onUpdate: handleRealtimeActivityUpdate,
+    onDelete: handleRealtimeActivityDelete,
+  })
+
+  const handleComposerClose = useCallback(() => {
+    setComposerVisible(false)
+  }, [])
+
+  const handleComposerSuccess = useCallback(() => {
+    setComposerVisible(false)
+    refresh()
+  }, [refresh])
 
   const handleTabChange = useCallback(
     (tab: FeedTab) => {
@@ -279,13 +481,66 @@ export default function FeedPageClient({
   const prefetchComposer = useCallback(() => {
     if (composerPrefetchedRef.current) return
     composerPrefetchedRef.current = true
-    import("./post-composer")
+    import("@/components/activity/activity-form")
   }, [])
 
   const handleOpenComposer = useCallback(() => {
     prefetchComposer()
     setComposerVisible(true)
   }, [prefetchComposer])
+
+  const displayActivities = useMemo(() => {
+    const seen = new Set<string>()
+    const result: ActivityWithAuthor[] = []
+
+    // 实时数据优先
+    for (const activity of realtimeActivities) {
+      if (seen.has(activity.id)) continue
+      seen.add(activity.id)
+      result.push(activity)
+    }
+
+    // 分页数据去重后追加
+    for (const activity of activities) {
+      if (seen.has(activity.id)) continue
+      seen.add(activity.id)
+      result.push(activity)
+    }
+
+    return result
+  }, [realtimeActivities, activities])
+  const realtimeActivityIds = useMemo(
+    () => new Set(realtimeActivities.map((activity) => activity.id)),
+    [realtimeActivities]
+  )
+  const hasDisplayActivities = displayActivities.length > 0
+
+  useEffect(() => {
+    if (!highlightActivityId) return
+    if (handledHighlightIdRef.current === highlightActivityId) return
+
+    const targetExists = displayActivities.some(
+      (activity) => activity.id === highlightActivityId
+    )
+    if (!targetExists) return
+
+    handledHighlightIdRef.current = highlightActivityId
+    triggerHighlight(highlightActivityId)
+
+    const scrollToTarget = () => {
+      const element = document.getElementById(`activity-${highlightActivityId}`)
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "center" })
+      }
+    }
+
+    scrollToTarget()
+    const fallbackTimer = window.setTimeout(scrollToTarget, 150)
+
+    return () => {
+      window.clearTimeout(fallbackTimer)
+    }
+  }, [displayActivities, highlightActivityId, triggerHighlight])
 
   if (isError) {
     return (
@@ -321,7 +576,12 @@ export default function FeedPageClient({
             {user && (
               <div className="mb-6">
                 {isComposerVisible ? (
-                  <PostComposer />
+                  <ActivityComposer
+                    onSuccess={handleComposerSuccess}
+                    onCancel={handleComposerClose}
+                    placeholder="分享你的想法..."
+                    showPinOption={canPinComposer}
+                  />
                 ) : (
                   <Card
                     className="transition-shadow hover:shadow-md"
@@ -378,11 +638,24 @@ export default function FeedPageClient({
                 </TabsList>
               </Tabs>
               {isPending && <p className="text-muted-foreground mt-2 text-sm">内容切换中...</p>}
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                <span>
+                  实时动态：
+                  <span className={isRealtimeSubscribed ? "text-emerald-600" : "text-amber-600"}>
+                    {isRealtimeSubscribed ? "已连接" : "连接中..."}
+                  </span>
+                </span>
+                {realtimeActivitiesError && (
+                  <span className="text-red-500">
+                    订阅失败：{realtimeActivitiesError.message || "请稍后重试"}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Activity Feed */}
             <div className="space-y-4">
-              {isLoading && activities.length === 0 ? (
+              {isLoading && !hasDisplayActivities ? (
                 // 加载状态
                 <div className="space-y-4">
                   {[...Array(3)].map((_, index) => (
@@ -403,7 +676,7 @@ export default function FeedPageClient({
                     </Card>
                   ))}
                 </div>
-              ) : activities.length === 0 ? (
+              ) : !hasDisplayActivities ? (
                 // 空状态 - 区分不同 tab
                 activeTab === "following" ? (
                   <div className="py-12 text-center">
@@ -426,25 +699,59 @@ export default function FeedPageClient({
               ) : (
                 // 真实动态列表
                 <>
-                  {activities.map((activity, index) => (
-                    <div key={activity.id}>
-                      {index === 0 ? (
-                        <ActivityCard
-                          activity={activity}
-                          onComment={handleComment}
-                          showActions={true}
-                          priority
-                        />
-                      ) : (
-                        <LazyActivityCard
-                          activity={activity}
-                          index={index}
-                          onComment={handleComment}
-                          showActions={true}
-                        />
-                      )}
-                    </div>
-                  ))}
+                  {displayActivities.map((activity, index) => {
+                    const isRealtimeItem = realtimeActivityIds.has(activity.id)
+                    const isHighlighted = highlightedActivityIds.has(activity.id)
+                    const wrapperClasses = [
+                      "space-y-3",
+                      "transition-all",
+                      isHighlighted
+                        ? "rounded-xl border border-emerald-300/70 bg-emerald-50/40 p-2 shadow-[0_0_0_1px_rgba(16,185,129,0.25)]"
+                        : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")
+
+                    const isExpanded = expandedComments.has(activity.id)
+
+                    return (
+                      <div
+                        key={activity.id}
+                        id={`activity-${activity.id}`}
+                        className={wrapperClasses}
+                      >
+                        {isRealtimeItem && (
+                          <span className="text-emerald-600 text-xs font-semibold">实时更新</span>
+                        )}
+                        {index === 0 ? (
+                          <ActivityCard
+                            activity={activity}
+                            onLike={handleLike}
+                            onComment={handleComment}
+                            showActions={true}
+                            priority
+                          />
+                        ) : (
+                          <LazyActivityCard
+                            activity={activity}
+                            index={index}
+                            onLike={handleLike}
+                            onComment={handleComment}
+                            showActions={true}
+                          />
+                        )}
+                        {isExpanded && (
+                          <CommentList
+                            activityId={activity.id}
+                            className="mt-2"
+                            showComposer={Boolean(user)}
+                            onCommentAdded={handleCommentsChange}
+                            onCommentDeleted={handleCommentsChange}
+                          />
+                        )}
+                      </div>
+                    )
+                  })}
                 </>
               )}
 

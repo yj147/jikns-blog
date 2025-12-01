@@ -3,15 +3,25 @@ import { getFeatureFlags } from "@/lib/config/client-feature-flags"
 import { getCurrentUser } from "@/lib/auth"
 import { listActivities } from "@/lib/repos/activity-repo"
 import type { ActivityWithAuthor } from "@/types/activity"
+import { signActivityListItems } from "@/lib/storage/signed-url"
 
 const INITIAL_LIMIT = 10
 type FeedTab = "latest" | "trending" | "following"
 
 export const revalidate = 60
 
-export default async function FeedPage() {
+export default async function FeedPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ highlight?: string | string[] }>
+}) {
   const featureFlags = await getFeatureFlags()
   const currentUser = await getCurrentUser()
+  const resolvedParams = await searchParams
+  const highlightParam = resolvedParams?.highlight
+  const highlightActivityId = Array.isArray(highlightParam)
+    ? highlightParam[0]
+    : highlightParam || undefined
 
   const initialTab: FeedTab =
     featureFlags.feedFollowingStrict && currentUser ? "following" : "latest"
@@ -29,6 +39,7 @@ export default async function FeedPage() {
         nextCursor: initialResult.nextCursor,
       }}
       initialTab={initialTab}
+      highlightActivityId={highlightActivityId}
     />
   )
 }
@@ -40,9 +51,10 @@ async function fetchInitialActivities(orderBy: FeedTab, userId: string | null) {
       limit: INITIAL_LIMIT,
       followingUserId: orderBy === "following" ? userId : null,
     })
+    const signed = await signActivityListItems(result.items)
 
     return {
-      activities: result.items as ActivityWithAuthor[],
+      activities: signed as ActivityWithAuthor[],
       hasMore: result.hasMore,
       nextCursor: result.nextCursor ?? null,
       totalCount: result.totalCount,
@@ -57,4 +69,3 @@ async function fetchInitialActivities(orderBy: FeedTab, userId: string | null) {
     }
   }
 }
-

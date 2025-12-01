@@ -15,6 +15,7 @@ import { createUniqueSmartSlug } from "@/lib/utils/slug-english"
 import { logger } from "@/lib/utils/logger"
 import { AuditEventType, auditLogger } from "@/lib/audit-log"
 import { getServerContext } from "@/lib/server-context"
+import { signAvatarUrl } from "@/lib/storage/signed-url"
 
 function resolveErrorCode(error: unknown, fallback: string): string {
   if (error instanceof Error) {
@@ -35,9 +36,14 @@ function resolveErrorCode(error: unknown, fallback: string): string {
     if (
       message.includes("已被使用") ||
       message.includes("已经发布") ||
-      message.includes("尚未发布")
+      message.includes("尚未发布") ||
+      message.includes("占用")
     ) {
       return "CONFLICT"
+    }
+
+    if (message.includes("slug") && !message.includes("占用")) {
+      return "VALIDATION_ERROR"
     }
 
     if (message.includes("不存在")) {
@@ -73,7 +79,7 @@ async function recordPostAudit(params: {
   errorCode?: string
   errorMessage?: string
 }): Promise<void> {
-  const context = getServerContext()
+  const context = await getServerContext()
   const details =
     params.errorCode !== undefined
       ? {
@@ -96,6 +102,45 @@ async function recordPostAudit(params: {
   })
 }
 
+async function resolvePostSlug(
+  title: string,
+  inputSlug?: string
+): Promise<{ slug: string; source: "custom" | "auto" }> {
+  const trimmedSlug = inputSlug?.trim()
+
+  if (trimmedSlug) {
+    const normalizedSlug = trimmedSlug.toLowerCase()
+    const validation = validateSlug(normalizedSlug)
+
+    if (!validation.isValid) {
+      throw new Error(validation.errors[0])
+    }
+
+    const existing = await prisma.post.findUnique({
+      where: { slug: normalizedSlug },
+    })
+
+    if (existing) {
+      throw new Error("Slug 已被占用，请更换其他 URL")
+    }
+
+    return { slug: normalizedSlug, source: "custom" }
+  }
+
+  const autoSlug = await createUniqueSmartSlug(
+    title,
+    async (candidateSlug: string) => {
+      const existing = await prisma.post.findUnique({
+        where: { slug: candidateSlug },
+      })
+      return !!existing
+    },
+    60
+  )
+
+  return { slug: autoSlug, source: "auto" }
+}
+
 // ============================================================================
 // 类型定义 (内联定义避免导出类型冲突)
 // ============================================================================
@@ -105,6 +150,7 @@ interface CreatePostRequest {
   content: string
   excerpt?: string
   published?: boolean
+  slug?: string
   canonicalUrl?: string
   seoTitle?: string
   seoDescription?: string
@@ -186,6 +232,7 @@ interface PostListResponse {
   viewCount: number
   publishedAt: string | null
   createdAt: string
+  contentLength: number
   author: {
     id: string
     name: string | null
@@ -198,6 +245,8 @@ interface PostListResponse {
   }[]
   stats: PostStats
 }
+
+type AdminPostsSearchParams = Omit<PostsSearchParams, "published">
 
 interface ApiError {
   code: string
@@ -287,17 +336,7 @@ export async function createPost(data: CreatePostRequest): Promise<ApiResponse<P
       }
     }
 
-    // 自动生成唯一 slug（智能翻译中文为英文）
-    const slug = await createUniqueSmartSlug(
-      trimmedTitle,
-      async (candidateSlug: string) => {
-        const existing = await prisma.post.findUnique({
-          where: { slug: candidateSlug },
-        })
-        return !!existing
-      },
-      60
-    )
+    const { slug } = await resolvePostSlug(trimmedTitle, data.slug)
 
     const incomingTagNames = Array.isArray(data.tagNames) ? data.tagNames : []
 
@@ -438,8 +477,20 @@ export async function createPost(data: CreatePostRequest): Promise<ApiResponse<P
       },
     }
   } catch (error) {
-    logger.error("创建文章失败", { module: "lib/actions/posts", action: "createPost" }, error)
     const code = resolveErrorCode(error, "AUTH_INSUFFICIENT_PERMISSIONS")
+    logger.error(
+      "创建文章失败",
+      {
+        module: "lib/actions/posts",
+        action: "createPost",
+        titleLength: data.title?.length ?? 0,
+        hasCustomSlug: Boolean(data.slug?.trim()),
+        published: data.published ?? false,
+        errorCode: code,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      },
+      error
+    )
     await recordPostAudit({
       action: "POST_CREATE",
       success: false,
@@ -532,7 +583,18 @@ export async function getPosts(
     const [posts, total] = await Promise.all([
       prisma.post.findMany({
         where,
-        include: {
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          excerpt: true,
+          published: true,
+          isPinned: true,
+          coverImage: true,
+          viewCount: true,
+          publishedAt: true,
+          createdAt: true,
+          content: true, // 需要完整内容来计算长度
           author: {
             select: { id: true, name: true, avatarUrl: true },
           },
@@ -558,8 +620,13 @@ export async function getPosts(
       prisma.post.count({ where }),
     ])
 
+    // 签名头像 URL
+    const signedAvatars = await Promise.all(
+      posts.map((post) => signAvatarUrl(post.author.avatarUrl))
+    )
+
     // 格式化响应数据
-    const data: PostListResponse[] = posts.map((post) => ({
+    const data: PostListResponse[] = posts.map((post, index) => ({
       id: post.id,
       slug: post.slug,
       title: post.title,
@@ -570,13 +637,17 @@ export async function getPosts(
       viewCount: post.viewCount,
       publishedAt: post.publishedAt?.toISOString() || null,
       createdAt: post.createdAt.toISOString(),
-      author: post.author,
+      author: {
+        ...post.author,
+        avatarUrl: signedAvatars[index],
+      },
       tags: post.tags.map((pt) => pt.tag),
       stats: {
         commentsCount: post._count.comments,
         likesCount: post._count.likes,
         bookmarksCount: post._count.bookmarks,
       },
+      contentLength: post.content.length, // 内容长度
     }))
 
     const totalPages = Math.ceil(total / limit)
@@ -617,6 +688,16 @@ export async function getPosts(
       },
     }
   }
+}
+
+/**
+ * 获取管理员视角的文章列表（不过滤发布状态）
+ */
+export async function getPostsForAdmin(
+  params: AdminPostsSearchParams = {}
+): Promise<PaginatedApiResponse<PostListResponse>> {
+  await requireAdmin()
+  return getPosts(params as PostsSearchParams)
 }
 
 /**

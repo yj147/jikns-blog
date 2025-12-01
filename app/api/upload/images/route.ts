@@ -1,9 +1,11 @@
 import { logger } from "@/lib/utils/logger"
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase"
-import { getCurrentUser } from "@/lib/auth"
+import { createRouteHandlerClient } from "@/lib/supabase"
+import { assertPolicy } from "@/lib/auth/session"
 import { createErrorResponse, createSuccessResponse, ErrorCode } from "@/lib/api/unified-response"
-import { validateImageFile, generateFileName } from "@/lib/upload/image-utils"
+import { validateImageFile, generateFileName, formatFileSize } from "@/lib/upload/image-utils"
+import { createSignedUrlIfNeeded } from "@/lib/storage/signed-url"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 // 上传配置
 const uploadConfig = {
@@ -14,49 +16,95 @@ const uploadConfig = {
   bucketName: "activity-images",
 }
 
-// POST /api/upload/images - 批量图片上传
-export async function POST(request: NextRequest) {
-  try {
-    // 用户认证
-    const user = await getCurrentUser()
-    if (!user) {
-      return createErrorResponse(ErrorCode.UNAUTHORIZED, "请先登录")
-    }
+const avatarConfig = {
+  maxFiles: 1,
+  maxSizePerFile: 5 * 1024 * 1024, // 单张5MB
+  pathPrefix: "avatars",
+}
 
-    // 检查用户状态
-    if (user.status !== "ACTIVE") {
-      return createErrorResponse(ErrorCode.FORBIDDEN, "您的账户已被限制，无法上传图片")
+const SIGNED_URL_EXPIRES_IN = 60 * 60 // 1 小时
+
+type UploadPurpose = "default" | "avatar"
+
+function getUploadPurpose(request: NextRequest): UploadPurpose {
+  const purpose = request.nextUrl.searchParams.get("purpose")?.toLowerCase()
+  return purpose === "avatar" ? "avatar" : "default"
+}
+
+function validateAvatarFile(file: File) {
+  if (file.size > avatarConfig.maxSizePerFile) {
+    return {
+      isValid: false,
+      error: `头像大小超过限制（${formatFileSize(avatarConfig.maxSizePerFile)}）`,
+    }
+  }
+
+  return validateImageFile(file)
+}
+
+function buildUploadPath(purpose: UploadPurpose, userId: string, fileName: string) {
+  if (purpose === "avatar") {
+    return `${avatarConfig.pathPrefix}/${userId}/${Date.now()}-${fileName}`
+  }
+
+  return `activities/${userId}/${Date.now()}/${fileName}`
+}
+
+// POST /api/upload/images - 批量图片上传
+async function handlePost(request: NextRequest) {
+  try {
+    const uploadPurpose = getUploadPurpose(request)
+
+    const [activeUser, authError] = await assertPolicy("user-active", buildPolicyContext(request))
+    if (!activeUser) {
+      if (authError?.code === "ACCOUNT_BANNED") {
+        return createErrorResponse(ErrorCode.FORBIDDEN, "您的账户已被限制，无法上传图片")
+      }
+      return createErrorResponse(ErrorCode.UNAUTHORIZED, "请先登录")
     }
 
     // 解析 FormData
     const formData = await request.formData()
-    const files = formData.getAll("files") as File[]
+    const files = formData.getAll("files").filter((item): item is File => item instanceof File)
 
     // 验证文件数量
     if (files.length === 0) {
-      return createErrorResponse(ErrorCode.INVALID_PARAMETERS, "请选择要上传的图片")
-    }
-
-    if (files.length > uploadConfig.maxFiles) {
       return createErrorResponse(
         ErrorCode.INVALID_PARAMETERS,
-        `最多上传${uploadConfig.maxFiles}张图片`
+        uploadPurpose === "avatar" ? "请选择要上传的头像" : "请选择要上传的图片"
       )
+    }
+
+    const maxFiles = uploadPurpose === "avatar" ? avatarConfig.maxFiles : uploadConfig.maxFiles
+    if (files.length > maxFiles) {
+      const message =
+        uploadPurpose === "avatar"
+          ? "头像仅支持单文件上传"
+          : `最多上传${uploadConfig.maxFiles}张图片`
+
+      return createErrorResponse(ErrorCode.INVALID_PARAMETERS, message)
     }
 
     // 验证总文件大小
     const totalSize = files.reduce((sum, file) => sum + file.size, 0)
-    if (totalSize > uploadConfig.maxTotalSize) {
-      return createErrorResponse(ErrorCode.INVALID_PARAMETERS, "文件总大小超过限制（50MB）")
+    const maxTotalSize = uploadPurpose === "avatar" ? avatarConfig.maxSizePerFile : uploadConfig.maxTotalSize
+    if (totalSize > maxTotalSize) {
+      const message =
+        uploadPurpose === "avatar"
+          ? `头像大小超过限制（${formatFileSize(avatarConfig.maxSizePerFile)}）`
+          : "文件总大小超过限制（50MB）"
+
+      return createErrorResponse(ErrorCode.INVALID_PARAMETERS, message)
     }
 
-    const supabase = createClient()
+    const supabase = await createRouteHandlerClient()
 
     // 并行上传所有文件
     const uploadPromises = files.map(async (file, index) => {
       try {
         // 验证单个文件
-        const validation = validateImageFile(file)
+        const validation =
+          uploadPurpose === "avatar" ? validateAvatarFile(file) : validateImageFile(file)
         if (!validation.isValid) {
           return {
             success: false,
@@ -68,10 +116,10 @@ export async function POST(request: NextRequest) {
 
         // 生成存储路径
         const fileName = generateFileName(file, index)
-        const path = `activities/${user.id}/${Date.now()}/${fileName}`
+        const path = buildUploadPath(uploadPurpose, activeUser.id, fileName)
 
         // 上传到 Supabase Storage
-        const { data, error } = await supabase.storage
+        const { error } = await supabase.storage
           .from(uploadConfig.bucketName)
           .upload(path, file, {
             cacheControl: "3600",
@@ -89,14 +137,13 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // 获取公开URL
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from(uploadConfig.bucketName).getPublicUrl(path)
+        const signedUrl = await createSignedUrlIfNeeded(path, SIGNED_URL_EXPIRES_IN)
 
         return {
           success: true,
-          url: publicUrl,
+          url: signedUrl,
+          signedUrl,
+          signedUrlExpiresIn: SIGNED_URL_EXPIRES_IN,
           path,
           index,
           fileName: file.name,
@@ -134,9 +181,13 @@ export async function POST(request: NextRequest) {
     return createSuccessResponse({
       uploaded: successful.length,
       total: files.length,
-      urls: successful.map((r) => r.url),
+      urls: successful
+        .map((r) => r.signedUrl || r.url || null)
+        .filter((item): item is string => Boolean(item)),
       details: successful.map((r) => ({
-        url: r.url,
+        path: r.path,
+        signedUrl: r.signedUrl,
+        signedUrlExpiresIn: r.signedUrlExpiresIn,
         fileName: r.fileName,
         size: r.size,
         index: r.index,
@@ -156,11 +207,11 @@ export async function POST(request: NextRequest) {
 }
 
 // DELETE /api/upload/images - 删除图片
-export async function DELETE(request: NextRequest) {
+async function handleDelete(request: NextRequest) {
   try {
     // 用户认证
-    const user = await getCurrentUser()
-    if (!user) {
+    const [viewer] = await assertPolicy("any", buildPolicyContext(request))
+    if (!viewer) {
       return createErrorResponse(ErrorCode.UNAUTHORIZED, "请先登录")
     }
 
@@ -172,11 +223,14 @@ export async function DELETE(request: NextRequest) {
     }
 
     // 验证路径是否属于当前用户
-    if (!imagePath.startsWith(`activities/${user.id}/`)) {
+    const canDeleteActivities = imagePath.startsWith(`activities/${viewer.id}/`)
+    const canDeleteAvatars = imagePath.startsWith(`${avatarConfig.pathPrefix}/${viewer.id}/`)
+
+    if (!canDeleteActivities && !canDeleteAvatars) {
       return createErrorResponse(ErrorCode.FORBIDDEN, "无权限删除此图片")
     }
 
-    const supabase = createClient()
+    const supabase = await createRouteHandlerClient()
 
     // 删除文件
     const { error } = await supabase.storage.from(uploadConfig.bucketName).remove([imagePath])
@@ -193,5 +247,22 @@ export async function DELETE(request: NextRequest) {
   } catch (error) {
     logger.error("删除图片异常:", error as Error)
     return createErrorResponse(ErrorCode.INTERNAL_ERROR, "服务器内部错误")
+  }
+}
+
+export const POST = withApiResponseMetrics(handlePost)
+export const DELETE = withApiResponseMetrics(handleDelete)
+
+function buildPolicyContext(request: NextRequest) {
+  const ip =
+    request.headers.get("x-forwarded-for") ||
+    request.headers.get("x-real-ip") ||
+    undefined
+  const ua = request.headers.get("user-agent") || undefined
+
+  return {
+    path: request.nextUrl.pathname,
+    ip,
+    ua,
   }
 }

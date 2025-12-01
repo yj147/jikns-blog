@@ -5,8 +5,9 @@
 
 import { NextResponse } from "next/server"
 import { checkDbHealth } from "@/lib/utils/db-health"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
-export async function GET() {
+async function handleGet() {
   try {
     const health = await checkDbHealth()
 
@@ -34,3 +35,5 @@ export async function GET() {
     )
   }
 }
+
+export const GET = withApiResponseMetrics(handleGet)

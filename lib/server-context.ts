@@ -9,9 +9,9 @@ export interface ServerContext {
 
 const REQUEST_ID_HEADERS = ["x-request-id", "x-vercel-request-id", "x-vercel-id", "traceparent"]
 
-export function getServerContext(): ServerContext {
+export async function getServerContext(): Promise<ServerContext> {
   try {
-    const headerStore = headers() as unknown as Awaited<ReturnType<typeof headers>>
+    const headerStore = await headers()
     const requestId =
       REQUEST_ID_HEADERS.map((key) => headerStore.get(key)).find(
         (value) => value && value.length > 0

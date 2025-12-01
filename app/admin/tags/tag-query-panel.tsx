@@ -30,8 +30,8 @@ export function TagQueryPanel({
   onCreateClick,
 }: TagQueryPanelProps) {
   return (
-    <div className="mb-8">
-      <div className="mb-4 flex items-center justify-between">
+    <section className="space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">标签管理</h1>
           <p className="text-muted-foreground mt-2">管理博客文章的标签分类</p>
@@ -42,7 +42,7 @@ export function TagQueryPanel({
         </Button>
       </div>
 
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">总标签数</CardTitle>
@@ -79,6 +79,6 @@ export function TagQueryPanel({
           </SelectContent>
         </Select>
       </div>
-    </div>
+    </section>
   )
 }

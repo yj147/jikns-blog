@@ -69,9 +69,14 @@ async function executeSearchTags(
     }),
   ])
 
+  const items: SearchTagResult[] = tags.map((tag, index) => ({
+    ...tag,
+    rank: offset + index + 1,
+  }))
+
   return {
     total,
-    items: tags,
+    items,
   }
 }
 

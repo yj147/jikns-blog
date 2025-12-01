@@ -115,10 +115,14 @@ export async function GET(request: NextRequest) {
         } catch (syncError) {
           authLogger.error("用户数据同步失败", { userId: session.user.id }, syncError)
 
-          // 同步失败但认证成功，允许登录但显示警告
-          const warningRedirect = validateRedirectUrl(redirectPath) ? redirectPath : "/"
+          // 同步失败，禁止继续登录，提示用户重新尝试
+          const message =
+            syncError instanceof Error ? syncError.message : "用户数据同步失败，请重试"
           return NextResponse.redirect(
-            new URL(`${warningRedirect}?message=login_success_sync_warning`, requestUrl.origin)
+            new URL(
+              `/login?error=sync_failed&message=${encodeURIComponent(message)}`,
+              requestUrl.origin
+            )
           )
         }
       } else {

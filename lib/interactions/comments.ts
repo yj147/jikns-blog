@@ -3,34 +3,31 @@
  * 为文章和动态提供统一的评论功能
  *
  * ============================================================================
- * 软删除可见性策略（设计决策）
+ * 软删除可见性策略（2025-11 更新）
  * ============================================================================
  *
- * 本模块采用"软删除可见（占位符模式）"策略：
+ * 自 2025-11 起，评论采用“软删除隐藏”策略：
  *
  * 1. **核心原则**：
- *    - 软删除的评论对用户可见，显示为 "[该评论已删除]" 占位符
- *    - 保持对话完整性：如果评论有回复，删除后仍显示占位符以维持上下文
- *    - 计数器包含软删除：commentsCount 统计所有评论（含软删除），与用户看到的数量一致
+ *    - 软删除评论会被 `deletedAt` 标记，但不会再向客户端返回
+ *    - API 仍暴露 `isDeleted` 字段用于内部审计
+ *    - commentsCount 仍包含软删除记录，保持与历史数据一致
  *
  * 2. **实现细节**：
- *    - `listComments`：返回所有评论（包括软删除），不过滤 deletedAt
- *    - `formatComment`：将 deletedAt 非空的评论内容替换为占位符，设置 isDeleted=true
- *    - `getCommentCount`：统计所有评论，不过滤 deletedAt
- *    - `deleteComment`：有回复时软删（设置 deletedAt），无回复时硬删（DELETE）
- *    - 数据库触发器：只在 INSERT/DELETE 时更新计数，UPDATE（软删）不影响计数
+ *    - `listComments`：默认过滤 `deletedAt != null` 的记录
+ *    - `formatComment`：只设置 `isDeleted`，不再修改 `content`
+ *    - `deleteComment`：有回复时软删（仅写 `deletedAt`），无回复时硬删
+ *    - 数据库触发器：仍只在 INSERT/DELETE 时更新计数
  *
  * 3. **设计理由**：
- *    - 符合主流平台惯例（Reddit/Twitter/微信）
- *    - 避免"幽灵回复"问题（回复的父评论消失导致上下文丢失）
- *    - 用户体验一致：看到的评论数与计数器显示的数字一致
- *    - 简化前端逻辑：不需要处理评论数量跳变
+ *    - 用户期望删除后彻底消失，避免“占位符”影响体验
+ *    - 仍保留软删除以避免删除有回复的节点导致计数错乱
+ *    - 权限审计依旧可通过 `isDeleted`/`deletedAt` 追踪操作
  *
  * 4. **影响范围**：
- *    - API 响应：软删除评论会出现在列表中，isDeleted=true
- *    - 计数器：Activity.commentsCount 包含软删除评论
- *    - 触发器：软删除（UPDATE deletedAt）不触发计数变更
- *    - 测试用例：期望软删除评论可见（见 tests/integration/comments-service.test.ts:545）
+ *    - API：软删除评论不再出现在列表响应，但 `isDeleted` 字段保留
+ *    - 计数器：`Activity.commentsCount` 继续包含软删除，避免突然跳变
+ *    - 测试：更新 `formatComment` 及列表相关断言以符合新策略
  *
  * ============================================================================
  */
@@ -40,6 +37,8 @@ import { cleanXSS } from "@/lib/security/xss-cleaner"
 import type { Comment, User, Prisma } from "@/lib/generated/prisma"
 import { logger } from "@/lib/utils/logger"
 import type { CommentTargetType } from "@/lib/dto/comments.dto"
+import { notify } from "@/lib/services/notification"
+import { signAvatarUrl } from "@/lib/storage/signed-url"
 
 export enum CommentErrorCode {
   TARGET_NOT_FOUND = "TARGET_NOT_FOUND",
@@ -173,8 +172,8 @@ export async function createComment(data: CreateCommentData): Promise<CommentWit
     const cleanContent = cleanXSS(data.content)
 
     // 验证目标是否存在
-    const targetExists = await validateCommentTarget(data.targetType, data.targetId)
-    if (!targetExists) {
+    const targetOwnerId = await validateCommentTarget(data.targetType, data.targetId)
+    if (!targetOwnerId) {
       throw new CommentServiceError(
         CommentErrorCode.TARGET_NOT_FOUND,
         `${data.targetType} ${data.targetId} not found`,
@@ -227,6 +226,15 @@ export async function createComment(data: CreateCommentData): Promise<CommentWit
       targetId: data.targetId,
       authorId: data.authorId,
     })
+
+    if (targetOwnerId && targetOwnerId !== data.authorId) {
+      await notify(targetOwnerId, "COMMENT", {
+        actorId: data.authorId,
+        commentId: comment.id,
+        postId: data.targetType === "post" ? data.targetId : undefined,
+      })
+    }
+
     return formatComment(comment as PrismaCommentWithAuthor)
   } catch (error) {
     if (error instanceof CommentServiceError) {
@@ -247,7 +255,12 @@ export async function createComment(data: CreateCommentData): Promise<CommentWit
  */
 export async function listComments(
   options: CommentQueryOptions
-): Promise<{ comments: CommentWithAuthor[]; hasMore: boolean; nextCursor?: string }> {
+): Promise<{
+  comments: CommentWithAuthor[]
+  hasMore: boolean
+  nextCursor?: string
+  totalCount: number
+}> {
   try {
     const {
       targetType,
@@ -262,17 +275,48 @@ export async function listComments(
     const isFetchingReplies = !!parentId
     const baseWhere = targetType === "post" ? { postId: targetId } : { activityId: targetId }
 
-    const where: Prisma.CommentWhereInput = isFetchingReplies
-      ? { ...baseWhere, parentId }
-      : { ...baseWhere, parentId: null }
+    const where: Prisma.CommentWhereInput = {
+      ...baseWhere,
+      deletedAt: null,
+      ...(isFetchingReplies ? { parentId } : { parentId: null }),
+    }
+
+    // totalCount 需排除父评论已被软删的“孤儿回复”，否则会虚高（顶层 + 父存活的回复）
+    const [topLevelCount, validReplyCount] = await Promise.all([
+      prisma.comment.count({
+        where: {
+          ...baseWhere,
+          deletedAt: null,
+          parentId: null,
+        },
+      }),
+      prisma.comment.count({
+        where: {
+          ...baseWhere,
+          deletedAt: null,
+          parentId: { not: null },
+          parent: {
+            ...baseWhere,
+            deletedAt: null,
+          },
+        },
+      }),
+    ])
+
+    const totalCount = topLevelCount + validReplyCount
 
     const orderBy: Prisma.CommentOrderByWithRelationInput[] = isFetchingReplies
       ? [{ createdAt: "asc" }, { id: "asc" }]
       : [{ createdAt: "desc" }, { id: "desc" }]
 
+    // 计数必须过滤软删除回复，避免前端展开按钮误判
     const include: Prisma.CommentInclude = {
       _count: {
-        select: { replies: true },
+        select: {
+          replies: {
+            where: { deletedAt: null },
+          },
+        },
       },
     }
 
@@ -310,9 +354,34 @@ export async function listComments(
 
     const nextCursor = hasMore ? comments[comments.length - 1]?.id : undefined
 
-    // 格式化顶层评论
+    // 批量查询未删除回复的实际计数（修复展开回复问题）
+    let actualRepliesCounts: Record<string, number> = {}
+    if (!isFetchingReplies && comments.length > 0) {
+      const commentIds = comments.map((c) => c.id)
+      const repliesCountResult = await prisma.comment.groupBy({
+        by: ["parentId"],
+        where: {
+          parentId: { in: commentIds },
+          deletedAt: null, // 只统计未删除的回复
+        },
+        _count: {
+          id: true,
+        },
+      })
+
+      actualRepliesCounts = commentIds.reduce<Record<string, number>>((acc, id) => {
+        acc[id] = 0
+        return acc
+      }, {})
+
+      repliesCountResult.forEach((item) => {
+        actualRepliesCounts[item.parentId!] = item._count.id
+      })
+    }
+
+    // 格式化顶层评论（使用实际回复计数）
     let commentsWithReplies: CommentWithAuthor[] = (comments as PrismaCommentWithAuthor[]).map(
-      (comment) => formatComment(comment)
+      (comment) => formatComment(comment, actualRepliesCounts[comment.id])
     )
 
     // 如果需要包含回复，批量获取并组装
@@ -321,6 +390,7 @@ export async function listComments(
       const replies = await prisma.comment.findMany({
         where: {
           parentId: { in: commentIds },
+          deletedAt: null,
         },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         include,
@@ -333,15 +403,37 @@ export async function listComments(
       )
     }
 
+    const commentsWithSignedAvatars = await signCommentAuthors(commentsWithReplies)
+
     return {
-      comments: commentsWithReplies,
+      comments: commentsWithSignedAvatars,
       hasMore,
       nextCursor,
+      totalCount,
     }
   } catch (error) {
     logger.error("获取评论列表失败", error)
     throw error
   }
+}
+
+async function signCommentAuthors(
+  comments: CommentWithAuthor[]
+): Promise<CommentWithAuthor[]> {
+  return Promise.all(
+    comments.map(async (comment) => {
+      const signedAvatar = await signAvatarUrl(comment.author?.avatarUrl ?? null)
+      const signedReplies = comment.replies ? await signCommentAuthors(comment.replies) : undefined
+
+      return {
+        ...comment,
+        author: comment.author
+          ? { ...comment.author, avatarUrl: signedAvatar ?? comment.author.avatarUrl }
+          : null,
+        replies: signedReplies,
+      }
+    })
+  )
 }
 
 /**
@@ -391,7 +483,7 @@ export async function deleteComment(
 
     if (hasReplies) {
       // 软删除：如果有回复，只设置 deletedAt
-      // formatComment 函数会在读取时自动替换 content 为 "[该评论已删除]"
+      // 列表查询会过滤掉 deletedAt 非空的记录
       // 数据库触发器会自动更新 activity.commentsCount
       await prisma.comment.update({
         where: { id: commentId },
@@ -432,19 +524,19 @@ export async function deleteComment(
 async function validateCommentTarget(
   targetType: CommentTargetType,
   targetId: string
-): Promise<boolean> {
+): Promise<string | null> {
   if (targetType === "post") {
     const post = await prisma.post.findUnique({
       where: { id: targetId },
-      select: { id: true },
+      select: { id: true, authorId: true },
     })
-    return !!post
+    return post?.authorId ?? null
   } else {
     const activity = await prisma.activity.findUnique({
       where: { id: targetId },
-      select: { id: true },
+      select: { id: true, authorId: true },
     })
-    return !!activity
+    return activity?.authorId ?? null
   }
 }
 
@@ -544,22 +636,27 @@ function resolveCommentTarget(comment: PrismaCommentWithAuthor): {
 }
 
 /**
- * 格式化评论对象，处理软删除占位符
+ * 格式化评论对象
  *
  * 将数据库评论记录转换为 API DTO：
- * - 软删除评论：替换 content 为 "[该评论已删除]"，设置 isDeleted=true
- * - 正常评论：保持原始 content，设置 isDeleted=false
+ * - 软删除评论：仅设置 isDeleted=true（保留原始 content 以供审计）
+ * - 正常评论：保持原始 content，isDeleted=false
  *
+ * @param comment 数据库评论记录
+ * @param actualRepliesCount 可选的实际回复计数（未删除的），覆盖 _count.replies
  * @internal 导出仅用于单元测试
  */
-export function formatComment(comment: PrismaCommentWithAuthor): CommentWithAuthor {
+export function formatComment(
+  comment: PrismaCommentWithAuthor,
+  actualRepliesCount?: number
+): CommentWithAuthor {
   const isDeleted = Boolean(comment.deletedAt)
   const { targetType, targetId } = resolveCommentTarget(comment)
-  const repliesCount = comment._count?.replies ?? 0
+  // 优先使用传入的实际计数，否则使用 Prisma _count
+  const repliesCount = actualRepliesCount ?? comment._count?.replies ?? 0
 
   return {
     ...comment,
-    content: isDeleted ? "[该评论已删除]" : comment.content,
     author: comment.author ?? null,
     isDeleted,
     targetType,

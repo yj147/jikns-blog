@@ -66,29 +66,50 @@ async function fetchCurrentPostTags(
 export async function recalculateTagCounts(tx: Transaction, tagIds: string[]): Promise<void> {
   if (!tagIds || tagIds.length === 0) return
 
-  const uniqueTagIds = Array.from(new Set(tagIds))
+  const uniqueTagIds = Array.from(
+    new Set(tagIds.filter((id): id is string => Boolean(id && id.trim())))
+  )
+  if (uniqueTagIds.length === 0) return
 
-  const tagIdsArray = Prisma.sql`ARRAY[${Prisma.join(uniqueTagIds)}]`
+  const [publishedCounts, activityCounts] = await Promise.all([
+    tx.postTag.groupBy({
+      by: ["tagId"],
+      where: {
+        tagId: { in: uniqueTagIds },
+        post: { published: true },
+      },
+      _count: {
+        _all: true,
+      },
+    }),
+    tx.activityTag.groupBy({
+      by: ["tagId"],
+      where: {
+        tagId: { in: uniqueTagIds },
+        activity: { deletedAt: null },
+      },
+      _count: {
+        _all: true,
+      },
+    }),
+  ])
 
-  await tx.$executeRaw`
-    WITH target_tags AS (
-      SELECT id
-      FROM tags
-      WHERE id = ANY(${tagIdsArray})
-      FOR UPDATE
-    ),
-    tag_counts AS (
-      SELECT tt.id, COALESCE(COUNT(p.id), 0)::int AS count
-      FROM target_tags tt
-      LEFT JOIN post_tags pt ON pt."tagId" = tt.id
-      LEFT JOIN posts p ON p.id = pt."postId" AND p.published = true
-      GROUP BY tt.id
+  const postsCountMap = new Map(publishedCounts.map((entry) => [entry.tagId, entry._count._all]))
+  const activitiesCountMap = new Map(
+    activityCounts.map((entry) => [entry.tagId, entry._count._all])
+  )
+
+  await Promise.all(
+    uniqueTagIds.map((tagId) =>
+      tx.tag.update({
+        where: { id: tagId },
+        data: {
+          postsCount: postsCountMap.get(tagId) ?? 0,
+          activitiesCount: activitiesCountMap.get(tagId) ?? 0,
+        },
+      })
     )
-    UPDATE tags AS t
-    SET "postsCount" = COALESCE(tc.count, 0)
-    FROM tag_counts tc
-    WHERE t.id = tc.id;
-  `
+  )
 }
 
 interface SyncPostTagsParams {

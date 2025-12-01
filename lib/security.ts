@@ -433,12 +433,18 @@ export class RateLimiter {
 
   /**
    * 检查速率限制
+   * 注意：在 E2E 测试环境中（设置 DISABLE_RATE_LIMIT=1）跳过限制
    */
   static checkRateLimit(
     identifier: string,
     limit: number = 100,
     windowMs: number = 15 * 60 * 1000 // 15 分钟
   ): boolean {
+    // E2E 测试环境跳过速率限制
+    if (process.env.DISABLE_RATE_LIMIT === "1") {
+      return true
+    }
+
     const now = Date.now()
     const record = this.requests.get(identifier)
 

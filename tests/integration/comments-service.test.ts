@@ -27,6 +27,7 @@ vi.mock("@/lib/prisma", () => {
     update: vi.fn(),
     delete: vi.fn(),
     count: vi.fn(),
+    groupBy: vi.fn(),
   }
 
   const post = {
@@ -322,6 +323,11 @@ describe("评论服务测试", () => {
       limit: 10,
     }
 
+    beforeEach(() => {
+      vi.mocked(prisma.comment.count).mockResolvedValue(0)
+      vi.mocked(prisma.comment.groupBy).mockResolvedValue([] as any)
+    })
+
     it("应该获取文章的顶级评论列表", async () => {
       const mockComments = [
         {
@@ -356,6 +362,9 @@ describe("评论服务测试", () => {
         },
       ]
 
+      vi.mocked(prisma.comment.count)
+        .mockResolvedValueOnce(mockComments.length)
+        .mockResolvedValueOnce(0)
       vi.mocked(prisma.comment.findMany).mockResolvedValue(mockComments as any)
 
       const result = await listComments(baseQueryOptions)
@@ -364,6 +373,7 @@ describe("评论服务测试", () => {
         where: {
           postId: "post-1",
           parentId: null,
+          deletedAt: null,
         },
         take: 11,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -378,7 +388,30 @@ describe("评论服务测试", () => {
             },
           },
           _count: {
-            select: { replies: true },
+            select: {
+              replies: {
+                where: { deletedAt: null },
+              },
+            },
+          },
+        },
+      })
+
+      expect(prisma.comment.count).toHaveBeenNthCalledWith(1, {
+        where: {
+          postId: "post-1",
+          deletedAt: null,
+          parentId: null,
+        },
+      })
+      expect(prisma.comment.count).toHaveBeenNthCalledWith(2, {
+        where: {
+          postId: "post-1",
+          deletedAt: null,
+          parentId: { not: null },
+          parent: {
+            postId: "post-1",
+            deletedAt: null,
           },
         },
       })
@@ -389,6 +422,7 @@ describe("评论服务测试", () => {
       expect(result.comments[0].isDeleted).toBe(false)
       expect(result.comments[0].author?.email).toBe("user1@example.com")
       expect(result.comments[0]).toMatchObject({ targetType: "post", targetId: "post-1" })
+      expect(result.totalCount).toBe(2)
     })
 
     it("应该支持游标分页", async () => {
@@ -401,6 +435,9 @@ describe("评论服务测试", () => {
         createdAt: new Date(2024, 0, 11 - i),
       }))
 
+      vi.mocked(prisma.comment.count)
+        .mockResolvedValueOnce(mockComments.length)
+        .mockResolvedValueOnce(0)
       vi.mocked(prisma.comment.findMany).mockResolvedValue(mockComments as any)
 
       const result = await listComments({
@@ -413,6 +450,7 @@ describe("评论服务测试", () => {
         where: {
           postId: "post-1",
           parentId: null,
+          deletedAt: null,
         },
         take: 11,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -420,7 +458,11 @@ describe("评论服务测试", () => {
         skip: 1,
         include: {
           _count: {
-            select: { replies: true },
+            select: {
+              replies: {
+                where: { deletedAt: null },
+              },
+            },
           },
         },
       })
@@ -432,6 +474,7 @@ describe("评论服务测试", () => {
       expect(result.hasMore).toBe(true)
       expect(result.nextCursor).toBe("comment-9")
       expect(result.comments.every((item) => item.author === null)).toBe(true)
+      expect(result.totalCount).toBe(11)
     })
 
     it("应该包含回复（includeReplies=true）", async () => {
@@ -483,6 +526,9 @@ describe("评论服务测试", () => {
         },
       ]
 
+      vi.mocked(prisma.comment.count)
+        .mockResolvedValueOnce(mockTopComments.length)
+        .mockResolvedValueOnce(mockReplies.length)
       vi.mocked(prisma.comment.findMany)
         .mockResolvedValueOnce(mockTopComments as any)
         .mockResolvedValueOnce(mockReplies as any)
@@ -497,6 +543,7 @@ describe("评论服务测试", () => {
         where: {
           postId: "post-1",
           parentId: null,
+          deletedAt: null,
         },
         take: 11,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -511,7 +558,11 @@ describe("评论服务测试", () => {
             },
           },
           _count: {
-            select: { replies: true },
+            select: {
+              replies: {
+                where: { deletedAt: null },
+              },
+            },
           },
         },
       })
@@ -520,6 +571,7 @@ describe("评论服务测试", () => {
       expect(prisma.comment.findMany).toHaveBeenNthCalledWith(2, {
         where: {
           parentId: { in: ["comment-1"] },
+          deletedAt: null,
         },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         include: {
@@ -533,7 +585,11 @@ describe("评论服务测试", () => {
             },
           },
           _count: {
-            select: { replies: true },
+            select: {
+              replies: {
+                where: { deletedAt: null },
+              },
+            },
           },
         },
       })
@@ -541,34 +597,23 @@ describe("评论服务测试", () => {
       expect(result.comments).toHaveLength(1)
       expect(result.comments[0].replies).toHaveLength(2)
       expect(result.comments[0].replies?.[0].isDeleted).toBe(false)
+      expect(result.totalCount).toBe(3)
     })
 
-    it("应该返回软删除的评论并标记 isDeleted", async () => {
-      const mockDeletedComment = [
-        {
-          id: "deleted-comment",
-          content: "原始内容",
-          authorId: "user-9",
-          postId: "post-1",
-          parentId: null,
-          deletedAt: new Date("2024-02-01"),
-          author: {
-            id: "user-9",
-            name: "User 9",
-            email: "user9@example.com",
-            avatarUrl: null,
-            role: "USER",
-          },
-        },
-      ]
+    it("应该过滤掉软删除的评论", async () => {
+      vi.mocked(prisma.comment.findMany).mockResolvedValue([])
 
-      vi.mocked(prisma.comment.findMany).mockResolvedValue(mockDeletedComment as any)
+      await listComments(baseQueryOptions)
 
-      const result = await listComments(baseQueryOptions)
-
-      expect(result.comments).toHaveLength(1)
-      expect(result.comments[0].isDeleted).toBe(true)
-      expect(result.comments[0].content).toBe("[该评论已删除]")
+      expect(prisma.comment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            postId: baseQueryOptions.targetId,
+            parentId: null,
+            deletedAt: null,
+          }),
+        })
+      )
     })
 
     it("应该处理动态评论查询", async () => {
@@ -584,6 +629,7 @@ describe("评论服务测试", () => {
         where: {
           activityId: "activity-1",
           parentId: null,
+          deletedAt: null,
         },
         take: 21,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -598,7 +644,11 @@ describe("评论服务测试", () => {
             },
           },
           _count: {
-            select: { replies: true },
+            select: {
+              replies: {
+                where: { deletedAt: null },
+              },
+            },
           },
         },
       })

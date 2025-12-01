@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/actions/auth"
 import { apiLogger } from "@/lib/utils/logger"
 import { createErrorResponse, ErrorCode } from "@/lib/api/unified-response"
 import { generateRequestId } from "@/lib/auth/session"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 /**
  * 获取用户完整资料（需鉴权）
@@ -20,7 +21,7 @@ import { generateRequestId } from "@/lib/auth/session"
  * - 鉴权：只有本人或管理员可访问
  * - PII 保护：email, role, lastLoginAt, socialLinks 仅授权用户可见
  */
-export async function GET(
+async function handleGet(
   request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
@@ -115,3 +116,5 @@ export async function GET(
     })
   }
 }
+
+export const GET = withApiResponseMetrics(handleGet)

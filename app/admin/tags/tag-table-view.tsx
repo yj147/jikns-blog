@@ -78,10 +78,10 @@ export function TagTableView({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>标签</TableHead>
-                  <TableHead>Slug</TableHead>
+                  <TableHead>名称</TableHead>
                   <TableHead className="text-center">文章数</TableHead>
-                  <TableHead>创建时间</TableHead>
+                  <TableHead className="text-center">动态数</TableHead>
+                  <TableHead className="text-center">颜色</TableHead>
                   <TableHead className="text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
@@ -89,21 +89,26 @@ export function TagTableView({
                 {tags.map((tag) => (
                   <TableRow key={tag.id}>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        {tag.color && (
-                          <div className="h-4 w-4 rounded" style={{ backgroundColor: tag.color }} />
-                        )}
+                      <div className="space-y-1">
                         <span className="font-medium">{tag.name}</span>
+                        <code className="text-muted-foreground block text-xs">{tag.slug}</code>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <code className="text-muted-foreground text-sm">{tag.slug}</code>
                     </TableCell>
                     <TableCell className="text-center">
                       <Badge variant="secondary">{tag.postsCount}</Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {new Date(tag.createdAt).toLocaleDateString("zh-CN")}
+                    <TableCell className="text-center">
+                      <Badge variant="secondary">{tag.activitiesCount ?? 0}</Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {tag.color ? (
+                        <div className="inline-flex items-center justify-center gap-2">
+                          <div className="h-4 w-4 rounded" style={{ backgroundColor: tag.color }} />
+                          <span className="text-muted-foreground text-xs">{tag.color}</span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">

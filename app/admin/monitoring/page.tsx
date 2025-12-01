@@ -10,7 +10,7 @@ import { MonitoringDashboard } from "@/components/admin/monitoring-dashboard"
 // import { useEnhancedAuth } from '@/hooks/use-enhanced-auth' // 暂时禁用
 import { useAuth } from "@/app/providers/auth-provider"
 import { LoadingIndicator } from "@/components/ui/loading-indicator"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { AlertTriangle } from "lucide-react"
 
 export default function MonitoringPage() {
@@ -36,7 +36,7 @@ export default function MonitoringPage() {
 
   if (isLoading || !authChecked) {
     return (
-      <div className="container mx-auto py-8">
+      <div className="flex justify-center py-12">
         <LoadingIndicator variant="spinner" size="lg" message="验证权限中..." />
       </div>
     )
@@ -44,8 +44,8 @@ export default function MonitoringPage() {
 
   if (!isAdmin) {
     return (
-      <div className="container mx-auto py-8">
-        <Card>
+      <div className="flex justify-center">
+        <Card className="w-full max-w-xl">
           <CardContent className="p-8">
             <div className="text-center">
               <AlertTriangle className="mx-auto mb-4 h-12 w-12 text-red-500" />
@@ -63,8 +63,12 @@ export default function MonitoringPage() {
   }
 
   return (
-    <div className="container mx-auto py-8">
+    <section className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold">监控中心</h1>
+        <p className="text-muted-foreground">实时洞察系统健康、性能与审计事件</p>
+      </div>
       <MonitoringDashboard />
-    </div>
+    </section>
   )
 }

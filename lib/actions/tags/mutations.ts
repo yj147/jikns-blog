@@ -3,8 +3,8 @@
 import { z } from "zod"
 
 import type { ApiResponse as UnifiedApiResponse } from "@/lib/api/unified-response"
-import { Prisma } from "@/lib/generated/prisma"
 import { prisma } from "@/lib/prisma"
+import { recalculateTagCounts } from "@/lib/repos/tag-repo"
 import { normalizeTagSlug } from "@/lib/utils/tag"
 import { logger } from "@/lib/utils/logger"
 import { TagNameSchema } from "@/lib/validation/tag"
@@ -43,7 +43,7 @@ const UpdateTagSchema = z.object({
 
 export type UpdateTagData = z.infer<typeof UpdateTagSchema>
 
-type TagAuditAction = "TAG_CREATE" | "TAG_UPDATE" | "TAG_DELETE"
+type TagAuditAction = "TAG_CREATE" | "TAG_UPDATE" | "TAG_DELETE" | "TAG_MERGE"
 
 async function recordTagAudit(params: {
   action: TagAuditAction
@@ -54,7 +54,7 @@ async function recordTagAudit(params: {
   errorCode?: string
   errorMessage?: string
 }) {
-  const context = getServerContext()
+  const context = await getServerContext()
   const details = {
     ...(params.tagId ? { tagId: params.tagId } : {}),
     ...(params.slug ? { slug: params.slug } : {}),
@@ -148,6 +148,7 @@ export async function createTag(data: CreateTagData): Promise<ApiResponse<{ tag:
         description: description || null,
         color: color || null,
         postsCount: 0,
+        activitiesCount: 0,
       },
       select: {
         id: true,
@@ -156,6 +157,7 @@ export async function createTag(data: CreateTagData): Promise<ApiResponse<{ tag:
         description: true,
         color: true,
         postsCount: true,
+        activitiesCount: true,
         createdAt: true,
       },
     })
@@ -301,6 +303,7 @@ export async function updateTag(
         description: true,
         color: true,
         postsCount: true,
+        activitiesCount: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -393,7 +396,11 @@ export async function deleteTag(tagId: string): Promise<ApiResponse<{ message: s
 
     slugForAudit = existingTag.slug
 
-    await prisma.tag.delete({ where: { id: tagId } })
+    await prisma.$transaction(async (tx) => {
+      await tx.postTag.deleteMany({ where: { tagId } })
+      await tx.activityTag.deleteMany({ where: { tagId } })
+      await tx.tag.delete({ where: { id: tagId } })
+    })
 
     logger.info(`标签已删除: ${existingTag.name} (${existingTag.id})`)
 
@@ -423,6 +430,151 @@ export async function deleteTag(tagId: string): Promise<ApiResponse<{ message: s
       errorCode: response.error?.code,
       errorMessage:
         response.error?.message || (error instanceof Error ? error.message : "删除标签失败"),
+    })
+
+    return response
+  }
+}
+
+/**
+ * 将 source 标签合并到 target 标签，迁移文章与动态关联并刷新计数
+ */
+export async function mergeTags(
+  sourceTagId: string,
+  targetTagId: string
+): Promise<ApiResponse<{ tag: TagData }>> {
+  "use server"
+  let adminId: string | undefined
+  let sourceSlug: string | undefined
+  let targetSlug: string | undefined
+
+  try {
+    const admin = await enforceTagMutationGuards()
+    adminId = admin.id
+
+    if (!sourceTagId || !targetTagId) {
+      const response = createErrorResponse("VALIDATION_ERROR", "源标签与目标标签ID均不能为空")
+      await recordTagAudit({
+        action: "TAG_MERGE",
+        adminId,
+        success: false,
+        errorCode: response.error?.code,
+        errorMessage: response.error?.message,
+      })
+      return response
+    }
+
+    if (sourceTagId === targetTagId) {
+      const response = createErrorResponse("VALIDATION_ERROR", "无法将标签合并到自身")
+      await recordTagAudit({
+        action: "TAG_MERGE",
+        adminId,
+        success: false,
+        errorCode: response.error?.code,
+        errorMessage: response.error?.message,
+      })
+      return response
+    }
+
+    const tags = await prisma.tag.findMany({
+      where: { id: { in: [sourceTagId, targetTagId] } },
+      select: { id: true, name: true, slug: true },
+    })
+
+    const sourceTag = tags.find((tag) => tag.id === sourceTagId)
+    const targetTag = tags.find((tag) => tag.id === targetTagId)
+
+    if (!sourceTag || !targetTag) {
+      const response = createErrorResponse("NOT_FOUND", "源标签或目标标签不存在")
+      await recordTagAudit({
+        action: "TAG_MERGE",
+        adminId,
+        tagId: sourceTagId,
+        success: false,
+        errorCode: response.error?.code,
+        errorMessage: response.error?.message,
+      })
+      return response
+    }
+
+    sourceSlug = sourceTag.slug
+    targetSlug = targetTag.slug
+
+    const mergedTag = await prisma.$transaction(async (tx) => {
+      const sourcePostIds = await tx.postTag.findMany({
+        where: { tagId: sourceTagId },
+        select: { postId: true },
+      })
+      const sourceActivityIds = await tx.activityTag.findMany({
+        where: { tagId: sourceTagId },
+        select: { activityId: true },
+      })
+
+      await tx.postTag.deleteMany({ where: { tagId: sourceTagId } })
+      if (sourcePostIds.length > 0) {
+        await tx.postTag.createMany({
+          data: sourcePostIds.map(({ postId }) => ({ postId, tagId: targetTagId })),
+          skipDuplicates: true,
+        })
+      }
+
+      await tx.activityTag.deleteMany({ where: { tagId: sourceTagId } })
+      if (sourceActivityIds.length > 0) {
+        await tx.activityTag.createMany({
+          data: sourceActivityIds.map(({ activityId }) => ({ activityId, tagId: targetTagId })),
+          skipDuplicates: true,
+        })
+        await tx.tag.update({
+          where: { id: targetTagId },
+          data: { activitiesCount: { increment: sourceActivityIds.length } },
+        })
+      }
+
+      await tx.tag.delete({ where: { id: sourceTagId } })
+      await recalculateTagCounts(tx, [targetTagId])
+
+      return tx.tag.findUnique({
+        where: { id: targetTagId },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          description: true,
+          color: true,
+          postsCount: true,
+          activitiesCount: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      })
+    })
+
+    if (!mergedTag) {
+      throw new Error("合并后未找到目标标签")
+    }
+
+    revalidateTagCaches()
+    if (sourceSlug) revalidateTagDetail(sourceSlug)
+    if (targetSlug) revalidateTagDetail(targetSlug)
+
+    await recordTagAudit({
+      action: "TAG_MERGE",
+      adminId,
+      tagId: mergedTag.id,
+      slug: mergedTag.slug,
+      success: true,
+    })
+
+    return createSuccessResponse({ tag: mergedTag })
+  } catch (error) {
+    const response = handleTagMutationError(error, "合并标签")
+
+    await recordTagAudit({
+      action: "TAG_MERGE",
+      adminId,
+      success: false,
+      errorCode: response.error?.code,
+      errorMessage: response.error?.message || (error instanceof Error ? error.message : undefined),
     })
 
     return response

@@ -20,32 +20,29 @@ import {
   createSecurityContext,
   validateSecurityHeaders,
 } from "@/lib/security/middleware"
+import { generateRequestId } from "@/lib/utils/request-id"
 
-// 权限缓存配置
-interface UserPermissionCache {
-  user: any
-  timestamp: number
-}
-
-const permissionCache = new Map<string, UserPermissionCache>()
-const CACHE_DURATION = 5 * 60 * 1000 // 5分钟缓存
+// 中间件只负责认证，不做角色鉴权。角色检查交给 Server Component / API。
 
 /**
  * 路径权限配置
  */
 const PATH_PERMISSIONS = {
-  // 管理员专用路径
-  admin: [
+  // 需要认证的路径（仅校验是否登录，角色交由上层处理）
+  // 注意：/profile 不在此列表中，因为 /profile/{userId} 需要支持匿名访问公开资料
+  // /profile (当前用户) 在页面服务端组件中自行处理认证检查
+  authenticated: [
+    "/settings",
+    "/api/user",
     "/admin",
     "/admin/dashboard",
     "/admin/users",
     "/admin/posts",
     "/admin/settings",
+    "/admin/feeds",
     "/api/admin",
+    "/api/admin/feeds",
   ],
-
-  // 需要认证的路径
-  authenticated: ["/profile", "/settings", "/api/user"],
 
   // 公开路径（无需认证）
   public: [
@@ -78,52 +75,23 @@ function matchesPath(pathname: string, patterns: readonly string[]): boolean {
   })
 }
 
-/**
- * 获取用户权限信息（简化版本）
- * 注意：中间件中无法使用 Prisma，基于邮箱识别管理员
- */
-async function getUserPermissions(userId: string, supabaseUser: any = null): Promise<any> {
-  const now = Date.now()
-  const cached = permissionCache.get(userId)
+const METRICS_EXCLUDED_PATHS = ["/api/admin/monitoring", "/api/admin/metrics"] as const
 
-  // 检查缓存是否有效
-  if (cached && now - cached.timestamp < CACHE_DURATION) {
-    return cached.user
-  }
-
-  // 基于邮箱识别管理员（临时方案）
-  const adminEmails = ["admin@example.com", "1483864379@qq.com"] // 可以通过环境变量配置
-  const userEmail = supabaseUser?.email || ""
-  const isAdmin = adminEmails.includes(userEmail)
-  const userRole = isAdmin ? "ADMIN" : supabaseUser?.user_metadata?.role || "USER"
-
-  if (isAdmin) {
-    console.log("中间件: 检测到管理员邮箱，设置角色为 ADMIN:", userEmail)
-  } else {
-    console.log("中间件: 普通用户，使用 Supabase metadata 权限检查, role:", userRole)
-  }
-
-  const basicUser = {
-    id: userId,
-    role: userRole,
-    status: "ACTIVE", // 默认状态
-    lastLoginAt: new Date(),
-  }
-
-  // 更新缓存
-  permissionCache.set(userId, {
-    user: basicUser,
-    timestamp: now,
-  })
-
-  return basicUser
+function isApiMetricsTarget(pathname: string): boolean {
+  if (!(pathname === "/api" || pathname.startsWith("/api/"))) return false
+  return !METRICS_EXCLUDED_PATHS.some(
+    (excludedPath) =>
+      pathname === excludedPath || pathname.startsWith(excludedPath + "/")
+  )
 }
 
-/**
- * 清除用户权限缓存
- */
-function clearUserPermissionCache(userId: string) {
-  permissionCache.delete(userId)
+function decideMetricsSample(existingValue: string | null): string {
+  if (existingValue !== null) return existingValue
+
+  const rateValue = Number(process.env.METRICS_SAMPLE_RATE ?? "1")
+  const rate = Number.isFinite(rateValue) ? Math.min(Math.max(rateValue, 0), 1) : 1
+
+  return Math.random() < rate ? "1" : "0"
 }
 
 /**
@@ -217,11 +185,29 @@ function getStatusCode(reason: string): number {
 export async function middleware(request: NextRequest) {
   const startTime = performance.now()
   const pathname = request.nextUrl.pathname
+  const isMetricsPath = isApiMetricsTarget(pathname)
+  const requestId = request.headers.get("x-request-id") ?? generateRequestId()
+  const traceStart = request.headers.get("x-trace-start") ?? Date.now().toString()
+  const metricsSample = isMetricsPath ? decideMetricsSample(request.headers.get("x-metrics-sample")) : undefined
+  const forwardedHeaders = new Headers(request.headers)
+  forwardedHeaders.set("x-request-id", requestId)
+  forwardedHeaders.set("x-trace-start", traceStart)
+  if (metricsSample !== undefined) {
+    forwardedHeaders.set("x-metrics-sample", metricsSample)
+  }
+  const attachTraceHeaders = (response: NextResponse) => {
+    response.headers.set("x-request-id", requestId)
+    response.headers.set("x-trace-start", traceStart)
+    if (metricsSample !== undefined) {
+      response.headers.set("x-metrics-sample", metricsSample)
+    }
+    return response
+  }
 
   // Phase 1 任务 1.2：公开路径直接返回，避免不必要的 Supabase/Auth/审计逻辑
   if (matchesPath(pathname, PATH_PERMISSIONS.public)) {
-    const response = NextResponse.next()
-    return setSecurityHeaders(response)
+    const response = NextResponse.next({ request: { headers: forwardedHeaders } })
+    return attachTraceHeaders(setSecurityHeaders(response))
   }
 
   try {
@@ -243,14 +229,14 @@ export async function middleware(request: NextRequest) {
 
     if (securityCheckResult) {
       // 安全检查失败，返回相应的错误响应
-      return securityCheckResult
+      return attachTraceHeaders(securityCheckResult)
     }
 
     // 安全检查已在 SecurityMiddleware.processSecurityChecks() 中完成
     // 移除重复的速率限制检查以避免双重消耗配额
 
     // 创建 Supabase 客户端
-    const response = NextResponse.next()
+    const response = NextResponse.next({ request: { headers: forwardedHeaders } })
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -280,7 +266,7 @@ export async function middleware(request: NextRequest) {
       if (userError) {
         if (!isSupabaseSessionMissingError(userError)) {
           console.error("中间件用户验证错误:", userError)
-          return createUnauthorizedResponse(request, "AUTHENTICATION_REQUIRED")
+          return attachTraceHeaders(createUnauthorizedResponse(request, "AUTHENTICATION_REQUIRED"))
         }
       } else {
         user = fetchedUser
@@ -288,55 +274,30 @@ export async function middleware(request: NextRequest) {
     } catch (error) {
       if (!isSupabaseSessionMissingError(error)) {
         console.error("中间件用户验证异常:", error)
-        return createUnauthorizedResponse(request, "AUTHENTICATION_REQUIRED")
+        return attachTraceHeaders(createUnauthorizedResponse(request, "AUTHENTICATION_REQUIRED"))
       }
     }
 
-    // 检查是否需要认证
+    // 检查是否需要认证（/admin 仅要求登录，角色校验由 Server Component / API 负责）
     const requiresAuth = matchesPath(pathname, PATH_PERMISSIONS.authenticated)
-    const requiresAdmin = matchesPath(pathname, PATH_PERMISSIONS.admin)
 
-    if (!user && (requiresAuth || requiresAdmin)) {
+    if (!user && requiresAuth) {
       // 未认证用户访问需认证路径
       const isApiRequest = pathname.startsWith("/api/")
 
       if (isApiRequest) {
         // API 请求返回错误状态码
-        return createUnauthorizedResponse(request, "AUTHENTICATION_REQUIRED")
+        return attachTraceHeaders(createUnauthorizedResponse(request, "AUTHENTICATION_REQUIRED"))
       } else {
         // 页面请求重定向到登录页
         const loginUrl = new URL("/login", request.url)
         loginUrl.searchParams.set("redirect", pathname)
-        return createRedirectResponse(loginUrl.toString(), request)
+        return attachTraceHeaders(createRedirectResponse(loginUrl.toString(), request))
       }
     }
 
-    // 如果有用户，验证用户权限
-    if (user) {
-      // 清除权限缓存以获取最新权限（临时解决方案）
-      clearUserPermissionCache(user.id)
-
-      const userWithPermissions = await getUserPermissions(user.id, user)
-
-      if (!userWithPermissions) {
-        // 数据库中找不到用户记录
-        return createUnauthorizedResponse(request, "AUTHENTICATION_REQUIRED")
-      }
-
-      // 检查用户状态
-      if (userWithPermissions.status === "BANNED") {
-        clearUserPermissionCache(userWithPermissions.id)
-        return createUnauthorizedResponse(request, "ACCOUNT_BANNED")
-      }
-
-      // 检查管理员权限
-      if (requiresAdmin && userWithPermissions.role !== "ADMIN") {
-        return createUnauthorizedResponse(request, "INSUFFICIENT_PERMISSIONS")
-      }
-
-      // 注意：中间件中跳过数据库更新操作
-      // TODO: 在 Server Actions 或 API 路由中实现用户登录时间更新
-    }
+    // 中间件保持最小职责：仅验证登录状态、附加安全头部
+    // 角色权限检查由 Server Components 和 API 路由通过 lib/permissions.ts 处理
 
     // 性能日志（仅在开发环境）
     if (process.env.NODE_ENV === "development") {
@@ -348,7 +309,7 @@ export async function middleware(request: NextRequest) {
     }
 
     // 应用安全头部
-    return setSecurityHeaders(response)
+    return attachTraceHeaders(setSecurityHeaders(response))
   } catch (error) {
     console.error("中间件处理错误:", error)
 
@@ -359,18 +320,22 @@ export async function middleware(request: NextRequest) {
 
     // 对于错误情况，返回服务不可用响应
     if (request.nextUrl.pathname.startsWith("/api/")) {
-      return NextResponse.json(
-        {
-          error: "服务暂时不可用",
-          code: "SERVICE_UNAVAILABLE",
-          timestamp: new Date().toISOString(),
-        },
-        { status: 500 }
+      return attachTraceHeaders(
+        NextResponse.json(
+          {
+            error: "服务暂时不可用",
+            code: "SERVICE_UNAVAILABLE",
+            timestamp: new Date().toISOString(),
+          },
+          { status: 500 }
+        )
       )
     }
 
     // 页面请求重定向到错误页
-    return createRedirectResponse("/unauthorized?reason=service_unavailable", request)
+    return attachTraceHeaders(
+      createRedirectResponse("/unauthorized?reason=service_unavailable", request)
+    )
   }
 }
 

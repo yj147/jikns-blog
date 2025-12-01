@@ -69,7 +69,7 @@ export function BlogPostCard({ post, index = 0 }: BlogPostCardProps) {
                   {formatRelativeTime(post.publishedAt)}
                 </span>
                 <Clock className="ml-2 h-3 w-3" />
-                <span>{calculateReadTime(post.excerpt)}</span>
+                <span>{calculateReadTime(post.contentLength)}</span>
               </div>
             </div>
           </div>
@@ -105,8 +105,9 @@ export function BlogPostCard({ post, index = 0 }: BlogPostCardProps) {
                     <Badge
                       variant="secondary"
                       className={`hover:bg-primary hover:text-primary-foreground cursor-pointer text-xs transition-colors ${
-                        tag.color || generateTagColor(tag.name)
+                        !tag.color ? generateTagColor(tag.name) : ""
                       }`}
+                      style={tag.color ? { backgroundColor: tag.color, color: "#ffffff" } : undefined}
                     >
                       {tag.name}
                     </Badge>

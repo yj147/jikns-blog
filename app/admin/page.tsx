@@ -98,35 +98,32 @@ export default function AdminDashboard() {
   }, [loadStats])
 
   return (
-    <div className="bg-background min-h-screen">
-
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="mb-1 text-3xl font-bold">管理后台</h1>
-            <p className="text-muted-foreground">实时掌握用户、内容与动态运行状况</p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Button variant="outline" asChild>
-              <Link href="/admin/settings">
-                <Shield className="mr-2 h-4 w-4" /> 系统设置
-              </Link>
-            </Button>
-            <Button onClick={loadStats} variant="secondary" disabled={state.loading}>
-              <RefreshCw className="mr-2 h-4 w-4" /> 刷新数据
-            </Button>
-          </div>
+    <section className="space-y-8">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">管理后台</h1>
+          <p className="text-muted-foreground mt-1">实时掌握用户、内容与动态运行状况</p>
         </div>
-
-        {state.loading ? (
-          <DashboardSkeleton />
-        ) : state.error ? (
-          <ErrorState message={state.error} onRetry={loadStats} />
-        ) : state.stats ? (
-          <DashboardContent stats={state.stats} />
-        ) : null}
+        <div className="flex flex-wrap gap-3">
+          <Button variant="outline" asChild>
+            <Link href="/admin/settings">
+              <Shield className="mr-2 h-4 w-4" /> 系统设置
+            </Link>
+          </Button>
+          <Button onClick={loadStats} variant="secondary" disabled={state.loading}>
+            <RefreshCw className="mr-2 h-4 w-4" /> 刷新数据
+          </Button>
+        </div>
       </div>
-    </div>
+
+      {state.loading ? (
+        <DashboardSkeleton />
+      ) : state.error ? (
+        <ErrorState message={state.error} onRetry={loadStats} />
+      ) : state.stats ? (
+        <DashboardContent stats={state.stats} />
+      ) : null}
+    </section>
   )
 }
 
@@ -240,7 +237,7 @@ function DashboardContent({ stats }: { stats: AdminStats }) {
                 <div className="mt-3 flex gap-4 text-sm text-muted-foreground">
                   <span>评论 {post.comments}</span>
                   <span>点赞 {post.likes}</span>
-                  <span>{new Date(post.createdAt).toLocaleDateString()}</span>
+                  <span>{new Date(post.createdAt).toLocaleDateString("zh-CN")}</span>
                 </div>
               </div>
             ))}
@@ -269,7 +266,7 @@ function DashboardContent({ stats }: { stats: AdminStats }) {
       </section>
 
       <p className="text-muted-foreground text-xs">
-        数据更新时间：{new Date(stats.generatedAt).toLocaleString()}
+        数据更新时间：{new Date(stats.generatedAt).toLocaleString("zh-CN", { hour12: false })}
       </p>
     </div>
   )
@@ -315,7 +312,7 @@ function RecentActivityItem({
         <div className="flex items-center justify-between">
           <p className="text-sm font-medium">{activity.authorName ?? "匿名用户"}</p>
           <span className="text-muted-foreground text-xs">
-            {new Date(activity.createdAt).toLocaleString()}
+            {new Date(activity.createdAt).toLocaleString("zh-CN", { hour12: false })}
           </span>
         </div>
         <p className="text-sm text-muted-foreground">{activity.content}</p>

@@ -14,6 +14,7 @@ import bcrypt from "bcryptjs"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/database"
 import type { Session } from "@supabase/supabase-js"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 // 登录请求验证 Schema
 const LoginSchema = z.object({
@@ -22,7 +23,7 @@ const LoginSchema = z.object({
   redirectTo: z.string().optional(),
 })
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const clientIP =
     request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown"
 
@@ -231,7 +232,7 @@ function extractSessionTokens(session: Session | null) {
 }
 
 // 不支持的方法
-export async function GET() {
+async function handleGet() {
   return NextResponse.json(
     {
       success: false,
@@ -241,6 +242,9 @@ export async function GET() {
     { status: 405 }
   )
 }
+
+export const POST = withApiResponseMetrics(handlePost)
+export const GET = withApiResponseMetrics(handleGet)
 
 function isInvalidCredentialsError(error: any): boolean {
   if (!error) return false

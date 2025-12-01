@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
+  // 🔒 安全检查：仅开发环境可访问调试端点
+  if (process.env.NODE_ENV !== 'development') {
+    return NextResponse.json(
+      { error: 'Not available in production' },
+      { status: 404 }
+    )
+  }
+
   try {
     console.log('🔍 [DEBUG] 开始测试 getCurrentUser...')
 
@@ -48,3 +57,5 @@ export async function GET(request: NextRequest) {
     }, { status: 500 })
   }
 }
+
+export const GET = withApiResponseMetrics(handleGet)

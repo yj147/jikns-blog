@@ -7,8 +7,12 @@ import { createRouteHandlerClient } from "@/lib/supabase"
 import { prisma } from "@/lib/prisma"
 import { NextResponse } from "next/server"
 import { authLogger } from "@/lib/utils/logger"
+import { syncUserFromAuth, isConfiguredAdminEmail } from "@/lib/auth"
+import { notificationPreferencesSchema, privacySettingsSchema } from "@/types/user-settings"
+import { signAvatarUrl } from "@/lib/storage/signed-url"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
-export async function GET() {
+async function handleGet() {
   try {
     const supabase = await createRouteHandlerClient()
 
@@ -22,12 +26,18 @@ export async function GET() {
       return NextResponse.json({ error: "未授权访问" }, { status: 401 })
     }
 
+    // 优先同步 Supabase 数据到数据库，保证 name/avatar 最新
+    try {
+      await syncUserFromAuth(authUser)
+    } catch (syncError) {
+      authLogger.error("同步用户资料失败", { userId: authUser.id }, syncError)
+    }
+
     // 尝试从数据库获取用户信息
     let user = null
     let dbError = null
 
     try {
-      // 从数据库获取用户的完整信息
       user = await prisma.user.findUnique({
         where: { id: authUser.id },
         select: {
@@ -37,6 +47,10 @@ export async function GET() {
           avatarUrl: true,
           bio: true,
           socialLinks: true,
+          location: true,
+          phone: true,
+          notificationPreferences: true,
+          privacySettings: true,
           role: true,
           status: true,
           createdAt: true,
@@ -44,59 +58,56 @@ export async function GET() {
         },
       })
 
-      // 如果用户不存在，自动创建用户记录（适用于首次OAuth登录）
       if (!user) {
-        authLogger.info("用户不存在，自动创建用户记录", {
-          userId: authUser.id,
-          email: authUser.email,
-        })
-        authLogger.debug("用户元数据", {
-          userId: authUser.id,
-          metadata: authUser.user_metadata,
-        })
-        user = await prisma.user.create({
-          data: {
-            id: authUser.id,
-            email: authUser.email || "",
-            name: authUser.user_metadata?.name || authUser.user_metadata?.full_name || null,
-            avatarUrl: authUser.user_metadata?.avatar_url || null,
-            role: "USER",
-            status: "ACTIVE",
-            lastLoginAt: new Date(),
-          },
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            avatarUrl: true,
-            bio: true,
-            socialLinks: true,
-            role: true,
-            status: true,
-            createdAt: true,
-            lastLoginAt: true,
-          },
-        })
-        authLogger.info("用户创建成功", { userId: user.id })
+        authLogger.warn("数据库未找到用户，使用认证信息回退", { userId: authUser.id })
       }
     } catch (dbErrorCaught) {
       authLogger.error("获取用户信息时数据库操作失败", { userId: authUser.id }, dbErrorCaught)
       dbError = dbErrorCaught
+    }
 
-      // 如果数据库连接失败，使用 Supabase 认证信息作为回退
+    const metadata = authUser.user_metadata || {}
+    const fallbackName =
+      metadata.full_name || metadata.name || metadata.user_name || authUser.email?.split("@")[0] || null
+    const fallbackAvatar = metadata.avatar_url || metadata.picture || null
+
+    const normalizedNotificationPreferences = notificationPreferencesSchema.parse(
+      user?.notificationPreferences ?? {}
+    )
+    const normalizedPrivacySettings = privacySettingsSchema.parse(user?.privacySettings ?? {})
+
+    if (!user) {
       user = {
         id: authUser.id,
         email: authUser.email || "",
-        name: authUser.user_metadata?.name || authUser.user_metadata?.full_name || null,
-        avatarUrl: authUser.user_metadata?.avatar_url || null,
+        name: fallbackName,
+        avatarUrl: fallbackAvatar,
         bio: null,
         socialLinks: null,
-        role: "USER",
+        location: null,
+        phone: null,
+        notificationPreferences: normalizedNotificationPreferences,
+        privacySettings: normalizedPrivacySettings,
+        role: isConfiguredAdminEmail(authUser.email) ? "ADMIN" : "USER",
         status: "ACTIVE",
         createdAt: new Date(),
         lastLoginAt: new Date(),
       }
-      authLogger.warn("使用认证信息作为回退用户数据", { userId: authUser.id })
+    } else {
+      user = {
+        ...user,
+        name: user.name || fallbackName,
+        // avatarUrl 完全使用数据库值，syncUserFromAuth 已处理首次登录时的初始化
+        avatarUrl: user.avatarUrl,
+        notificationPreferences: normalizedNotificationPreferences,
+        privacySettings: normalizedPrivacySettings,
+      }
+    }
+
+    const avatarSignedUrl = await signAvatarUrl(user.avatarUrl || fallbackAvatar)
+    if (avatarSignedUrl) {
+      user.avatarUrl = avatarSignedUrl
+      ;(user as any).avatarSignedUrl = avatarSignedUrl
     }
 
     // 组合认证信息和业务信息
@@ -125,3 +136,5 @@ export async function GET() {
     return NextResponse.json({ error: "服务器错误" }, { status: 500 })
   }
 }
+
+export const GET = withApiResponseMetrics(handleGet)

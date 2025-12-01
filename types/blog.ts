@@ -45,6 +45,7 @@ export interface PostListItem {
   author: PostAuthor
   tags: PostTag[]
   stats: PostStats
+  contentLength: number // 内容长度（用于计算阅读时间）
 }
 
 // 完整文章类型（用于文章详情页）

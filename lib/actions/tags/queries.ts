@@ -26,6 +26,7 @@ export interface TagData {
   description: string | null
   color: string | null
   postsCount: number
+  activitiesCount: number
   createdAt: Date
   updatedAt?: Date
 }
@@ -109,6 +110,7 @@ const fetchTagsFromDatabase = async (options: NormalizedGetTagsOptions) => {
         description: true,
         color: true,
         postsCount: true,
+        activitiesCount: true,
         createdAt: true,
       },
     }),
@@ -158,6 +160,7 @@ const fetchTagDetail = unstable_cache(
         description: true,
         color: true,
         postsCount: true,
+        activitiesCount: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -280,17 +283,18 @@ async function fetchPopularTagsFromDatabase(limit: number): Promise<TagData[]> {
       postsCount: "desc",
     },
     take: limit,
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      description: true,
-      color: true,
-      postsCount: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  })
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        description: true,
+        color: true,
+        postsCount: true,
+        activitiesCount: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    })
 }
 
 /**
@@ -339,17 +343,18 @@ async function searchTagsFromDatabase(sanitizedQuery: string, limit: number): Pr
       postsCount: "desc",
     },
     take: limit,
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      description: true,
-      color: true,
-      postsCount: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  })
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        description: true,
+        color: true,
+        postsCount: true,
+        activitiesCount: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    })
 }
 
 /**

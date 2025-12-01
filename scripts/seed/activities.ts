@@ -244,6 +244,7 @@ export async function seedFeedScenario(prisma: PrismaClient, context: FeedSeedCo
         description: tag.name,
         color: tag.color,
         postsCount: 0,
+        activitiesCount: 0,
         updatedAt: new Date("2025-02-01T00:00:00.000Z"),
       },
     })
@@ -277,62 +278,68 @@ export async function seedFeedScenario(prisma: PrismaClient, context: FeedSeedCo
     const author = userMap.get(blueprint.authorEmail.toLowerCase())
     if (!author) continue
 
-    const activity = await prisma.activity.create({
-      data: {
-        id: blueprint.id,
-        authorId: author.id,
-        content: blueprint.content,
-        imageUrls: blueprint.imageUrls,
-        isPinned: blueprint.isPinned,
-        createdAt: blueprint.createdAt,
-        updatedAt: blueprint.createdAt,
-        viewsCount: blueprint.viewsCount,
-        likesCount: blueprint.likesBy.length,
-        commentsCount: blueprint.comments.length,
-      },
+    await prisma.$transaction(async (tx) => {
+      const activity = await tx.activity.create({
+        data: {
+          id: blueprint.id,
+          authorId: author.id,
+          content: blueprint.content,
+          imageUrls: blueprint.imageUrls,
+          isPinned: blueprint.isPinned,
+          createdAt: blueprint.createdAt,
+          updatedAt: blueprint.createdAt,
+          viewsCount: blueprint.viewsCount,
+          likesCount: blueprint.likesBy.length,
+          commentsCount: blueprint.comments.length,
+        },
+      })
+
+      for (const slug of blueprint.tags) {
+        const tag = tagMap.get(slug)
+        if (!tag) continue
+        await tx.activityTag.create({
+          data: {
+            activityId: activity.id,
+            tagId: tag.id,
+          },
+        })
+        await tx.tag.update({
+          where: { id: tag.id },
+          data: { activitiesCount: { increment: 1 } },
+        })
+      }
+
+      for (const likerEmail of blueprint.likesBy) {
+        const liker = userMap.get(likerEmail.toLowerCase())
+        if (!liker) continue
+        await tx.like.create({
+          data: {
+            id: randomUUID(),
+            authorId: liker.id,
+            activityId: activity.id,
+            createdAt: blueprint.createdAt,
+          },
+        })
+      }
+
+      for (const comment of blueprint.comments) {
+        const commenter = userMap.get(comment.authorEmail.toLowerCase())
+        if (!commenter) continue
+        await tx.comment.create({
+          data: {
+            id: randomUUID(),
+            content: comment.content,
+            authorId: commenter.id,
+            activityId: activity.id,
+            createdAt: comment.createdAt,
+            updatedAt: comment.createdAt,
+          },
+        })
+      }
     })
 
-    for (const slug of blueprint.tags) {
-      const tag = tagMap.get(slug)
-      if (!tag) continue
-      await prisma.activityTag.create({
-        data: {
-          activityId: activity.id,
-          tagId: tag.id,
-        },
-      })
-    }
-
-    for (const likerEmail of blueprint.likesBy) {
-      const liker = userMap.get(likerEmail.toLowerCase())
-      if (!liker) continue
-      await prisma.like.create({
-        data: {
-          id: randomUUID(),
-          authorId: liker.id,
-          activityId: activity.id,
-          createdAt: blueprint.createdAt,
-        },
-      })
-      likeCount += 1
-    }
-
-    for (const comment of blueprint.comments) {
-      const commenter = userMap.get(comment.authorEmail.toLowerCase())
-      if (!commenter) continue
-      await prisma.comment.create({
-        data: {
-          id: randomUUID(),
-          content: comment.content,
-          authorId: commenter.id,
-          activityId: activity.id,
-          createdAt: comment.createdAt,
-          updatedAt: comment.createdAt,
-        },
-      })
-      commentCount += 1
-    }
-
+    likeCount += blueprint.likesBy.length
+    commentCount += blueprint.comments.length
     activityCount += 1
   }
 

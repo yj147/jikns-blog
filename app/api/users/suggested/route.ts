@@ -10,11 +10,12 @@ import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/utils/logger"
 import { assertPolicy, generateRequestId } from "@/lib/auth/session"
 import { auditLogger, getClientIP, getClientUserAgent } from "@/lib/audit-log"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 /**
  * 获取推荐用户列表
  */
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const requestId = generateRequestId()
   const ip = getClientIP(request) ?? undefined
   const ua = getClientUserAgent(request) ?? undefined
@@ -160,3 +161,5 @@ export async function GET(request: NextRequest) {
     return handleApiError(error)
   }
 }
+
+export const GET = withApiResponseMetrics(handleGet)

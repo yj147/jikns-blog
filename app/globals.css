@@ -1,3 +1,9 @@
+/*
+ * [全局样式警告]
+ * - 禁止在此处添加任何 outline/ring/border 的全局 reset（例：* { outline: none; }）。
+ * - 详细规范见 docs/css-guidelines.md。
+ * - base layer 仅负责主题 token 和安全继承（颜色、字号变量），不做交互覆盖。
+ */
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -114,9 +120,15 @@
 }
 
 @layer base {
+  /*
+   * Keep global reset minimal: only inherit border color so components control their own
+   * outlines/borders. The previous outline-on-everything rule polluted layouts with
+   * unexpected outlines and border rendering across the admin pages.
+   */
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-geist-sans), var(--font-manrope), -apple-system, BlinkMacSystemFont,

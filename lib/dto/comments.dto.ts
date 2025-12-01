@@ -43,7 +43,7 @@ export const CommentAuthorSchema = z.object({
   id: flexibleIdSchema,
   name: z.string().min(1).nullable(),
   email: z.string().email(),
-  avatarUrl: z.string().url().nullable(),
+  avatarUrl: z.string().nullable(),
   role: z.enum(["USER", "ADMIN"]),
 })
 

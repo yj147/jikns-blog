@@ -225,6 +225,7 @@ describe("Comments Rate Limiting Integration", () => {
         comments: [],
         hasMore: false,
         nextCursor: null,
+        totalCount: 0,
       })
 
       // Make multiple GET requests

@@ -8,14 +8,17 @@ import { withApiAuth, createSuccessResponse, createErrorResponse } from "@/lib/a
 import { prisma } from "@/lib/prisma"
 import { XSSProtection } from "@/lib/security"
 import type { User } from "@/lib/generated/prisma"
+import { UserStatus, Role } from "@/lib/generated/prisma"
+import { ActivityPermissions } from "@/lib/permissions/activity-permissions"
 import { logger } from "@/lib/utils/logger"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 /**
  * 处理点赞/取消点赞
  */
-async function handleLikeHandler(request: NextRequest, user: User) {
+async function handleLikeHandler(request: NextRequest, user: User, parsedBody?: any) {
   try {
-    const body = await request.json()
+    const body = parsedBody ?? (await request.json())
     const { targetType, targetId, action } = body
 
     // 验证输入
@@ -31,20 +34,74 @@ async function handleLikeHandler(request: NextRequest, user: User) {
       return createErrorResponse("不支持的目标类型", "UNSUPPORTED_TARGET_TYPE", 400)
     }
 
-    // 验证目标是否存在
-    let target = null
+    // 验证目标是否存在并进行权限校验
     if (targetType === "POST") {
-      target = await prisma.post.findUnique({
+      const post = await prisma.post.findUnique({
         where: { id: targetId, published: true },
+        select: {
+          id: true,
+          authorId: true,
+          published: true,
+          author: {
+            select: {
+              id: true,
+              status: true,
+            },
+          },
+        },
       })
-    } else if (targetType === "ACTIVITY") {
-      target = await prisma.activity.findUnique({
-        where: { id: targetId },
-      })
-    }
 
-    if (!target) {
-      return createErrorResponse("目标内容不存在", "TARGET_NOT_FOUND", 404)
+      if (!post) {
+        return createErrorResponse("目标内容不存在", "TARGET_NOT_FOUND", 404)
+      }
+
+      if (post.authorId === user.id) {
+        return createErrorResponse("不能给自己的内容点赞", "CANNOT_LIKE_SELF", 400)
+      }
+
+      if (post.author?.status && post.author.status !== UserStatus.ACTIVE) {
+        return createErrorResponse("作者状态异常，无法点赞", "AUTHOR_INACTIVE", 403)
+      }
+    } else {
+      const activity = await prisma.activity.findUnique({
+        where: { id: targetId, deletedAt: null },
+        select: {
+          id: true,
+          authorId: true,
+          deletedAt: true,
+          isPinned: true,
+          author: {
+            select: {
+              id: true,
+              status: true,
+              role: true,
+            },
+          },
+        },
+      })
+
+      if (!activity) {
+        return createErrorResponse("目标内容不存在", "TARGET_NOT_FOUND", 404)
+      }
+
+      const permissionSubject = {
+        id: activity.id,
+        authorId: activity.authorId,
+        deletedAt: activity.deletedAt,
+        isPinned: activity.isPinned ?? false,
+        author: {
+          id: activity.author?.id ?? activity.authorId,
+          status: activity.author?.status ?? UserStatus.ACTIVE,
+          role: activity.author?.role ?? Role.USER,
+        },
+      }
+
+      if (!ActivityPermissions.canLike(user, permissionSubject)) {
+        const code = user.id === activity.authorId ? "CANNOT_LIKE_SELF" : "LIKE_NOT_ALLOWED"
+        const message =
+          code === "CANNOT_LIKE_SELF" ? "不能给自己的内容点赞" : "当前动态无法点赞"
+        return createErrorResponse(message, code, code === "CANNOT_LIKE_SELF" ? 400 : 403)
+      }
     }
 
     // 检查是否已经点赞
@@ -125,9 +182,9 @@ async function handleLikeHandler(request: NextRequest, user: User) {
 /**
  * 处理关注/取消关注
  */
-async function handleFollowHandler(request: NextRequest, user: User) {
+async function handleFollowHandler(request: NextRequest, user: User, parsedBody?: any) {
   try {
-    const body = await request.json()
+    const body = parsedBody ?? (await request.json())
     const { targetUserId, action } = body
 
     // 验证输入
@@ -226,9 +283,9 @@ async function handleFollowHandler(request: NextRequest, user: User) {
 /**
  * 处理收藏/取消收藏
  */
-async function handleBookmarkHandler(request: NextRequest, user: User) {
+async function handleBookmarkHandler(request: NextRequest, user: User, parsedBody?: any) {
   try {
-    const body = await request.json()
+    const body = parsedBody ?? (await request.json())
     const { postId, action } = body
 
     // 验证输入
@@ -324,18 +381,19 @@ async function interactionHandler(request: NextRequest, user: User) {
 
   switch (type) {
     case "like":
-      return handleLikeHandler(request, user)
+      return handleLikeHandler(request, user, body)
     case "follow":
-      return handleFollowHandler(request, user)
+      return handleFollowHandler(request, user, body)
     case "bookmark":
-      return handleBookmarkHandler(request, user)
+      return handleBookmarkHandler(request, user, body)
     default:
       return createErrorResponse("不支持的互动类型", "UNSUPPORTED_INTERACTION_TYPE", 400)
   }
 }
 
 // 导出 HTTP 方法处理器
-export const POST = withApiAuth(interactionHandler, "auth")
+const postHandler = withApiAuth(interactionHandler, "auth")
+export const POST = withApiResponseMetrics(postHandler)
 
 // 处理 CORS 预检请求
 export async function OPTIONS() {

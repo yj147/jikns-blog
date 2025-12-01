@@ -150,6 +150,30 @@ export function PostCard({
     [post.coverImage]
   )
 
+  const deleteDialog =
+    onDelete ? (
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              删除后文章将无法恢复，确定要删除文章「{post.title}」吗？
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isLoading}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isLoading}
+            >
+              {isLoading ? "删除中..." : "确认删除"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    ) : null
+
   // 公共展示模式
   if (variant === "public") {
     return (
@@ -251,91 +275,94 @@ export function PostCard({
   // 紧凑模式
   if (variant === "compact") {
     return (
-      <div
-        className={cn("hover:bg-muted/50 flex items-center gap-4 rounded-lg border p-3", className)}
-      >
-        <div className="min-w-0 flex-1">
-          <div className="mb-1 flex items-center gap-2">
-            <Link
-              href={`/blog/${post.slug}`}
-              className="hover:text-primary truncate font-medium transition-colors"
-            >
-              {post.title}
-            </Link>
-            <div className="flex items-center gap-1">
-              {post.isPinned && (
-                <Badge variant="destructive">
-                  <Pin className="h-3 w-3" />
+      <>
+        <div
+          className={cn("hover:bg-muted/50 flex items-center gap-4 rounded-lg border p-3", className)}
+        >
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 flex items-center gap-2">
+              <Link
+                href={`/blog/${post.slug}`}
+                className="hover:text-primary truncate font-medium transition-colors"
+              >
+                {post.title}
+              </Link>
+              <div className="flex items-center gap-1">
+                {post.isPinned && (
+                  <Badge variant="destructive">
+                    <Pin className="h-3 w-3" />
+                  </Badge>
+                )}
+                <Badge variant={post.isPublished ? "default" : "secondary"}>
+                  {post.isPublished ? "已发布" : "草稿"}
                 </Badge>
-              )}
-              <Badge variant={post.isPublished ? "default" : "secondary"}>
-                {post.isPublished ? "已发布" : "草稿"}
-              </Badge>
+              </div>
             </div>
+            <p className="text-muted-foreground truncate text-sm">{formatDate(post.updatedAt)}</p>
           </div>
-          <p className="text-muted-foreground truncate text-sm">{formatDate(post.updatedAt)}</p>
-        </div>
 
-        {(onEdit || onDelete || onTogglePin || onTogglePublish) && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {onEdit && (
-                <DropdownMenuItem onClick={() => onEdit?.(post)}>
-                  <Edit className="mr-2 h-4 w-4" />
-                  编辑
-                </DropdownMenuItem>
-              )}
-              {onTogglePin && (
-                <DropdownMenuItem onClick={handleTogglePin}>
-                  {post.isPinned ? (
-                    <>
-                      <PinOff className="mr-2 h-4 w-4" />
-                      取消置顶
-                    </>
-                  ) : (
-                    <>
-                      <Pin className="mr-2 h-4 w-4" />
-                      置顶文章
-                    </>
-                  )}
-                </DropdownMenuItem>
-              )}
-              {onTogglePublish && (
-                <DropdownMenuItem onClick={handleTogglePublish}>
-                  {post.isPublished ? (
-                    <>
-                      <FileText className="mr-2 h-4 w-4" />
-                      设为草稿
-                    </>
-                  ) : (
-                    <>
-                      <Globe className="mr-2 h-4 w-4" />
-                      发布文章
-                    </>
-                  )}
-                </DropdownMenuItem>
-              )}
-              {onDelete && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => setShowDeleteDialog(true)}
-                    className="text-destructive focus:text-destructive"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    删除文章
+          {(onEdit || onDelete || onTogglePin || onTogglePublish) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {onEdit && (
+                  <DropdownMenuItem onClick={() => onEdit?.(post)}>
+                    <Edit className="mr-2 h-4 w-4" />
+                    编辑
                   </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
+                )}
+                {onTogglePin && (
+                  <DropdownMenuItem onClick={handleTogglePin}>
+                    {post.isPinned ? (
+                      <>
+                        <PinOff className="mr-2 h-4 w-4" />
+                        取消置顶
+                      </>
+                    ) : (
+                      <>
+                        <Pin className="mr-2 h-4 w-4" />
+                        置顶文章
+                      </>
+                    )}
+                  </DropdownMenuItem>
+                )}
+                {onTogglePublish && (
+                  <DropdownMenuItem onClick={handleTogglePublish}>
+                    {post.isPublished ? (
+                      <>
+                        <FileText className="mr-2 h-4 w-4" />
+                        设为草稿
+                      </>
+                    ) : (
+                      <>
+                        <Globe className="mr-2 h-4 w-4" />
+                        发布文章
+                      </>
+                    )}
+                  </DropdownMenuItem>
+                )}
+                {onDelete && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => setShowDeleteDialog(true)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      删除文章
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+        {deleteDialog}
+      </>
     )
   }
 
@@ -488,26 +515,7 @@ export function PostCard({
       </Card>
 
       {/* 删除确认对话框 */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>确认删除文章</AlertDialogTitle>
-            <AlertDialogDescription>
-              您确定要删除文章「{post.title}」吗？此操作不可撤销。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={isLoading}
-            >
-              {isLoading ? "删除中..." : "确认删除"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {deleteDialog}
     </>
   )
 }

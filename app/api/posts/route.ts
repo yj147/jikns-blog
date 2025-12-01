@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma"
 import { apiLogger } from "@/lib/utils/logger"
 import { featureFlags } from "@/lib/config/feature-flags"
 import { recordPostsPublicEmailAudit } from "@/lib/observability/posts-public-email-audit"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 /**
  * 获取公开文章列表
@@ -33,7 +34,7 @@ interface ParamViolation {
   reason: string
 }
 
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   try {
     const { searchParams } = request.nextUrl
     const rawPage = searchParams.get("page")
@@ -302,6 +303,8 @@ export async function GET(request: NextRequest) {
     })
   }
 }
+
+export const GET = withApiResponseMetrics(handleGet)
 
 // 处理 CORS 预检请求
 export async function OPTIONS() {

@@ -8,7 +8,7 @@ export type { ApiResponse, TagData, TagListPagination, GetTagsOptions } from "./
 export { getTags, getTag, getPopularTags, searchTags } from "./queries"
 
 export type { CreateTagData, UpdateTagData } from "./mutations"
-export { createTag, updateTag, deleteTag } from "./mutations"
+export { createTag, updateTag, deleteTag, mergeTags } from "./mutations"
 
 export type {
   TagCandidateData,

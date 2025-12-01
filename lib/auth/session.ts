@@ -10,6 +10,7 @@ import { unstable_cache, revalidateTag } from "next/cache"
 import { NextRequest } from "next/server"
 import type { User, Role, UserStatus } from "@/lib/generated/prisma"
 import { authLogger } from "@/lib/utils/logger"
+import { performanceMonitor, MetricType } from "@/lib/performance-monitor"
 import { buildSessionLogContext } from "@/lib/utils/auth-logging"
 import { generateRequestId } from "@/lib/utils/request-id"
 
@@ -87,24 +88,26 @@ interface SupabaseUser {
  * 获取 Supabase 认证用户（底层函数）
  * 使用 React cache 优化，在同一请求中避免重复查询
  */
-const SUPABASE_SESSION_COOKIE_KEYS = ["sb-access-token", "sb-refresh-token"] as const
+
+function isSupabaseSessionCookie(name?: string): boolean {
+  if (!name || !name.startsWith("sb-")) return false
+  return name.includes("-auth-token") || name.includes("-refresh-token")
+}
 
 async function hasSupabaseSessionCookie(request?: NextRequest): Promise<boolean> {
-  if (request) {
-    return SUPABASE_SESSION_COOKIE_KEYS.some((key) => {
-      const cookie = request.cookies.get?.(key)
-      if (!cookie) return false
-      return cookie.value.length > 0
-    })
-  }
-
   try {
+    if (request) {
+      return request.cookies.getAll().some((cookie) => {
+        if (!isSupabaseSessionCookie(cookie.name)) return false
+        return cookie.value.length > 0
+      })
+    }
+
     const { cookies } = await import("next/headers")
     const cookieStore = await cookies()
 
-    return SUPABASE_SESSION_COOKIE_KEYS.some((key) => {
-      const cookie = cookieStore.get?.(key)
-      if (!cookie) return false
+    return cookieStore.getAll().some((cookie) => {
+      if (!isSupabaseSessionCookie(cookie.name)) return false
       return cookie.value.length > 0
     })
   } catch (error) {
@@ -116,6 +119,12 @@ async function hasSupabaseSessionCookie(request?: NextRequest): Promise<boolean>
 }
 
 const getSupabaseUser = cache(async () => {
+  const hasSession = await hasSupabaseSessionCookie()
+  if (!hasSession) {
+    authLogger.debug("未检测到 Supabase 认证 Cookie，跳过 getUser 查询")
+    return null
+  }
+
   const supabase = await createServerSupabaseClient()
 
   try {
@@ -184,32 +193,105 @@ async function getCachedUser(userId: string): Promise<User | null> {
 }
 
 /**
- * 获取认证用户（统一入口）
- * Server Components 和 Server Actions 专用
+ * 兼容旧版 API 的完整用户查询
+ * 统一走缓存管线，避免重复命中数据库
  */
-export const fetchAuthenticatedUser = cache(async (): Promise<AuthenticatedUser | null> => {
+export async function fetchSessionUserProfile(): Promise<User | null> {
   const supabaseUser = await getSupabaseUser()
 
   if (!supabaseUser?.id) {
     return null
   }
 
-  // 从数据库获取完整用户信息
-  const dbUser = await getCachedUser(supabaseUser.id)
+  return getCachedUser(supabaseUser.id)
+}
 
-  if (!dbUser) {
-    const context = buildSessionLogContext(supabaseUser.id)
-    authLogger.warn("认证用户在数据库中不存在", context)
-    return null
+/**
+ * 获取认证用户（统一入口）
+ * Server Components 和 Server Actions 专用
+ */
+export const fetchAuthenticatedUser = cache(async (): Promise<AuthenticatedUser | null> => {
+  const timerId = `auth-session-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  performanceMonitor.startTimer(timerId)
+
+  let supabaseUserId: string | undefined
+  let timerEnded = false
+  const endTimer = (context: Record<string, any>) => {
+    timerEnded = true
+    performanceMonitor.endTimer(timerId, MetricType.AUTH_SESSION_CHECK_TIME, {
+      userId: supabaseUserId ?? context.userId,
+      ...context,
+    })
   }
 
-  return {
-    id: dbUser.id,
-    email: dbUser.email,
-    role: dbUser.role,
-    status: dbUser.status,
-    name: dbUser.name,
-    avatarUrl: dbUser.avatarUrl,
+  try {
+    const supabaseUser = await getSupabaseUser()
+
+    if (!supabaseUser?.id) {
+      endTimer({ success: true, userPresent: false })
+      return null
+    }
+
+    supabaseUserId = supabaseUser.id
+
+    const toAuthenticatedUser = (user: User): AuthenticatedUser => ({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
+    })
+
+    // 从数据库获取完整用户信息
+    const dbUser = await getCachedUser(supabaseUser.id)
+
+    if (dbUser) {
+      const result = toAuthenticatedUser(dbUser)
+      endTimer({
+        success: true,
+        userPresent: true,
+        source: "database",
+        userId: supabaseUserId,
+      })
+      return result
+    }
+
+    const context = buildSessionLogContext(supabaseUser.id)
+    authLogger.warn("认证用户在数据库中不存在，尝试自愈同步", context)
+
+    try {
+      const syncedUser = await syncUserFromAuth({
+        id: supabaseUser.id,
+        email: supabaseUser.email,
+        user_metadata: supabaseUser.user_metadata,
+      })
+      const result = toAuthenticatedUser(syncedUser)
+      endTimer({
+        success: true,
+        userPresent: true,
+        source: "sync",
+        userId: supabaseUserId,
+      })
+      return result
+    } catch (error) {
+      endTimer({
+        success: false,
+        userPresent: true,
+        source: "sync",
+        userId: supabaseUserId,
+        error: error instanceof Error ? error.message : "未知错误",
+      })
+      authLogger.error("自愈同步失败", {
+        ...context,
+        error,
+      })
+      return null
+    }
+  } finally {
+    if (!timerEnded) {
+      endTimer({ success: false, userPresent: false, source: "unexpected" })
+    }
   }
 })
 
@@ -424,6 +506,22 @@ export async function assertPolicy<P extends AuthPolicy>(
   }
 
   return handler(policyContext)
+}
+
+export async function requireAdmin(request?: NextRequest): Promise<PolicyUserMap["admin"]> {
+  const path = request?.nextUrl.pathname ?? "auth:session:requireAdmin"
+  const ip =
+    request?.headers.get("x-forwarded-for") ?? request?.headers.get("x-real-ip") ?? undefined
+  const ua = request?.headers.get("user-agent") ?? undefined
+  const requestId = request?.headers.get("x-request-id") ?? undefined
+
+  const [user, error] = await assertPolicy("admin", { path, ip, ua, requestId })
+
+  if (!user || error) {
+    throw error ?? AuthErrors.forbidden("需要管理员权限", { path, requestId })
+  }
+
+  return user
 }
 
 // Re-export generateRequestId from unified module

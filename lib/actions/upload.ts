@@ -5,7 +5,7 @@
  * 实现 Supabase Storage 集成的图片上传功能
  */
 
-import { createClient } from "@/lib/supabase"
+import { createServerSupabaseClient } from "@/lib/supabase"
 import { requireAuth } from "@/lib/auth"
 import { logger } from "@/lib/utils/logger"
 
@@ -240,8 +240,8 @@ export async function uploadImage(formData: FormData): Promise<ApiResponse<Uploa
     const fileName = generateUniqueFileName(file.name)
     const filePath = `${authenticatedUser.id}/${fileName}`
 
-    // 创建 Supabase 客户端
-    const supabase = createClient()
+    // 创建服务端 Supabase 客户端（带用户会话）
+    const supabase = await createServerSupabaseClient()
 
     // 上传文件到 Storage（使用重试机制）
     const { data: uploadData, error: uploadError } = await uploadWithRetry(
@@ -285,7 +285,11 @@ export async function uploadImage(formData: FormData): Promise<ApiResponse<Uploa
           code: errorCode,
           message: errorMessage,
           timestamp: Date.now(),
-          details: uploadError,
+          // 序列化错误对象，避免 RSC 传递 Error 实例
+          details: {
+            originalError: uploadError?.message || String(uploadError),
+            statusCode: uploadError?.statusCode,
+          },
         },
       }
     }
@@ -422,8 +426,8 @@ export async function deleteImage(
       }
     }
 
-    // 创建 Supabase 客户端
-    const supabase = createClient()
+    // 创建服务端 Supabase 客户端（带用户会话）
+    const supabase = await createServerSupabaseClient()
 
     // 从 Storage 删除文件
     const { error: deleteError } = await supabase.storage.from(UPLOAD_BUCKET).remove([filePath])
@@ -502,8 +506,8 @@ export async function uploadMultipleImages(
     const results: UploadImageResult[] = []
     const errors: string[] = []
 
-    // 创建 Supabase 客户端
-    const supabase = createClient()
+    // 创建服务端 Supabase 客户端（带用户会话）
+    const supabase = await createServerSupabaseClient()
 
     // 串行上传每个文件以避免并发限制
     for (const file of files) {
@@ -597,8 +601,8 @@ export async function getUserImages(): Promise<
     // 验证用户认证
     const user = await requireAuth()
 
-    // 创建 Supabase 客户端
-    const supabase = createClient()
+    // 创建服务端 Supabase 客户端（带用户会话）
+    const supabase = await createServerSupabaseClient()
 
     // 列出用户文件夹中的所有文件
     const { data: files, error } = await supabase.storage.from(UPLOAD_BUCKET).list(user.id, {

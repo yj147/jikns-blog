@@ -8,8 +8,9 @@ import { createRouteHandlerClient } from "@/lib/supabase"
 import { validateRedirectUrl } from "@/lib/auth"
 import { RateLimiter } from "@/lib/security"
 import { authLogger } from "@/lib/utils/logger"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const clientIP =
     request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown"
 
@@ -115,7 +116,7 @@ export async function POST(request: NextRequest) {
 }
 
 // 支持 GET 请求以便直接重定向
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   try {
     const url = new URL(request.url)
     const redirectTo = url.searchParams.get("redirect_to") || "/"
@@ -154,3 +155,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/login?error=oauth_redirect_failed", request.url))
   }
 }
+
+export const POST = withApiResponseMetrics(handlePost)
+export const GET = withApiResponseMetrics(handleGet)

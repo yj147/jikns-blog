@@ -19,6 +19,16 @@ function readTokenFromStorage(): string | null {
   }
 }
 
+function readTokenFromCookie(): string | null {
+  if (!isBrowser()) return null
+  try {
+    const match = document.cookie.match(/(?:^|;\s*)csrf-token=([^;]+)/)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
+
 function writeTokenToStorage(token: string) {
   if (!isBrowser()) return
   try {
@@ -59,16 +69,36 @@ async function requestTokenFromApi(): Promise<string> {
 
 /**
  * 确保本地存在最新的 CSRF 令牌
- * 会优先返回 sessionStorage 中的缓存，必要时访问 /api/csrf-token
+ * 优先使用 cookie 中的令牌，确保与服务端同步
+ * 若 sessionStorage 与 cookie 不一致，从 API 获取以同步
  */
 export async function ensureCsrfToken(options?: { forceRefresh?: boolean }): Promise<string> {
+  // 测试环境跳过 CSRF 请求，避免无头环境多余的网络交互
+  if (process.env.NODE_ENV === "test") {
+    return ""
+  }
+
   if (!isBrowser()) {
     return ""
   }
 
+  const cookieToken = readTokenFromCookie()
+  const cachedToken = readTokenFromStorage()
+
   if (!options?.forceRefresh) {
-    const cached = readTokenFromStorage()
-    if (cached) return cached
+    // 如果 cookie 存在且与缓存一致，直接使用
+    if (cookieToken && cookieToken === cachedToken) {
+      return cookieToken
+    }
+    // 如果 cookie 存在但缓存不一致，同步到 sessionStorage
+    if (cookieToken && cookieToken !== cachedToken) {
+      writeTokenToStorage(cookieToken)
+      return cookieToken
+    }
+    // 如果没有 cookie 但有缓存，仍使用缓存（向后兼容）
+    if (cachedToken) {
+      return cachedToken
+    }
   } else {
     writeTokenToStorage("")
   }

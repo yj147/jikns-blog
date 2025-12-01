@@ -7,27 +7,33 @@
  */
 
 /**
- * 生成唯一的请求 ID
+ * 生成唯一的请求 ID（CUID 风格）
  *
- * 优先使用 Web Crypto API 的 randomUUID() 生成标准 UUID v4
- * 如果不可用（如某些旧环境），则使用时间戳 + 随机数的 fallback 方案
- *
- * @returns 请求 ID 字符串
- * @example
- * // 标准 UUID v4 格式
- * "550e8400-e29b-41d4-a716-446655440000"
- *
- * // Fallback 格式
- * "req_1704067200000_a1b2c3d4e"
+ * Edge Runtime 友好：仅依赖 Web Crypto，无需 Node 内置模块。
+ * 输出格式：以 "c" 开头，后跟 24 个 [a-z0-9] 字符，匹配常见 CUID 校验规则。
  */
 export function generateRequestId(): string {
-  // 优先使用标准 UUID v4
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID()
+  const fallback = () => {
+    const randomPart = Math.random().toString(36).slice(2).padEnd(24, "0").slice(0, 24)
+    return `c${randomPart}`
   }
 
-  // Fallback: 时间戳 + 随机数
-  const timestamp = Date.now()
-  const randomSuffix = Math.random().toString(36).slice(2, 11)
-  return `req_${timestamp}_${randomSuffix}`
+  if (typeof crypto === "undefined") {
+    return fallback()
+  }
+
+  // 优先使用 randomUUID，并截断为 24 个字符保证固定长度
+  if (typeof crypto.randomUUID === "function") {
+    const uuid = crypto.randomUUID().replace(/-/g, "")
+    return `c${uuid.slice(0, 24)}`
+  }
+
+  if (typeof crypto.getRandomValues === "function") {
+    const bytes = new Uint8Array(24)
+    crypto.getRandomValues(bytes)
+    const randomPart = Array.from(bytes, (byte) => (byte % 36).toString(36)).join("")
+    return `c${randomPart.slice(0, 24)}`
+  }
+
+  return fallback()
 }

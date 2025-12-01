@@ -208,13 +208,7 @@ describe("Comment Deletion API Tests", () => {
       })
 
       // 验证没有调用软删除
-      expect(prisma.comment.update).not.toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            content: "[该评论已删除]",
-          }),
-        })
-      )
+      expect(prisma.comment.update).not.toHaveBeenCalled()
     })
 
     it("should decrement activity.commentsCount on hard delete", async () => {

@@ -4,13 +4,14 @@ import { ErrorCode, createErrorResponse } from "@/lib/api/unified-response"
 import { toTagApiResponse } from "../api-helpers"
 import { enforceTagRateLimitForRequest } from "@/lib/rate-limit/tag-limits"
 import { getOptionalViewer } from "@/lib/auth/session"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
-export async function GET(_request: NextRequest, { params }: { params: { tagId: string } }) {
+async function handleGet(_request: NextRequest, { params }: { params: { tagId: string } }) {
   const result = await getTag(params.tagId)
   return toTagApiResponse(result)
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { tagId: string } }) {
+async function handlePatch(request: NextRequest, { params }: { params: { tagId: string } }) {
   const viewer = await getOptionalViewer({ request })
   try {
     await enforceTagRateLimitForRequest("mutation", request, viewer?.id)
@@ -57,7 +58,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { tagId:
   return toTagApiResponse(result)
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { tagId: string } }) {
+async function handleDelete(request: NextRequest, { params }: { params: { tagId: string } }) {
   const viewer = await getOptionalViewer({ request })
   try {
     await enforceTagRateLimitForRequest("mutation", request, viewer?.id)
@@ -77,3 +78,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { tagId
   const result = await deleteTag(params.tagId)
   return toTagApiResponse(result)
 }
+
+export const GET = withApiResponseMetrics(handleGet)
+export const PATCH = withApiResponseMetrics(handlePatch)
+export const DELETE = withApiResponseMetrics(handleDelete)

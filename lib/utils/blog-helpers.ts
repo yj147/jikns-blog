@@ -1,3 +1,5 @@
+import { calculateReadingMinutes } from "./reading-time"
+
 /**
  * 博客相关工具函数 - Phase 5.2
  * 日期格式化、URL生成、内容处理等辅助函数
@@ -54,23 +56,22 @@ export function formatRelativeTime(dateString: string | null): string {
 
 /**
  * 计算阅读时间（基于中文阅读速度）
+ * @param contentOrLength 文章内容字符串 或 内容长度数字
  */
-export function calculateReadTime(content: string | null): string {
-  if (!content) return "未知"
-
-  const wordsPerMinute = 200 // 中文阅读速度
-  const wordCount = content.length
-  const minutes = Math.ceil(wordCount / wordsPerMinute)
+export function calculateReadTime(contentOrLength: string | number | null): string {
+  const minutes = calculateReadingMinutes(contentOrLength)
 
   if (minutes <= 1) {
     return "1分钟阅读"
-  } else if (minutes < 60) {
-    return `${minutes}分钟阅读`
-  } else {
-    const hours = Math.floor(minutes / 60)
-    const remainingMinutes = minutes % 60
-    return `${hours}小时${remainingMinutes}分钟阅读`
   }
+
+  if (minutes < 60) {
+    return `${minutes}分钟阅读`
+  }
+
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  return `${hours}小时${remainingMinutes}分钟阅读`
 }
 
 /**

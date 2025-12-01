@@ -96,6 +96,7 @@ function buildDemoActivity(
     author: overrides.author ?? {
       id: `demo-author-${sequence}`,
       name: `性能小组 ${sequence}`,
+      email: `demo-${sequence}@example.com`,
       avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${sequence}`,
       role: Role.USER,
       status: UserStatus.ACTIVE,

@@ -27,12 +27,13 @@ import { checkLikeRate } from "@/lib/rate-limit/like-limits"
 import { handleInteractionError } from "@/lib/api/interaction-error-handler"
 import { API_ERROR_MESSAGES } from "@/lib/api/error-messages"
 import { mapAuthErrorCode } from "@/lib/api/auth-error-mapper"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 /**
  * GET /api/likes
  * 获取点赞状态或点赞用户列表
  */
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   // 生成 requestId 用于追踪（统一所有路由的追踪行为）
   const requestId = generateRequestId()
 
@@ -125,7 +126,7 @@ export async function GET(request: NextRequest) {
  * POST /api/likes
  * 切换点赞状态
  */
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   // 使用 route-guard 进行认证
   const requestId = generateRequestId()
   try {
@@ -199,13 +200,18 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export const GET = withApiResponseMetrics(handleGet)
+export const POST = withApiResponseMetrics(handlePost)
+export const PUT = withApiResponseMetrics(handlePut)
+export const DELETE = withApiResponseMetrics(handleDelete)
+
 /**
  * PUT /api/likes
  * 确保已点赞（幂等操作）
  *
  * 符合 HTTP PUT 语义：多次调用结果一致，最终状态为已点赞
  */
-export async function PUT(request: NextRequest) {
+async function handlePut(request: NextRequest) {
   const requestId = generateRequestId()
   try {
     const ip = getClientIP(request) ?? undefined
@@ -284,7 +290,7 @@ export async function PUT(request: NextRequest) {
  *
  * 符合 HTTP DELETE 语义：多次调用结果一致，最终状态为未点赞
  */
-export async function DELETE(request: NextRequest) {
+async function handleDelete(request: NextRequest) {
   const requestId = generateRequestId()
   try {
     const ip = getClientIP(request) ?? undefined

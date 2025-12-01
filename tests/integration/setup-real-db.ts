@@ -36,14 +36,19 @@ export const realPrisma = new PrismaClient({
  * 按照外键依赖顺序删除，避免违反外键约束
  */
 export async function cleanupTestData(): Promise<void> {
-  await realPrisma.comments.deleteMany()
-  await realPrisma.likes.deleteMany()
-  await realPrisma.bookmarks.deleteMany()
-  await realPrisma.follows.deleteMany()
-  await realPrisma.activities.deleteMany()
-  await realPrisma.posts.deleteMany()
-  await realPrisma.system_settings.deleteMany()
-  await realPrisma.users.deleteMany()
+  await realPrisma.notification.deleteMany()
+  await realPrisma.comment.deleteMany()
+  await realPrisma.like.deleteMany()
+  await realPrisma.bookmark.deleteMany()
+  await realPrisma.follow.deleteMany()
+  await realPrisma.activityTag.deleteMany()
+  await realPrisma.activityTagCandidate.deleteMany()
+  await realPrisma.activity.deleteMany()
+  await realPrisma.postTag.deleteMany()
+  await realPrisma.post.deleteMany()
+  await realPrisma.series.deleteMany()
+  await realPrisma.tag.deleteMany()
+  await realPrisma.user.deleteMany()
 }
 
 /**
@@ -57,7 +62,7 @@ export async function createTestUser(data?: {
   status?: UserStatus
 }) {
   const email = data?.email || `test-${randomUUID()}@example.com`
-  return realPrisma.users.create({
+  return realPrisma.user.create({
     data: {
       id: data?.id || randomUUID(),
       email,
@@ -79,7 +84,7 @@ export async function createTestPost(data: {
   slug?: string
   content?: string
 }) {
-  return realPrisma.posts.create({
+  return realPrisma.post.create({
     data: {
       id: randomUUID(),
       title: data.title || "Test Post",
@@ -102,7 +107,7 @@ export async function createTestActivity(data: {
   content?: string
   imageUrls?: string[]
 }) {
-  return realPrisma.activities.create({
+  return realPrisma.activity.create({
     data: {
       id: randomUUID(),
       content: data.content || "Test activity",
@@ -130,7 +135,7 @@ export async function createTestComment(data: {
     throw new Error("Comment cannot have both postId and activityId")
   }
 
-  return realPrisma.comments.create({
+  return realPrisma.comment.create({
     data: {
       id: randomUUID(),
       content: data.content || "Test comment",
@@ -158,7 +163,7 @@ export async function createTestLike(data: {
     throw new Error("Like cannot have both postId and activityId")
   }
 
-  return realPrisma.likes.create({
+  return realPrisma.like.create({
     data: {
       id: randomUUID(),
       authorId: data.authorId,

@@ -81,6 +81,7 @@ describe("comments API contract", () => {
       ],
       hasMore: false,
       nextCursor: null,
+      totalCount: 1,
     })
 
     const request = new NextRequest(

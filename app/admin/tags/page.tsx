@@ -29,7 +29,7 @@ const DEFAULT_CANDIDATE_QUERY: Partial<GetTagCandidatesOptions> = {
 
 function renderLoadError(title: string, description: string) {
   return (
-    <div className="bg-background flex min-h-screen items-center justify-center px-4 py-12">
+    <div className="flex justify-center py-12">
       <Card className="w-full max-w-xl">
         <CardContent className="space-y-4 py-10 text-center">
           <h1 className="text-2xl font-semibold">{title}</h1>

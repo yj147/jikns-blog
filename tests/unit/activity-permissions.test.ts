@@ -275,6 +275,28 @@ describe("ActivityPermissions - 无 N+1 查询版本", () => {
       const result = ActivityPermissions.canLike(bannedUser, activity)
       expect(result).toBe(false)
     })
+
+    it("应该拒绝点赞被封禁作者的动态", () => {
+      const activity: ActivityWithAuthorForPermission = {
+        id: "act-2",
+        authorId: "banned-author",
+        deletedAt: null,
+        isPinned: false,
+        author: {
+          id: "banned-author",
+          status: UserStatus.BANNED,
+          role: Role.USER,
+        },
+      }
+
+      const user: User = {
+        id: "user-3",
+        role: Role.USER,
+        status: UserStatus.ACTIVE,
+      } as User
+
+      expect(ActivityPermissions.canLike(user, activity)).toBe(false)
+    })
   })
 
   describe("filterViewableActivities", () => {

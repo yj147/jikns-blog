@@ -40,6 +40,7 @@ export default function CreatePostPage() {
         content: data.content,
         excerpt: data.summary || undefined,
         published: data.isPublished,
+        slug: data.slug || undefined,
         canonicalUrl: undefined,
         seoTitle: data.metaTitle || undefined,
         seoDescription: data.metaDescription || undefined,
@@ -80,6 +81,7 @@ export default function CreatePostPage() {
         content: data.content,
         excerpt: data.summary || undefined,
         published: false, // 草稿强制为未发布
+        slug: data.slug || undefined,
         canonicalUrl: undefined,
         seoTitle: data.metaTitle || undefined,
         seoDescription: data.metaDescription || undefined,

@@ -19,6 +19,7 @@ interface AuthContextType {
   isAdmin: boolean
   supabase: SupabaseClient | null
   signOut: () => Promise<void>
+  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -56,6 +57,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAdmin = user?.role === "ADMIN" && user?.status === "ACTIVE"
 
+  const refreshUser = async () => {
+    if (!supabase) return
+
+    try {
+      const {
+        data: { session: nextSession },
+        error,
+      } = await supabase.auth.getSession()
+
+      if (error) {
+        logger.error("刷新会话失败", { module: "AuthProvider.refreshUser" }, error)
+        return
+      }
+
+      setSession(nextSession)
+
+      if (nextSession?.user) {
+        const dbUser = await fetchUserProfile(nextSession.user)
+        setUser(dbUser)
+      } else {
+        setUser(null)
+      }
+    } catch (error) {
+      logger.error("刷新用户资料失败", { module: "AuthProvider.refreshUser" }, error)
+    }
+  }
+
   // 从数据库获取用户完整信息
   const fetchUserProfile = async (supabaseUser: SupabaseUser): Promise<DatabaseUser | null> => {
     try {
@@ -68,6 +96,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (response.ok) {
         const { user: data } = await response.json()
+        if (data) {
+          data.avatarUrl = data.avatarSignedUrl || data.avatarUrl || null
+        }
         return data
       } else {
         logger.warn("用户未认证或 API 返回错误", {
@@ -174,6 +205,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isAdmin,
     supabase,
     signOut,
+    refreshUser,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

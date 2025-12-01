@@ -4,6 +4,7 @@ import { ErrorCode, createErrorResponse } from "@/lib/api/unified-response"
 import { toTagApiResponse } from "./api-helpers"
 import { enforceTagRateLimitForRequest } from "@/lib/rate-limit/tag-limits"
 import { getOptionalViewer } from "@/lib/auth/session"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 const ORDER_BY_WHITELIST = new Set(["postsCount", "name", "createdAt"])
 const ORDER_WHITELIST = new Set(["asc", "desc"])
@@ -38,7 +39,7 @@ function handleRateLimitError(error: unknown) {
   throw error
 }
 
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const viewer = await getOptionalViewer({ request })
   try {
     await enforceTagRateLimitForRequest("search", request, viewer?.id)
@@ -68,7 +69,7 @@ export async function GET(request: NextRequest) {
   return toTagApiResponse(result)
 }
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const viewer = await getOptionalViewer({ request })
   try {
     await enforceTagRateLimitForRequest("mutation", request, viewer?.id)
@@ -91,3 +92,6 @@ export async function POST(request: NextRequest) {
 
   return toTagApiResponse(result, 201)
 }
+
+export const GET = withApiResponseMetrics(handleGet)
+export const POST = withApiResponseMetrics(handlePost)

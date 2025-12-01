@@ -7,8 +7,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/auth"
 import { RateLimiter } from "@/lib/security"
 import { authLogger } from "@/lib/utils/logger"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const clientIP =
     request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown"
 
@@ -102,7 +103,7 @@ export async function GET(request: NextRequest) {
 }
 
 // 不支持的方法
-export async function POST() {
+async function handlePost() {
   return NextResponse.json(
     {
       success: false,
@@ -112,3 +113,6 @@ export async function POST() {
     { status: 405 }
   )
 }
+
+export const GET = withApiResponseMetrics(handleGet)
+export const POST = withApiResponseMetrics(handlePost)

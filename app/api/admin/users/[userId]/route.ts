@@ -11,12 +11,13 @@ import { prisma } from "@/lib/prisma"
 import { clearUserCache } from "@/lib/auth/session"
 import { auditLogger, getClientIP, getClientUserAgent } from "@/lib/audit-log"
 import { logger } from "@/lib/utils/logger"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 /**
  * PATCH - 修改用户权限
  * 管理员专用，用于修改用户的 role 或 status
  */
-export async function PATCH(
+async function handlePatch(
   request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
@@ -159,3 +160,5 @@ export async function PATCH(
     }
   })
 }
+
+export const PATCH = withApiResponseMetrics(handlePatch)

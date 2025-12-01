@@ -12,9 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Separator } from "@/components/ui/separator"
-import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Calendar, Clock, Eye, Heart, Share2, Bookmark, ThumbsUp } from "lucide-react"
+import { ArrowLeft, Calendar, Clock, Eye, Share2, ThumbsUp } from "lucide-react"
 import { PostDetail } from "@/types/blog"
 import {
   formatDate,
@@ -23,6 +21,9 @@ import {
   formatNumber,
 } from "@/lib/utils/blog-helpers"
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer"
+import CommentList from "@/components/comments/comment-list"
+import { LikeButton } from "@/components/blog/like-button"
+import { BookmarkButton } from "@/components/blog/bookmark-button"
 
 // 页面参数接口
 interface BlogPostPageProps {
@@ -156,14 +157,19 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 
                 {/* 互动按钮 */}
                 <div className="flex items-center space-x-4">
-                  <Button variant="outline" size="sm">
-                    <Heart className="mr-2 h-4 w-4" />
-                    {formatNumber(post.stats.likesCount)}
-                  </Button>
-                  <Button variant="outline" size="sm">
-                    <Bookmark className="mr-2 h-4 w-4" />
-                    收藏
-                  </Button>
+                  <LikeButton
+                    targetId={post.id}
+                    targetType="post"
+                    initialCount={post.stats.likesCount}
+                    variant="outline"
+                    size="sm"
+                  />
+                  <BookmarkButton
+                    postId={post.id}
+                    initialCount={post.stats.bookmarksCount}
+                    variant="outline"
+                    size="sm"
+                  />
                   <Button variant="outline" size="sm">
                     <Share2 className="mr-2 h-4 w-4" />
                     分享
@@ -229,29 +235,14 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 
             {/* 评论区域 */}
             <section className="mt-12">
-              <h2 className="mb-6 text-2xl font-bold">
-                评论 ({formatNumber(post.stats.commentsCount)})
-              </h2>
-
-              {/* 评论表单 */}
-              <Card className="mb-8">
-                <CardHeader>
-                  <CardTitle className="text-lg">发表评论</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <Textarea placeholder="写下你的想法..." className="min-h-[100px]" />
-                    <div className="flex justify-end">
-                      <Button>发布评论</Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* 评论列表占位 - 暂时显示评论功能待实现的提示 */}
-              <div className="text-muted-foreground py-12 text-center">
-                <p>评论功能即将上线，敬请期待！</p>
-              </div>
+              <CommentList
+                targetType="post"
+                targetId={post.id}
+                showComposer
+                showTitle
+                initialCount={post.stats.commentsCount}
+                className="mt-6"
+              />
             </section>
           </div>
 

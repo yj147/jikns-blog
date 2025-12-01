@@ -117,7 +117,7 @@ describe("Comment Deletion API Tests", () => {
       // Mock soft delete
       vi.mocked(prisma.comment.update).mockResolvedValue({
         ...mockComment,
-        content: "[该评论已删除]",
+        deletedAt: new Date(),
       })
 
       const request = new NextRequest("http://localhost/api/comments/comment1", {
@@ -135,7 +135,7 @@ describe("Comment Deletion API Tests", () => {
       // 验证调用了软删除
       expect(prisma.comment.update).toHaveBeenCalledWith({
         where: { id: "comment1" },
-        data: { content: "[该评论已删除]" },
+        data: { deletedAt: expect.any(Date) },
       })
 
       // 验证没有调用硬删除
@@ -153,7 +153,7 @@ describe("Comment Deletion API Tests", () => {
       // Mock soft delete
       vi.mocked(prisma.comment.update).mockResolvedValue({
         ...mockComment,
-        content: "[该评论已删除]",
+        deletedAt: new Date(),
       })
 
       const request = new NextRequest("http://localhost/api/comments/comment1", {
@@ -216,7 +216,7 @@ describe("Comment Deletion API Tests", () => {
       )
     })
 
-    it("should decrement activity.commentsCount on hard delete", async () => {
+    it("should rely on triggers for activity.commentsCount on hard delete", async () => {
       vi.mocked(getCurrentUser).mockResolvedValue(mockUser)
 
       // Mock comment and activity
@@ -226,10 +226,6 @@ describe("Comment Deletion API Tests", () => {
 
       // Mock updates
       vi.mocked(prisma.comment.delete).mockResolvedValue(mockComment)
-      vi.mocked(prisma.activity.update).mockResolvedValue({
-        ...mockActivity,
-        commentsCount: mockActivity.commentsCount - 1,
-      })
 
       const request = new NextRequest("http://localhost/api/comments/comment1", {
         method: "DELETE",
@@ -239,15 +235,8 @@ describe("Comment Deletion API Tests", () => {
 
       expect(response.status).toBe(200)
 
-      // 验证更新了 activity.commentsCount
-      expect(prisma.activity.update).toHaveBeenCalledWith({
-        where: { id: "activity1" },
-        data: {
-          commentsCount: {
-            increment: -1,
-          },
-        },
-      })
+      // 计数由数据库触发器处理，此处不应直接更新 activity
+      expect(prisma.activity.update).not.toHaveBeenCalled()
     })
 
     it("should use aggregation for Post comments count", async () => {

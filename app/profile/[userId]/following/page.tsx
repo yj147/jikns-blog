@@ -31,6 +31,8 @@ export default function FollowingPage({ params }: FollowingPageProps) {
     isLoading,
     isError,
     error,
+    accessDenied,
+    deniedReason,
     hasMore,
     loadMore,
     isLoadingMore,
@@ -59,6 +61,35 @@ export default function FollowingPage({ params }: FollowingPageProps) {
     }
     fetchUserName()
   }, [userId])
+
+  if (accessDenied) {
+    return (
+      <div className="bg-background min-h-screen">
+        <div className="container mx-auto px-4 py-6">
+          <div className="py-12 text-center">
+            <div className="mb-4 text-6xl">🚫</div>
+            <h3 className="mb-2 text-xl font-semibold">无法访问关注列表</h3>
+            <p className="text-muted-foreground mb-6">
+              {deniedReason === "NOT_FOUND"
+                ? "目标用户不存在"
+                : deniedReason === "UNAUTHORIZED"
+                  ? "请登录后查看该关注列表"
+                  : "该用户限制了关注列表的可见性"}
+            </p>
+            {deniedReason === "UNAUTHORIZED" ? (
+              <Button asChild>
+                <Link href="/login">登录后重试</Link>
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={() => history.back()}>
+                返回上一页
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (isError) {
     return (

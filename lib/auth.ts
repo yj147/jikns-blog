@@ -6,10 +6,13 @@
 import { createServerSupabaseClient } from "./supabase"
 import { prisma } from "./prisma"
 import { cache } from "react"
-import { unstable_cache } from "next/cache"
 import { SessionSecurity } from "./security"
 import type { User } from "./generated/prisma"
 import { authLogger } from "./utils/logger"
+import { performanceMonitor, MetricType } from "@/lib/performance-monitor"
+import { assertPolicy, fetchSessionUserProfile } from "@/lib/auth/session"
+import type { AuthError } from "@/lib/error-handling/auth-error"
+import { signAvatarUrl } from "@/lib/storage/signed-url"
 
 /**
  * Supabase Auth User 类型定义
@@ -166,14 +169,15 @@ async function fetchUserFromDatabase(userId: string): Promise<User | null> {
 /**
  * 带缓存标签的用户查询函数
  */
-const getCachedUser = unstable_cache(
-  async (userId: string) => fetchUserFromDatabase(userId),
-  ["user-profile"],
-  {
-    tags: ["user:self"],
-    revalidate: 300, // 5分钟缓存
-  }
-)
+const adminEmailList = (process.env.ADMIN_EMAIL || "")
+  .split(",")
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean)
+
+export function isConfiguredAdminEmail(email?: string | null): boolean {
+  if (!email) return false
+  return adminEmailList.includes(email.toLowerCase())
+}
 
 /**
  * 获取当前用户信息（Server Components 专用）
@@ -181,20 +185,34 @@ const getCachedUser = unstable_cache(
  * 使用经过身份验证的用户数据确保安全性
  */
 export const getCurrentUser = cache(async (): Promise<User | null> => {
-  const { user } = await getAuthenticatedUser()
+  const user = await fetchSessionUserProfile()
+  if (!user) return null
 
-  if (!user?.id) {
-    return null
+  const signedAvatarUrl = await signAvatarUrl(user.avatarUrl)
+  if (signedAvatarUrl) {
+    return {
+      ...user,
+      avatarUrl: signedAvatarUrl,
+      avatarSignedUrl: signedAvatarUrl,
+    } as User & { avatarSignedUrl: string }
   }
 
-  return await getCachedUser(user.id)
+  return user
 })
 
 /**
  * 验证用户是否为管理员（Server Actions 专用）
  */
 export async function requireAdmin(): Promise<User> {
-  const user = await getCurrentUser()
+  const [policyUser, policyError] = await assertPolicy("admin", {
+    path: "legacy:requireAdmin",
+  })
+
+  if (!policyUser) {
+    throwLegacyAuthError(policyError, "未登录用户")
+  }
+
+  const user = await fetchUserFromDatabase(policyUser.id)
 
   if (!user) {
     throw new Error("未登录用户")
@@ -215,7 +233,15 @@ export async function requireAdmin(): Promise<User> {
  * 验证用户是否已认证（Server Actions 专用）
  */
 export async function requireAuth(): Promise<User> {
-  const user = await getCurrentUser()
+  const [policyUser, policyError] = await assertPolicy("user-active", {
+    path: "legacy:requireAuth",
+  })
+
+  if (!policyUser) {
+    throwLegacyAuthError(policyError, "用户未登录")
+  }
+
+  const user = await fetchUserFromDatabase(policyUser.id)
 
   if (!user) {
     throw new Error("用户未登录")
@@ -228,12 +254,30 @@ export async function requireAuth(): Promise<User> {
   return user
 }
 
+function throwLegacyAuthError(error: AuthError | null, unauthorizedMessage: string): never {
+  if (error?.code === "ACCOUNT_BANNED") {
+    throw new Error("账户已被封禁")
+  }
+
+  if (error?.code === "FORBIDDEN") {
+    throw new Error("需要管理员权限")
+  }
+
+  throw new Error(unauthorizedMessage)
+}
+
 /**
  * 增强的用户资料同步函数
  * 在 OAuth 回调或登录时调用，同步头像、昵称和 lastLoginAt
  * 支持 GitHub OAuth 和邮箱认证两种场景
  */
 export async function syncUserFromAuth(authUser: SupabaseUser): Promise<User> {
+  const timerId = `auth-login-${authUser.id}-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  performanceMonitor.startTimer(timerId, { userId: authUser.id, email: authUser.email })
+
+  let syncedUser: User | null = null
+  let errorMessage: string | undefined
+
   try {
     // 验证邮箱不能为空
     if (!authUser.email) {
@@ -241,6 +285,7 @@ export async function syncUserFromAuth(authUser: SupabaseUser): Promise<User> {
     }
 
     const currentTime = new Date()
+    const grantAdmin = isConfiguredAdminEmail(authUser.email)
 
     // 从 user_metadata 或 identities 中提取用户信息
     const extractedName = extractUserName(authUser)
@@ -252,23 +297,24 @@ export async function syncUserFromAuth(authUser: SupabaseUser): Promise<User> {
     })
 
     if (existingUser) {
-      // 复登：智能更新逻辑 - 仅当字段为空或有变更时才更新
-      const shouldUpdateName =
-        !existingUser.name || (extractedName && extractedName !== existingUser.name)
-      const shouldUpdateAvatar =
-        !existingUser.avatarUrl ||
-        (extractedAvatarUrl && extractedAvatarUrl !== existingUser.avatarUrl)
+      // 复登：智能更新逻辑 - 仅当字段为空时才从 Auth 同步，已有数据优先
+      const shouldUpdateName = !existingUser.name && extractedName
+      const shouldUpdateAvatar = !existingUser.avatarUrl && extractedAvatarUrl
 
       const updateData: any = {
         lastLoginAt: currentTime,
       }
 
-      if (shouldUpdateName && extractedName) {
+      if (shouldUpdateName) {
         updateData.name = extractedName
       }
 
-      if (shouldUpdateAvatar && extractedAvatarUrl) {
+      if (shouldUpdateAvatar) {
         updateData.avatarUrl = extractedAvatarUrl
+      }
+
+      if (grantAdmin && existingUser.role !== "ADMIN") {
+        updateData.role = "ADMIN"
       }
 
       const updatedUser = await prisma.user.update({
@@ -276,6 +322,7 @@ export async function syncUserFromAuth(authUser: SupabaseUser): Promise<User> {
         data: updateData,
       })
 
+      syncedUser = updatedUser
       return updatedUser
     } else {
       // 首登：创建新用户，填入所有可用信息
@@ -285,17 +332,26 @@ export async function syncUserFromAuth(authUser: SupabaseUser): Promise<User> {
           email: authUser.email,
           name: extractedName,
           avatarUrl: extractedAvatarUrl,
-          role: "USER", // 新用户默认为普通用户
+          role: grantAdmin ? "ADMIN" : "USER",
           status: "ACTIVE",
           lastLoginAt: currentTime,
         },
       })
 
+      syncedUser = newUser
       return newUser
     }
   } catch (error) {
     authLogger.error("用户数据同步失败", { stage: "syncUserFromAuth", userId: authUser.id }, error)
-    throw new Error(`用户数据同步失败: ${error instanceof Error ? error.message : "未知错误"}`)
+    errorMessage = error instanceof Error ? error.message : "未知错误"
+    throw new Error(`用户数据同步失败: ${errorMessage}`)
+  } finally {
+    performanceMonitor.endTimer(timerId, MetricType.AUTH_LOGIN_TIME, {
+      success: Boolean(syncedUser),
+      userId: authUser.id,
+      email: authUser.email,
+      error: syncedUser ? undefined : errorMessage,
+    })
   }
 }
 

@@ -5,7 +5,7 @@
  * Phase 10 - M2 阶段
  */
 
-import { useActionState, useEffect, useOptimistic, useState } from "react"
+import { useActionState, useEffect, useState, useTransition } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -93,10 +93,8 @@ export function TagDialog({
   updateTagAction,
 }: TagDialogProps) {
   const [generatedSlug, setGeneratedSlug] = useState("")
-  const [optimisticMessage, setOptimisticMessage] = useOptimistic<string | null, string | null>(
-    null,
-    (_, message) => message
-  )
+  const [optimisticMessage, setOptimisticMessage] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
   const isEditMode = !!tag
 
   const form = useForm<TagFormData>({
@@ -139,19 +137,16 @@ export function TagDialog({
 
   type SubmitState = { status: "idle" | "success" | "error"; errorMessage?: string }
 
-  const [submitState, submitAction, isPending] = useActionState<SubmitState, TagFormData>(
+  const [submitState, submitAction] = useActionState<SubmitState, TagFormData>(
     async (_prevState, data) => {
       const fallbackErrorMessage = isEditMode ? "更新标签失败" : "创建标签失败"
       try {
-        setOptimisticMessage(isEditMode ? "正在更新标签..." : "正在创建标签...")
-
         const response = isEditMode
           ? await updateTagAction(tag!.id, buildUpdatePayload(data))
           : await createTagAction(buildCreatePayload(data))
 
         if (response.success) {
           toast.success(isEditMode ? "标签已更新" : "标签已创建")
-          setOptimisticMessage(null)
           onOpenChange(false)
           onSuccess?.()
           return { status: "success" }
@@ -166,13 +161,11 @@ export function TagDialog({
           toast.error(response.error?.message || fallbackErrorMessage)
         }
 
-        setOptimisticMessage(null)
         return {
           status: "error",
           errorMessage: response.error?.message || fallbackErrorMessage,
         }
       } catch (error) {
-        setOptimisticMessage(null)
         toast.error(fallbackErrorMessage)
         return { status: "error", errorMessage: fallbackErrorMessage }
       }
@@ -180,8 +173,17 @@ export function TagDialog({
     { status: "idle" }
   )
 
+  useEffect(() => {
+    if (!isPending) {
+      setOptimisticMessage(null)
+    }
+  }, [isPending])
+
   const onSubmit = (data: TagFormData) => {
-    submitAction(data)
+    startTransition(() => {
+      setOptimisticMessage(isEditMode ? "正在更新标签..." : "正在创建标签...")
+      submitAction(data)
+    })
   }
 
   const submissionError = submitState.status === "error" ? (submitState.errorMessage ?? null) : null

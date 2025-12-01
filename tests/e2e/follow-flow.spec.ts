@@ -4,6 +4,7 @@
  */
 
 import { test, expect, Page } from "@playwright/test"
+import prisma from "@/lib/prisma"
 import fs from "fs/promises"
 
 type SeedState = {
@@ -11,8 +12,8 @@ type SeedState = {
 }
 
 const TEST_USERS = {
-  user1: { email: "testuser1@example.com", password: "test123", name: "testuser1" },
-  user2: { email: "testuser2@example.com", password: "test123", name: "testuser2" },
+  user1: { email: "user@example.com", password: "user123456", name: "示例用户" },
+  user2: { email: "admin@example.com", password: "admin123456", name: "系统管理员" },
 }
 
 async function loginUser(page: Page, email: string, password: string) {
@@ -20,16 +21,25 @@ async function loginUser(page: Page, email: string, password: string) {
   await page.waitForSelector("input#email")
   await page.fill("input#email", email)
   await page.fill("input#password", password)
-  await page.click('button[type="submit"]')
-  await page.waitForURL((url) => !url.pathname.includes("/login"))
+  await page.getByRole("main").getByRole("button", { name: "登录", exact: true }).click()
+  await page.waitForSelector('text="登录成功"', { timeout: 30_000 })
+  await page.waitForTimeout(1500)
+  await page.waitForURL((url) => !url.pathname.includes("/login"), { timeout: 30_000 })
 }
 
 async function getUserIdByEmail(email: string): Promise<string> {
-  const raw = await fs.readFile("tests/e2e/seed-state.json", "utf8")
-  const state: SeedState = JSON.parse(raw)
-  const entry = state.users.find((u) => u.email === email)
-  if (!entry) throw new Error(`seed-state 未包含用户: ${email}`)
-  return entry.dbId
+  try {
+    const raw = await fs.readFile("tests/e2e/seed-state.json", "utf8")
+    const state: SeedState = JSON.parse(raw)
+    const entry = state.users.find((u) => u.email === email)
+    if (entry) return entry.dbId
+  } catch (error) {
+    // seed-state 可能不存在或未包含该用户，回退到直接查询数据库
+  }
+
+  const user = await prisma.user.findUnique({ where: { email }, select: { id: true } })
+  if (!user?.id) throw new Error(`找不到用户: ${email}`)
+  return user.id
 }
 
 test.describe("关注系统 - E2E", () => {

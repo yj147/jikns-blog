@@ -3,6 +3,7 @@
 import { mutate } from "swr"
 import { toast } from "sonner"
 import { logger } from "@/lib/utils/logger"
+import { toggleFollowAction } from "@/lib/actions/follow"
 import {
   invokeToggleFollow,
   setToggleFollowLoader,
@@ -16,10 +17,8 @@ export type { UseFollowUserOptions, FollowActionResult } from "./internal/create
 const isTestEnv = typeof process !== "undefined" && process.env.NODE_ENV === "test"
 
 if (typeof window !== "undefined" && !isTestEnv) {
-  setToggleFollowLoader(async () => {
-    const mod = await import("@/lib/actions/follow")
-    return mod.toggleFollowAction
-  })
+  // 使用静态导入让 Server Action 参与 HMR，避免动态 import 缓存导致的失配
+  setToggleFollowLoader(async () => toggleFollowAction)
 }
 
 const useFollowUserCore = createFollowUserHook({

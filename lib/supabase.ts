@@ -8,6 +8,16 @@ import { createClient as createSupabaseJsClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/database"
 import { logger } from "./utils/logger"
 
+type NextCookiesStore = Awaited<
+  ReturnType<(typeof import("next/headers"))["cookies"]>
+>
+
+type SupabaseCookieMethods = {
+  get: (name: string) => string | undefined
+  set?: (name: string, value: string, options: any) => void
+  remove?: (name: string, options: any) => void
+}
+
 // 环境变量验证
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -37,29 +47,14 @@ export const createClientSupabaseClient = createClient
 export async function createServerSupabaseClient() {
   const { cookies } = await import("next/headers")
   const cookieStore = await cookies()
+  const allowCookieWrite = isCookieStoreWritable(cookieStore)
+
+  if (!allowCookieWrite) {
+    logger.debug("Supabase server client running in read-only cookie mode")
+  }
 
   return createServerClient<Database>(supabaseUrl!, supabaseAnonKey!, {
-    cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value
-      },
-      set(name: string, value: string, options: any) {
-        try {
-          cookieStore.set(name, value, options)
-        } catch (error) {
-          // 处理在某些上下文中无法设置 cookie 的情况
-          logger.error("无法设置 cookie", { name }, error)
-        }
-      },
-      remove(name: string, options: any) {
-        try {
-          cookieStore.delete(name)
-        } catch (error) {
-          // 处理在某些上下文中无法删除 cookie 的情况
-          logger.error("无法删除 cookie", { name }, error)
-        }
-      },
-    },
+    cookies: buildCookieMethods(cookieStore, allowCookieWrite),
   })
 }
 
@@ -70,19 +65,10 @@ export async function createServerSupabaseClient() {
 export async function createRouteHandlerClient() {
   const { cookies } = await import("next/headers")
   const cookieStore = await cookies()
+  const allowCookieWrite = isCookieStoreWritable(cookieStore)
 
   return createServerClient<Database>(supabaseUrl!, supabaseAnonKey!, {
-    cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value
-      },
-      set(name: string, value: string, options: any) {
-        cookieStore.set(name, value, options)
-      },
-      remove(name: string, options: any) {
-        cookieStore.delete(name)
-      },
-    },
+    cookies: buildCookieMethods(cookieStore, allowCookieWrite),
   })
 }
 
@@ -103,4 +89,45 @@ export function createServiceRoleClient() {
       persistSession: false,
     },
   })
+}
+
+function isCookieStoreWritable(cookieStore: NextCookiesStore): boolean {
+  const setFn = (cookieStore as any)?.set
+  if (typeof setFn !== "function") {
+    return false
+  }
+
+  const fnName = setFn.name || ""
+  if (fnName === "callable") {
+    return false
+  }
+
+  const fnSource = Function.prototype.toString.call(setFn)
+  if (fnSource.includes("ReadonlyRequestCookiesError")) {
+    return false
+  }
+
+  return true
+}
+
+function buildCookieMethods(
+  cookieStore: NextCookiesStore,
+  allowCookieWrite: boolean
+): SupabaseCookieMethods {
+  const cookieMethods: SupabaseCookieMethods = {
+    get(name: string) {
+      return cookieStore.get(name)?.value
+    },
+  }
+
+  if (allowCookieWrite) {
+    cookieMethods.set = (name, value, options) => {
+      cookieStore.set(name, value, options)
+    }
+    cookieMethods.remove = (name, _options) => {
+      cookieStore.delete(name)
+    }
+  }
+
+  return cookieMethods
 }

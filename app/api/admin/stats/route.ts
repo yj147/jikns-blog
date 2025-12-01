@@ -3,6 +3,7 @@ import { validateApiPermissions } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 import { createSuccessResponse, createErrorResponse, ErrorCode } from "@/lib/api/unified-response"
 import { logger } from "@/lib/utils/logger"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 interface AdminStatsPayload {
   totals: {
@@ -48,7 +49,7 @@ interface AdminStatsPayload {
   generatedAt: string
 }
 
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const { success, error, user } = await validateApiPermissions(request, "admin")
 
   if (!success || !user) {
@@ -176,3 +177,5 @@ export async function GET(request: NextRequest) {
     return createErrorResponse(ErrorCode.INTERNAL_ERROR, "获取管理统计数据失败")
   }
 }
+
+export const GET = withApiResponseMetrics(handleGet)

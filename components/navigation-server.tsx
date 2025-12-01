@@ -1,10 +1,18 @@
 import Link from "next/link"
-import { PenTool } from "lucide-react"
+import { PenTool, Shield } from "lucide-react"
 
 import { navigationItems } from "./navigation-links"
 import NavigationInteractive from "./navigation-interactive"
+import NavigationSearch from "./navigation-search"
+import { assertPolicy } from "@/lib/auth/session"
 
-export function NavigationServer() {
+export async function NavigationServer() {
+  const [viewer] = await assertPolicy("any", { path: "component:navigation" })
+  const isAdmin = viewer?.role === "ADMIN" && viewer?.status === "ACTIVE"
+  const dynamicNavigationItems = isAdmin
+    ? [...navigationItems, { name: "管理后台", href: "/admin", icon: Shield }]
+    : navigationItems
+
   return (
     <header className="bg-background/95 supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50 w-full border-b backdrop-blur transition-shadow duration-300">
       <div className="container flex h-16 items-center gap-4 px-4">
@@ -20,7 +28,7 @@ export function NavigationServer() {
           className="text-muted-foreground hidden flex-1 items-center justify-center gap-6 text-sm font-medium md:flex"
           aria-label="主导航"
         >
-          {navigationItems.map((item) => {
+          {dynamicNavigationItems.map((item) => {
             const Icon = item.icon
             return (
               <Link
@@ -36,7 +44,10 @@ export function NavigationServer() {
           })}
         </nav>
 
-        <div className="ml-auto">
+        <div className="ml-auto flex flex-1 items-center justify-end gap-3">
+          <div className="min-w-[200px] flex-1 max-w-xl">
+            <NavigationSearch className="w-full" />
+          </div>
           <NavigationInteractive />
         </div>
       </div>

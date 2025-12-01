@@ -3,6 +3,8 @@
  * 统一的 API 响应格式和错误处理类型
  */
 
+import type { Comment } from "./comments"
+
 // ============================================================================
 // 通用 API 响应类型
 // ============================================================================
@@ -81,6 +83,7 @@ export interface CreatePostRequest {
   content: string
   excerpt?: string
   published?: boolean
+  slug?: string
   publishedAt?: string // ISO string
   canonicalUrl?: string
   seoTitle?: string
@@ -274,39 +277,7 @@ export interface UpdateCommentRequest {
   content: string
 }
 
-export interface CommentResponse {
-  id: string
-  content: string
-  createdAt: string // ISO string
-  updatedAt: string // ISO string
-  author: {
-    id: string
-    name: string | null
-    avatarUrl: string | null
-  }
-  post?: {
-    id: string
-    title: string
-    slug: string
-  }
-  activity?: {
-    id: string
-    content: string
-  }
-  parent?: {
-    id: string
-    content: string
-    author: {
-      id: string
-      name: string | null
-    }
-  }
-  replies: CommentResponse[]
-  stats: {
-    likesCount: number
-    repliesCount: number
-  }
-}
+export type CommentResponse = Comment
 
 // ============================================================================
 // 文件上传 API 类型

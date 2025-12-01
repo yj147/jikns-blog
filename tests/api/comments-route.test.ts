@@ -42,7 +42,7 @@ vi.mock("@/lib/interactions", async () => {
     listComments: vi.fn(() =>
       Promise.resolve({
         comments: [],
-        total: 0,
+        totalCount: 0,
         hasMore: false,
       })
     ),
@@ -151,7 +151,7 @@ describe("评论API路由契约测试", () => {
 
       vi.mocked(listComments).mockResolvedValue({
         comments: mockComments,
-        total: 1,
+        totalCount: 1,
         hasMore: false,
       })
 
@@ -170,7 +170,7 @@ describe("评论API路由契约测试", () => {
     it("应该支持分页参数cursor和limit", async () => {
       vi.mocked(listComments).mockResolvedValue({
         comments: [],
-        total: 0,
+        totalCount: 0,
         hasMore: false,
       })
 
@@ -193,7 +193,7 @@ describe("评论API路由契约测试", () => {
     it("应该支持includeReplies参数", async () => {
       vi.mocked(listComments).mockResolvedValue({
         comments: [],
-        total: 0,
+        totalCount: 0,
         hasMore: false,
       })
 
@@ -215,6 +215,7 @@ describe("评论API路由契约测试", () => {
     it("应该透传 parentId 参数", async () => {
       vi.mocked(listComments).mockResolvedValue({
         comments: [],
+        totalCount: 0,
         hasMore: false,
         nextCursor: null,
       })
@@ -237,7 +238,7 @@ describe("评论API路由契约测试", () => {
     it("缺省 cursor/parentId 时应该返回 200", async () => {
       vi.mocked(listComments).mockResolvedValue({
         comments: [],
-        total: 0,
+        totalCount: 0,
         hasMore: false,
       })
 
@@ -667,7 +668,7 @@ describe("评论API路由契约测试", () => {
 
         vi.mocked(listComments).mockResolvedValue({
           comments: mockComments,
-          total: 2,
+          totalCount: 2,
           hasMore: false,
           nextCursor: null,
         })
@@ -693,7 +694,7 @@ describe("评论API路由契约测试", () => {
       it("应该支持动态评论的分页", async () => {
         vi.mocked(listComments).mockResolvedValue({
           comments: [],
-          total: 0,
+          totalCount: 0,
           hasMore: true,
           nextCursor: "next-cursor",
         })

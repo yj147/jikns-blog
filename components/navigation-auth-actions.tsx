@@ -13,7 +13,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/app/providers/auth-provider"
-import { Bell, LogOut, Settings, Shield, User } from "lucide-react"
+import { LogOut, Settings, Shield, User } from "lucide-react"
+import NotificationBell from "@/components/notifications/notification-bell"
 
 export default function AuthActions() {
   const { user, loading } = useAuth()
@@ -43,13 +44,7 @@ export default function AuthActions() {
 
   return (
     <div className="flex items-center space-x-4">
-      <Button variant="ghost" size="icon" className="relative transition-transform duration-200 hover:-translate-y-0.5">
-        <Bell className="h-4 w-4" />
-        <Badge variant="destructive" className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 text-xs">
-          3
-        </Badge>
-      </Button>
-
+      <NotificationBell />
       <ClientUserMenu user={user} />
     </div>
   )
@@ -60,8 +55,15 @@ function ClientUserMenu({ user }: { user: any }) {
 
   if (!user) return null
 
-  const displayName = user.name || user.user_metadata?.full_name || user.email
-  const avatarUrl = user.avatarUrl || user.user_metadata?.avatar_url
+  const authMetadata = user.authUser?.metadata || {}
+  const displayName =
+    user.name ||
+    authMetadata.full_name ||
+    authMetadata.name ||
+    authMetadata.user_name ||
+    user.email
+  // 完全使用数据库的 avatarUrl，不再 fallback 到 Auth metadata
+  const avatarUrl = user.avatarUrl || undefined
 
   return (
     <DropdownMenu>

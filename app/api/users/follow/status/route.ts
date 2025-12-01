@@ -6,8 +6,9 @@ import { auditLogger, getClientIP, getClientUserAgent } from "@/lib/audit-log"
 import { logger } from "@/lib/utils/logger"
 import { createErrorResponse, createSuccessResponse, ErrorCode } from "@/lib/api/unified-response"
 import { mapAuthErrorCode } from "@/lib/api/auth-error-mapper"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
-export async function POST(req: NextRequest) {
+async function handlePost(req: NextRequest) {
   const requestId = generateRequestId()
   const path = req.nextUrl.pathname
   const ip = getClientIP(req)
@@ -169,3 +170,5 @@ export async function POST(req: NextRequest) {
     })
   }
 }
+
+export const POST = withApiResponseMetrics(handlePost)

@@ -4,49 +4,133 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
+import { ProfileActivitiesTab } from "@/components/profile/profile-activities-tab"
+import { ProfileLikesTab } from "@/components/profile/profile-likes-tab"
+import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/actions/auth"
+import { getQuickStats, EMPTY_QUICK_STATS, type QuickStats } from "@/lib/profile/stats"
 import { logger } from "@/lib/utils/logger"
+import { calculateReadingMinutes } from "@/lib/utils/reading-time"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import {
-  MapPin,
-  Calendar,
-  LinkIcon,
-  Mail,
-  Settings,
-  Heart,
-  MessageCircle,
-  Repeat2,
-  BookOpen,
-  Users,
-  Clock,
-} from "lucide-react"
+import { Calendar, LinkIcon, Mail, Settings, Heart, BookOpen, Users, Clock } from "lucide-react"
 
-// Mock 数据仅用于静态展示
-const mockPosts = [
-  {
-    id: 1,
-    title: "现代Web开发的最佳实践与思考",
-    excerpt: "探讨现代Web开发中的关键技术栈选择、性能优化策略以及用户体验设计原则...",
-    publishedAt: "2024年1月15日",
-    readTime: "8分钟阅读",
-    views: 1250,
-    likes: 89,
-    comments: 23,
-    tags: ["技术", "Web开发", "最佳实践"],
-  },
-]
+interface ProfilePostSummary {
+  id: string
+  title: string
+  excerpt: string
+  publishedAt: string
+  readTime: string
+  views: number
+  likes: number
+  comments: number
+  tags: string[]
+}
 
-const mockActivities = [
-  {
-    id: 1,
-    content: "刚刚完成了博客系统的用户资料页重构，现在数据完全来自数据库！",
-    timestamp: "2小时前",
-    likes: 42,
-    comments: 8,
-    reposts: 3,
-  },
-]
+interface ProfileCounts {
+  followers: number
+  following: number
+  posts: number
+  activities: number
+}
+
+const EMPTY_COUNTS: ProfileCounts = {
+  followers: 0,
+  following: 0,
+  posts: 0,
+  activities: 0,
+}
+
+function formatDate(date: Date | null): string {
+  if (!date) {
+    return "未发布"
+  }
+
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(date)
+}
+
+function formatReadTime(content?: string | null): string {
+  const minutes = calculateReadingMinutes(content ?? null)
+  return `≈${minutes}分钟阅读`
+}
+
+async function getProfileCounts(userId: string): Promise<ProfileCounts> {
+  const userCounts = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      _count: {
+        select: {
+          followers: true,
+          following: true,
+          posts: true,
+          activities: true,
+        },
+      },
+    },
+  })
+
+  if (!userCounts?._count) {
+    return { ...EMPTY_COUNTS }
+  }
+
+  return {
+    followers: userCounts._count.followers,
+    following: userCounts._count.following,
+    posts: userCounts._count.posts,
+    activities: userCounts._count.activities,
+  }
+}
+
+async function getRecentPosts(userId: string, take = 5): Promise<ProfilePostSummary[]> {
+  const posts = await prisma.post.findMany({
+    where: { authorId: userId },
+    orderBy: [
+      { publishedAt: "desc" },
+      { createdAt: "desc" },
+    ],
+    take,
+    select: {
+      id: true,
+      title: true,
+      excerpt: true,
+      content: true,
+      publishedAt: true,
+      createdAt: true,
+      viewCount: true,
+      tags: {
+        select: {
+          tag: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      },
+      _count: {
+        select: {
+          likes: true,
+          comments: true,
+        },
+      },
+    },
+  })
+
+  return posts.map((post) => ({
+    id: post.id,
+    title: post.title,
+    excerpt: post.excerpt || "暂时没有摘要",
+    publishedAt: formatDate(post.publishedAt ?? post.createdAt),
+    readTime: formatReadTime(post.content),
+    views: post.viewCount,
+    likes: post._count.likes,
+    comments: post._count.comments,
+    tags: post.tags.map((tag) => tag.tag.name).filter(Boolean),
+  }))
+}
 
 export default async function ProfilePage() {
   // 获取当前登录用户，数据来源于数据库
@@ -54,6 +138,20 @@ export default async function ProfilePage() {
 
   if (!user) {
     redirect("/login")
+  }
+
+  let profileCounts: ProfileCounts = { ...EMPTY_COUNTS }
+  let recentPosts: ProfilePostSummary[] = []
+  let quickStats: QuickStats = { ...EMPTY_QUICK_STATS }
+
+  try {
+    ;[profileCounts, recentPosts, quickStats] = await Promise.all([
+      getProfileCounts(user.id),
+      getRecentPosts(user.id),
+      getQuickStats(user.id),
+    ])
+  } catch (error) {
+    logger.error("加载个人资料页数据失败", { module: "profile:self", userId: user.id }, error)
   }
 
   // 格式化显示数据
@@ -149,19 +247,19 @@ export default async function ProfilePage() {
 
                     <div className="flex items-center space-x-6">
                       <div className="text-center">
-                        <p className="text-lg font-bold">0</p>
+                        <p className="text-lg font-bold">{profileCounts.following}</p>
                         <p className="text-muted-foreground text-sm">关注</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-lg font-bold">0</p>
+                        <p className="text-lg font-bold">{profileCounts.followers}</p>
                         <p className="text-muted-foreground text-sm">粉丝</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-lg font-bold">0</p>
+                        <p className="text-lg font-bold">{profileCounts.posts}</p>
                         <p className="text-muted-foreground text-sm">博客</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-lg font-bold">0</p>
+                        <p className="text-lg font-bold">{profileCounts.activities}</p>
                         <p className="text-muted-foreground text-sm">动态</p>
                       </div>
                     </div>
@@ -204,7 +302,7 @@ export default async function ProfilePage() {
 
               {/* Blog Posts Tab */}
               <TabsContent value="posts" className="space-y-6">
-                {mockPosts.length === 0 ? (
+                {recentPosts.length === 0 ? (
                   <Card>
                     <CardContent className="pt-6 text-center">
                       <BookOpen className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
@@ -212,12 +310,12 @@ export default async function ProfilePage() {
                     </CardContent>
                   </Card>
                 ) : (
-                  mockPosts.map((post) => (
+                  recentPosts.map((post) => (
                     <Card key={post.id} className="transition-shadow hover:shadow-lg">
                       <CardHeader>
                         <div className="mb-2 flex flex-wrap gap-2">
                           {post.tags.map((tag) => (
-                            <Badge key={tag} variant="secondary" className="text-xs">
+                            <Badge key={`${post.id}-${tag}`} variant="secondary" className="text-xs">
                               {tag}
                             </Badge>
                           ))}
@@ -253,49 +351,12 @@ export default async function ProfilePage() {
 
               {/* Activities Tab */}
               <TabsContent value="activities" className="space-y-6">
-                {mockActivities.length === 0 ? (
-                  <Card>
-                    <CardContent className="pt-6 text-center">
-                      <Users className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
-                      <p className="text-muted-foreground">还没有发布动态</p>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  mockActivities.map((activity) => (
-                    <Card key={activity.id} className="transition-shadow hover:shadow-md">
-                      <CardContent className="pt-6">
-                        <p className="text-foreground mb-4 leading-relaxed">{activity.content}</p>
-                        <div className="text-muted-foreground flex items-center justify-between text-sm">
-                          <span>{activity.timestamp}</span>
-                          <div className="flex items-center space-x-4">
-                            <span className="flex items-center">
-                              <Heart className="mr-1 h-3 w-3" />
-                              {activity.likes}
-                            </span>
-                            <span className="flex items-center">
-                              <MessageCircle className="mr-1 h-3 w-3" />
-                              {activity.comments}
-                            </span>
-                            <span className="flex items-center">
-                              <Repeat2 className="mr-1 h-3 w-3" />
-                              {activity.reposts}
-                            </span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
+                <ProfileActivitiesTab userId={user.id} />
               </TabsContent>
 
               {/* Likes Tab */}
               <TabsContent value="likes" className="space-y-6">
-                <Card>
-                  <CardContent className="pt-6 text-center">
-                    <Heart className="text-muted-foreground mx-auto mb-4 h-12 w-12" />
-                    <p className="text-muted-foreground">还没有点赞的内容</p>
-                  </CardContent>
-                </Card>
+                <ProfileLikesTab userId={user.id} />
               </TabsContent>
 
               {/* Media Tab */}
@@ -356,27 +417,27 @@ export default async function ProfilePage() {
                   <CardTitle className="text-lg">活动统计</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground text-sm">本月发布</span>
-                      <span className="font-semibold">0 篇</span>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground text-sm">本月发布</span>
+                        <span className="font-semibold">{quickStats.monthlyPosts} 篇</span>
+                      </div>
+                      <Separator />
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground text-sm">总阅读量</span>
+                        <span className="font-semibold">{quickStats.totalViews}</span>
+                      </div>
+                      <Separator />
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground text-sm">获得点赞</span>
+                        <span className="font-semibold">{quickStats.totalLikes}</span>
+                      </div>
+                      <Separator />
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground text-sm">评论互动</span>
+                        <span className="font-semibold">{quickStats.totalComments}</span>
+                      </div>
                     </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground text-sm">总阅读量</span>
-                      <span className="font-semibold">0</span>
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground text-sm">获得点赞</span>
-                      <span className="font-semibold">0</span>
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground text-sm">评论互动</span>
-                      <span className="font-semibold">0</span>
-                    </div>
-                  </div>
                 </CardContent>
               </Card>
 

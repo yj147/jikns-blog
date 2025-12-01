@@ -46,6 +46,7 @@
       "@/*": ["./*"],
       "@/components/*": ["./components/*"],
       "@/lib/*": ["./lib/*"],
+      "@lib/*": ["./lib/*"],
       "@/types/*": ["./types/*"],
       "@/hooks/*": ["./hooks/*"],
       "@/styles/*": ["./styles/*"],

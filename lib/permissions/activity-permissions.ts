@@ -126,6 +126,7 @@ export class ActivityPermissions {
   ): boolean {
     if (!user || activity.deletedAt) return false
     if (user.status !== UserStatus.ACTIVE) return false
+    if (activity.author.status !== UserStatus.ACTIVE) return false
 
     // 不能点赞自己的动态
     return user.id !== activity.authorId

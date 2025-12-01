@@ -178,9 +178,9 @@ async function fetchAuthorsAndTags(
             },
           })
           .then((items) =>
-            items.map<PostTagWithTag>((item) => ({
+            items.map<PostTagWithTag>((item, index) => ({
               postId: item.postId,
-              tag: item.tag,
+              tag: { ...item.tag, rank: item.tag.postsCount ?? index + 1 },
             }))
           )
       : Promise.resolve<PostTagWithTag[]>([]),

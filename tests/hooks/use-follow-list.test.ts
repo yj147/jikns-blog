@@ -7,7 +7,12 @@ import { renderHook, waitFor } from "@testing-library/react"
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import useSWR from "swr"
 import useSWRInfinite from "swr/infinite"
-import { useFollowers, useFollowing, useFollowStatusBatch } from "@/hooks/use-follow-list"
+import {
+  useFollowers,
+  useFollowing,
+  useFollowStatusBatch,
+  __testFollowListFetcher,
+} from "@/hooks/use-follow-list"
 import { logger } from "@/lib/utils/logger"
 
 // Mock dependencies
@@ -189,6 +194,36 @@ describe("useFollowers", () => {
     expect(mockedLogger.error).toHaveBeenCalledWith("获取粉丝列表失败:", mockError)
   })
 
+  it("403 错误时应标记 accessDenied 并阻断后续加载", () => {
+    const mockSetSize = vi.fn()
+    const mockMutate = vi.fn()
+    const forbiddenError = new Error("forbidden") as any
+    forbiddenError.status = 403
+
+    mockedUseSWRInfinite.mockReturnValue({
+      data: undefined,
+      error: forbiddenError,
+      isLoading: false,
+      isValidating: false,
+      mutate: mockMutate,
+      size: 1,
+      setSize: mockSetSize,
+    })
+
+    const { result } = renderHook(() => useFollowers("user-123"))
+
+    expect(result.current.accessDenied).toBe(true)
+    expect(result.current.deniedReason).toBe("FORBIDDEN")
+    expect(result.current.hasMore).toBe(false)
+
+    result.current.loadMore()
+    result.current.refresh()
+    result.current.reset()
+
+    expect(mockSetSize).not.toHaveBeenCalled()
+    expect(mockMutate).not.toHaveBeenCalled()
+  })
+
   it("应该支持加载更多功能", () => {
     const mockSetSize = vi.fn()
 
@@ -254,6 +289,50 @@ describe("useFollowers", () => {
       })
     )
   })
+
+  it("404 错误时应返回 NOT_FOUND", () => {
+    const mockSetSize = vi.fn()
+    const notFoundError = new Error("not found") as any
+    notFoundError.status = 404
+
+    mockedUseSWRInfinite.mockReturnValue({
+      data: undefined,
+      error: notFoundError,
+      isLoading: false,
+      isValidating: false,
+      mutate: vi.fn(),
+      size: 1,
+      setSize: mockSetSize,
+    })
+
+    const { result } = renderHook(() => useFollowers("user-123"))
+
+    expect(result.current.accessDenied).toBe(true)
+    expect(result.current.deniedReason).toBe("NOT_FOUND")
+    result.current.loadMore()
+    expect(mockSetSize).not.toHaveBeenCalled()
+  })
+
+  it("401 错误时应返回 UNAUTHORIZED", () => {
+    const mockSetSize = vi.fn()
+    const unauthorizedError = new Error("unauthorized") as any
+    unauthorizedError.status = 401
+
+    mockedUseSWRInfinite.mockReturnValue({
+      data: undefined,
+      error: unauthorizedError,
+      isLoading: false,
+      isValidating: false,
+      mutate: vi.fn(),
+      size: 1,
+      setSize: mockSetSize,
+    })
+
+    const { result } = renderHook(() => useFollowers("user-123"))
+
+    expect(result.current.accessDenied).toBe(true)
+    expect(result.current.deniedReason).toBe("UNAUTHORIZED")
+  })
 })
 
 describe("useFollowing", () => {
@@ -304,6 +383,40 @@ describe("useFollowing", () => {
     expect(result.current.items).toHaveLength(1)
     expect(result.current.items[0].id).toBe("user-4")
     expect(result.current.hasMore).toBe(false)
+  })
+})
+
+describe("default fetcher", () => {
+  it("在响应成功时返回 JSON", async () => {
+    const mockJson = vi.fn().mockResolvedValue({ success: true })
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: mockJson,
+    } as any)
+
+    const result = await __testFollowListFetcher("/api/users/demo/followers")
+
+    expect(result).toEqual({ success: true })
+    expect(mockFetch).toHaveBeenCalledWith("/api/users/demo/followers", {
+      credentials: "same-origin",
+    })
+  })
+
+  it("在响应失败时抛出带状态码的错误", async () => {
+    const mockJson = vi.fn().mockResolvedValue({
+      error: { message: "forbidden", code: "FORBIDDEN" },
+    })
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      json: mockJson,
+    } as any)
+
+    await expect(__testFollowListFetcher("/api/users/demo/followers")).rejects.toMatchObject({
+      message: "forbidden",
+      status: 403,
+      code: "FORBIDDEN",
+    })
   })
 })
 
@@ -518,5 +631,26 @@ describe("Key generation", () => {
 
     // 第一页应该明确传 includeTotal=false
     expect(keyGenerator(0, null)).toBe("/api/users/user-123/followers?limit=10&includeTotal=false")
+  })
+
+  it("当上一页缺少 cursor 时返回 null 以停止加载", () => {
+    mockedUseSWRInfinite.mockReturnValue({
+      data: null,
+      error: null,
+      isLoading: false,
+      isValidating: false,
+      mutate: vi.fn(),
+      size: 1,
+      setSize: vi.fn(),
+    })
+
+    renderHook(() => useFollowers("user-123"))
+    const keyGenerator = mockedUseSWRInfinite.mock.calls.at(-1)?.[0] as any
+
+    const nextKey = keyGenerator(1, {
+      meta: { pagination: { hasMore: true, nextCursor: undefined } },
+    })
+
+    expect(nextKey).toBeNull()
   })
 })

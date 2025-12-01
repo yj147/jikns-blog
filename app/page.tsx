@@ -1,6 +1,7 @@
+import { Suspense } from "react"
 import { HeroSection } from "@/components/hero-section"
 import { FeaturesSection } from "@/components/features-section"
-import { LatestContentSection } from "@/components/latest-content-section"
+import { LatestContentSection, LatestContentSectionSkeleton } from "@/components/latest-content-section"
 import { InteractiveTerminalSection } from "@/components/interactive-terminal-section"
 
 export default function HomePage() {
@@ -20,7 +21,9 @@ export default function HomePage() {
         </div>
       </section>
 
-      <LatestContentSection />
+      <Suspense fallback={<LatestContentSectionSkeleton />}>
+        <LatestContentSection />
+      </Suspense>
 
       {/* Footer */}
       <footer className="border-t px-4 py-12">

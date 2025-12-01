@@ -13,6 +13,7 @@ const authMocks = vi.hoisted(() => ({
   assertPolicy: vi.fn(),
   generateRequestId: vi.fn(() => "req-test-id"),
 }))
+const validatePermissionsMock = vi.hoisted(() => vi.fn())
 
 // Mock 依赖
 vi.mock("@/lib/prisma", () => ({
@@ -48,6 +49,11 @@ vi.mock("@/lib/prisma", () => ({
       findUnique: vi.fn(),
     },
   },
+}))
+
+vi.mock("@/lib/permissions", () => ({
+  validateApiPermissions: validatePermissionsMock,
+  createPermissionError: vi.fn(),
 }))
 
 // Mock 交互服务
@@ -95,23 +101,66 @@ describe("用户互动 API 兼容性测试", () => {
     id: "activity-123",
     content: "Test Activity",
     authorId: "author-456",
+    author: { id: "author-456", status: "ACTIVE", role: "USER" },
+    deletedAt: null,
+    isPinned: false,
   }
 
   beforeEach(() => {
     vi.clearAllMocks()
     authMocks.assertPolicy.mockResolvedValue([mockUser as any, null])
+    validatePermissionsMock.mockResolvedValue({ success: true, user: mockUser })
+
+    const prismaMock = prisma as any
+    prismaMock.post.findUnique.mockImplementation((args: any) => {
+      if (!args) return null
+      const base = {
+        ...mockPost,
+        author: { id: mockPost.authorId, status: "ACTIVE" },
+      }
+      if (args.select) {
+        const selected: any = {}
+        Object.entries(args.select).forEach(([key, value]) => {
+          if (!value) return
+          if (key === "author") {
+            selected.author = { id: base.authorId, status: "ACTIVE" }
+          } else {
+            selected[key] = (base as any)[key]
+          }
+        })
+        return selected
+      }
+      return base
+    })
+
+    prismaMock.activity.findUnique.mockImplementation((args: any) => {
+      if (!args) return null
+      const base = {
+        ...mockActivity,
+        deletedAt: null,
+        isPinned: false,
+        author: { id: mockActivity.authorId, status: "ACTIVE", role: "USER" },
+      }
+      if (args.select) {
+        const selected: any = {}
+        Object.entries(args.select).forEach(([key, value]) => {
+          if (!value) return
+          if (key === "author") {
+            selected.author = { id: base.authorId, status: "ACTIVE", role: "USER" }
+          } else {
+            selected[key] = (base as any)[key]
+          }
+        })
+        return selected
+      }
+      return base
+    })
   })
 
   function expectPolicyInvocation() {
-    expect(authMocks.assertPolicy).toHaveBeenCalledWith(
-      "user-active",
-      expect.objectContaining({
-        path: "/api/user/interactions",
-        requestId: "req-test-id",
-        ip: "127.0.0.1",
-        ua: "vitest-agent",
-      })
-    )
+    expect(validatePermissionsMock).toHaveBeenCalled()
+    const [, permissionLevel] = validatePermissionsMock.mock.calls[0]
+    expect(permissionLevel).toBe("auth")
   }
 
   describe("点赞功能兼容性", () => {
@@ -121,16 +170,15 @@ describe("用户互动 API 兼容性测试", () => {
         const prismaMock = prisma as any
         prismaMock.post.findUnique.mockResolvedValue(mockPost)
 
-        const toggleLikeMock = interactions.toggleLike as any
-        toggleLikeMock.mockResolvedValue({
-          isLiked: true, // 服务层返回 isLiked
-          count: 10,
-        })
-
-        // mock 查询新创建的点赞ID
-        prismaMock.like.findFirst.mockResolvedValue({
+        prismaMock.like.findFirst
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce({ id: "like-new-123" })
+        prismaMock.like.create.mockResolvedValue({
           id: "like-new-123",
+          authorId: mockUser.id,
+          postId: mockPost.id,
         })
+        prismaMock.like.count.mockResolvedValue(10)
 
         // 创建请求
         const request = new NextRequest("http://localhost:3000/api/user/interactions", {
@@ -157,8 +205,6 @@ describe("用户互动 API 兼容性测试", () => {
           targetId: "post-123",
         })
 
-        // 验证调用了服务层
-        expect(toggleLikeMock).toHaveBeenCalledWith("post", "post-123", "user-123")
         expectPolicyInvocation()
       })
 
@@ -166,11 +212,13 @@ describe("用户互动 API 兼容性测试", () => {
         const prismaMock = prisma as any
         prismaMock.post.findUnique.mockResolvedValue(mockPost)
 
-        const toggleLikeMock = interactions.toggleLike as any
-        toggleLikeMock.mockResolvedValue({
-          isLiked: false, // 服务层返回 isLiked
-          count: 9,
+        prismaMock.like.findFirst.mockResolvedValue({
+          id: "like-existing",
+          authorId: mockUser.id,
+          postId: "post-123",
         })
+        prismaMock.like.delete.mockResolvedValue({ id: "like-existing" })
+        prismaMock.like.count.mockResolvedValue(9)
 
         const request = new NextRequest("http://localhost:3000/api/user/interactions", {
           method: "POST",
@@ -225,16 +273,15 @@ describe("用户互动 API 兼容性测试", () => {
         const prismaMock = prisma as any
         prismaMock.activity.findUnique.mockResolvedValue(mockActivity)
 
-        const toggleLikeMock = interactions.toggleLike as any
-        toggleLikeMock.mockResolvedValue({
-          isLiked: true, // 服务层返回 isLiked
-          count: 5,
-        })
-
-        // mock 查询新创建的点赞ID
-        prismaMock.like.findFirst.mockResolvedValue({
+        prismaMock.like.findFirst
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce({ id: "like-activity-123" })
+        prismaMock.like.create.mockResolvedValue({
           id: "like-activity-123",
+          authorId: mockUser.id,
+          activityId: "activity-123",
         })
+        prismaMock.like.count.mockResolvedValue(5)
 
         const request = new NextRequest("http://localhost:3000/api/user/interactions", {
           method: "POST",
@@ -258,8 +305,33 @@ describe("用户互动 API 兼容性测试", () => {
           targetId: "activity-123",
         })
 
-        expect(toggleLikeMock).toHaveBeenCalledWith("activity", "activity-123", "user-123")
         expectPolicyInvocation()
+      })
+
+      it("自赞动态应返回 400 并拒绝操作", async () => {
+        const prismaMock = prisma as any
+        prismaMock.activity.findUnique.mockResolvedValue({
+          ...mockActivity,
+          authorId: mockUser.id,
+          author: { id: mockUser.id, status: "ACTIVE", role: "USER" },
+        })
+
+        const request = new NextRequest("http://localhost:3000/api/user/interactions", {
+          method: "POST",
+          body: JSON.stringify({
+            type: "like",
+            targetType: "ACTIVITY",
+            targetId: "activity-123",
+            action: "like",
+          }),
+        })
+
+        const response = await POST(request)
+        const data = await response.json()
+
+        expect(response.status).toBe(400)
+        expect(data.success).toBe(false)
+        expect(data.error.code).toBe("CANNOT_LIKE_SELF")
       })
     })
   })
@@ -268,18 +340,15 @@ describe("用户互动 API 兼容性测试", () => {
     it("未收藏到收藏 - 响应格式保持一致", async () => {
       const prismaMock = prisma as any
       prismaMock.post.findUnique.mockResolvedValue(mockPost)
-      // count 已由服务层返回，无需再次查询
-
-      const toggleBookmarkMock = interactions.toggleBookmark as any
-      toggleBookmarkMock.mockResolvedValue({
-        isBookmarked: true, // 服务层返回 isBookmarked
-        count: 15,
-      })
-
-      // mock 查询新创建的收藏ID
-      prismaMock.bookmark.findUnique.mockResolvedValue({
+      prismaMock.bookmark.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: "bookmark-new-123" })
+      prismaMock.bookmark.create.mockResolvedValue({
         id: "bookmark-new-123",
+        userId: mockUser.id,
+        postId: mockPost.id,
       })
+      prismaMock.bookmark.count.mockResolvedValue(15)
 
       const request = new NextRequest("http://localhost:3000/api/user/interactions", {
         method: "POST",
@@ -301,20 +370,19 @@ describe("用户互动 API 兼容性测试", () => {
         bookmarkCount: 15, // 原格式：bookmarkCount 字段
       })
 
-      expect(toggleBookmarkMock).toHaveBeenCalledWith("post-123", "user-123")
       expectPolicyInvocation()
     })
 
     it("已收藏到取消收藏 - 响应格式保持一致", async () => {
       const prismaMock = prisma as any
       prismaMock.post.findUnique.mockResolvedValue(mockPost)
-      // count 已由服务层返回，无需再次查询
-
-      const toggleBookmarkMock = interactions.toggleBookmark as any
-      toggleBookmarkMock.mockResolvedValue({
-        isBookmarked: false, // 服务层返回 isBookmarked
-        count: 14,
+      prismaMock.bookmark.findFirst.mockResolvedValue({
+        id: "bookmark-new-123",
+        userId: mockUser.id,
+        postId: mockPost.id,
       })
+      prismaMock.bookmark.delete.mockResolvedValue({ id: "bookmark-new-123" })
+      prismaMock.bookmark.count.mockResolvedValue(14)
 
       const request = new NextRequest("http://localhost:3000/api/user/interactions", {
         method: "POST",
@@ -483,14 +551,16 @@ describe("用户互动 API 兼容性测试", () => {
     })
 
     it("鉴权失败 - 仍保持历史错误契约", async () => {
-      authMocks.assertPolicy.mockResolvedValueOnce([
-        null,
-        {
+      validatePermissionsMock.mockResolvedValueOnce({
+        success: false,
+        error: {
           code: "UNAUTHORIZED",
+          error: "未登录",
           message: "未登录",
           statusCode: 401,
-        } as any,
-      ])
+          timestamp: new Date().toISOString(),
+        },
+      })
 
       const request = new NextRequest("http://localhost:3000/api/user/interactions", {
         method: "POST",

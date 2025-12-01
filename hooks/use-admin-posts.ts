@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import useSWR from "swr"
 import { toast } from "sonner"
 
 import { deletePost, publishPost, togglePinPost, unpublishPost } from "@/lib/actions/posts"
@@ -14,12 +15,6 @@ interface PostListStats {
   published: number
   drafts: number
   pinned: number
-}
-
-interface PaginationState {
-  currentPage: number
-  totalPages: number
-  totalItems: number
 }
 
 interface ApiPostItem {
@@ -100,102 +95,116 @@ function mapApiPostToCard(post: ApiPostItem): Post {
   }
 }
 
-export function useAdminPosts() {
-  const [posts, setPosts] = useState<Post[]>([])
-  const [stats, setStats] = useState<PostListStats>(DEFAULT_STATS)
-  const [availableTags, setAvailableTags] = useState<string[]>([])
-  const [pagination, setPagination] = useState<PaginationState>({
-    currentPage: 1,
-    totalPages: 1,
-    totalItems: 0,
+interface AdminPostsApiPayload {
+  success: boolean
+  data?: AdminPostsApiResponse
+  error?: {
+    message?: string
+    code?: string
+  }
+}
+
+async function fetchAdminPosts(url: string): Promise<AdminPostsApiResponse> {
+  const response = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store",
   })
 
+  if (!response.ok) {
+    throw new Error(`请求失败: ${response.status}`)
+  }
+
+  const payload = (await response.json()) as AdminPostsApiPayload
+
+  if (!payload.success || !payload.data) {
+    throw new Error(payload.error?.message || "获取文章列表失败")
+  }
+
+  return payload.data
+}
+
+export function useAdminPosts() {
   const [searchInput, setSearchInput] = useState("")
-  const [searchQuery, setSearchQuery] = useState("")
-  const [filterStatus, setFilterStatus] = useState<FilterStatus>("all")
+  const [searchQuery, setSearchQueryState] = useState("")
+  const [filterStatus, setFilterStatusState] = useState<FilterStatus>("all")
   const [selectedTags, setSelectedTags] = useState<string[]>([])
-  const [sortBy, setSortBy] = useState<SortOption>("newest")
+  const [sortBy, setSortByState] = useState<SortOption>("newest")
   const [viewMode, setViewMode] = useState<ViewMode>("grid")
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(12)
-
-  const [isLoading, setIsLoading] = useState(true)
-  const [isFetching, setIsFetching] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const isFirstLoad = useRef(true)
+  const [page, setPageState] = useState(1)
+  const [pageSize, setPageSizeState] = useState(12)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setSearchQuery((current) => (current !== searchInput ? searchInput : current))
-      setPage(1)
+      setSearchQueryState((current) => (current !== searchInput ? searchInput : current))
+      setPageState(1)
     }, 300)
 
     return () => clearTimeout(timer)
   }, [searchInput])
 
-  const fetchPosts = useCallback(async () => {
-    try {
-      setError(null)
-      if (isFirstLoad.current) {
-        setIsLoading(true)
-      } else {
-        setIsFetching(true)
-      }
-
-      const params = new URLSearchParams()
-      params.set("page", page.toString())
-      params.set("limit", pageSize.toString())
-      if (searchQuery) params.set("search", searchQuery)
-      if (filterStatus !== "all") params.set("status", filterStatus)
-      if (sortBy !== "newest") params.set("sort", sortBy)
-      selectedTags.forEach((tag) => params.append("tag", tag))
-
-      const response = await fetch(`/api/admin/posts?${params.toString()}`, {
-        method: "GET",
-        credentials: "include",
-        cache: "no-store",
-      })
-
-      if (!response.ok) {
-        throw new Error(`请求失败: ${response.status}`)
-      }
-
-      const payload = (await response.json()) as {
-        success: boolean
-        data?: AdminPostsApiResponse
-        error?: { message?: string }
-      }
-
-      if (!payload.success || !payload.data) {
-        throw new Error(payload.error?.message || "获取文章列表失败")
-      }
-
-      const mappedPosts = payload.data.items.map(mapApiPostToCard)
-      setPosts(mappedPosts)
-      setStats(payload.data.stats ?? DEFAULT_STATS)
-      setAvailableTags(payload.data.availableTags ?? [])
-      setPagination({
-        currentPage: payload.data.pagination.page,
-        totalPages: payload.data.pagination.totalPages,
-        totalItems: payload.data.pagination.total,
-      })
-      setPage(payload.data.pagination.page)
-      setPageSize(payload.data.pagination.limit)
-    } catch (fetchError) {
-      const message = fetchError instanceof Error ? fetchError.message : String(fetchError)
-      setError(message)
-      toast.error(`获取文章列表失败: ${message}`)
-    } finally {
-      isFirstLoad.current = false
-      setIsLoading(false)
-      setIsFetching(false)
-    }
+  const queryString = useMemo(() => {
+    const params = new URLSearchParams()
+    params.set("page", page.toString())
+    params.set("limit", pageSize.toString())
+    if (searchQuery) params.set("search", searchQuery)
+    if (filterStatus !== "all") params.set("status", filterStatus)
+    if (sortBy !== "newest") params.set("sort", sortBy)
+    selectedTags.forEach((tag) => params.append("tag", tag))
+    return params.toString()
   }, [filterStatus, page, pageSize, searchQuery, selectedTags, sortBy])
 
   useEffect(() => {
-    fetchPosts()
-  }, [fetchPosts])
+    setActionError(null)
+  }, [queryString])
+
+  const endpoint = useMemo(() => `/api/admin/posts?${queryString}`, [queryString])
+
+  const { data, error: swrError, isLoading, isValidating, mutate } = useSWR<AdminPostsApiResponse>(
+    endpoint,
+    fetchAdminPosts,
+    {
+      revalidateOnMount: true,
+      dedupingInterval: 5000,
+    }
+  )
+
+  const swrErrorMessage = swrError ? (swrError instanceof Error ? swrError.message : String(swrError)) : null
+
+  useEffect(() => {
+    if (!swrErrorMessage) return
+    toast.error(`获取文章列表失败: ${swrErrorMessage}`)
+  }, [swrErrorMessage])
+
+  const paginationInfo = data?.pagination
+
+  useEffect(() => {
+    if (!paginationInfo) return
+    setPageState((prev) => (prev === paginationInfo.page ? prev : paginationInfo.page))
+    setPageSizeState((prev) => (prev === paginationInfo.limit ? prev : paginationInfo.limit))
+  }, [paginationInfo])
+
+  const posts = useMemo(() => {
+    if (!data) return []
+    return data.items.map(mapApiPostToCard)
+  }, [data])
+
+  const stats = data?.stats ?? DEFAULT_STATS
+  const availableTags = data?.availableTags ?? []
+  const resolvedItemsPerPage = paginationInfo?.limit ?? pageSize
+  const resolvedPage = paginationInfo?.page ?? page
+  const resolvedTotalPages = paginationInfo?.totalPages ?? 1
+  const resolvedTotalItems = paginationInfo?.total ?? 0
+
+  const isFetching = isValidating && !isLoading
+  const combinedError = swrErrorMessage ?? actionError
+  const hasError = combinedError !== null
+
+  const refreshAdminPosts = useCallback(() => {
+    setActionError(null)
+    return mutate()
+  }, [mutate])
 
   const handleDelete = useCallback(
     async (post: Post) => {
@@ -203,19 +212,19 @@ export function useAdminPosts() {
         const result = await deletePost(post.id)
         if (result.success) {
           toast.success("文章删除成功")
-          await fetchPosts()
+          await refreshAdminPosts()
         } else {
           const friendly = resolveErrorMessage(result.error?.code, result.error?.message)
-          setError(friendly)
+          setActionError(friendly)
           toast.error(`删除文章失败: ${friendly}`)
         }
       } catch (deleteError) {
         const message = deleteError instanceof Error ? deleteError.message : String(deleteError)
-        setError(message)
+        setActionError(message)
         toast.error("删除文章失败")
       }
     },
-    [fetchPosts]
+    [refreshAdminPosts]
   )
 
   const handleTogglePin = useCallback(
@@ -224,19 +233,19 @@ export function useAdminPosts() {
         const result = await togglePinPost(post.id)
         if (result.success) {
           toast.success(result.data?.message || "操作成功")
-          await fetchPosts()
+          await refreshAdminPosts()
         } else {
           const friendly = resolveErrorMessage(result.error?.code, result.error?.message)
-          setError(friendly)
+          setActionError(friendly)
           toast.error(`切换置顶状态失败: ${friendly}`)
         }
       } catch (toggleError) {
         const message = toggleError instanceof Error ? toggleError.message : String(toggleError)
-        setError(message)
+        setActionError(message)
         toast.error("切换置顶状态失败")
       }
     },
-    [fetchPosts]
+    [refreshAdminPosts]
   )
 
   const handleTogglePublish = useCallback(
@@ -245,43 +254,38 @@ export function useAdminPosts() {
         const result = post.isPublished ? await unpublishPost(post.id) : await publishPost(post.id)
         if (result.success) {
           toast.success(result.data?.message || "操作成功")
-          await fetchPosts()
+          await refreshAdminPosts()
         } else {
           const friendly = resolveErrorMessage(result.error?.code, result.error?.message)
-          setError(friendly)
+          setActionError(friendly)
           toast.error(`切换发布状态失败: ${friendly}`)
         }
       } catch (toggleError) {
         const message = toggleError instanceof Error ? toggleError.message : String(toggleError)
-        setError(message)
+        setActionError(message)
         toast.error("切换发布状态失败")
       }
     },
-    [fetchPosts]
+    [refreshAdminPosts]
   )
 
   const toggleTag = useCallback((tag: string) => {
     setSelectedTags((prev) => {
       const exists = prev.includes(tag)
-      const next = exists ? prev.filter((item) => item !== tag) : [...prev, tag]
-      return next
+      return exists ? prev.filter((item) => item !== tag) : [...prev, tag]
     })
-    setPage(1)
+    setPageState(1)
   }, [])
 
   const clearFilters = useCallback(() => {
     setSearchInput("")
-    setSearchQuery("")
+    setSearchQueryState("")
     setSelectedTags([])
-    setFilterStatus("all")
-    setSortBy("newest")
-    setPage(1)
+    setFilterStatusState("all")
+    setSortByState("newest")
+    setPageState(1)
   }, [])
 
-  // 简单的布尔值不需要 useMemo
-  const hasError = error !== null
-
-  // 使用 useMemo 避免 filters 对象每次渲染都创建新引用
   const filters = useMemo(
     () => ({
       searchQuery: searchInput,
@@ -289,10 +293,10 @@ export function useAdminPosts() {
       selectedTags,
       sortBy,
       viewMode,
-      itemsPerPage: pageSize,
-      currentPage: pagination.currentPage,
-      totalPages: pagination.totalPages,
-      totalItems: pagination.totalItems,
+      itemsPerPage: resolvedItemsPerPage,
+      currentPage: resolvedPage,
+      totalPages: resolvedTotalPages,
+      totalItems: resolvedTotalItems,
     }),
     [
       searchInput,
@@ -300,10 +304,10 @@ export function useAdminPosts() {
       selectedTags,
       sortBy,
       viewMode,
-      pageSize,
-      pagination.currentPage,
-      pagination.totalPages,
-      pagination.totalItems,
+      resolvedItemsPerPage,
+      resolvedPage,
+      resolvedTotalPages,
+      resolvedTotalItems,
     ]
   )
 
@@ -314,28 +318,28 @@ export function useAdminPosts() {
     filters,
     isLoading,
     isFetching,
-    error,
+    error: combinedError,
     hasError,
     setSearchQuery: setSearchInput,
     setFilterStatus: (status: FilterStatus) => {
-      setFilterStatus(status)
-      setPage(1)
+      setFilterStatusState(status)
+      setPageState(1)
     },
     toggleTag,
     clearFilters,
     setSortBy: (value: SortOption) => {
-      setSortBy(value)
-      setPage(1)
+      setSortByState(value)
+      setPageState(1)
     },
     setItemsPerPage: (value: number) => {
-      setPageSize(value)
-      setPage(1)
+      setPageSizeState(value)
+      setPageState(1)
     },
     setViewMode,
     setPage: (value: number) => {
-      setPage(Math.max(1, value))
+      setPageState(Math.max(1, value))
     },
-    refetch: fetchPosts,
+    refetch: refreshAdminPosts,
     handleDelete,
     handleTogglePin,
     handleTogglePublish,

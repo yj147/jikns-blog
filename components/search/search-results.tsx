@@ -18,9 +18,10 @@ import { buildUrlSearchParams } from "@/lib/search/search-params"
 import { SearchResultCard } from "@/components/search/search-result-card"
 import { SearchPagination } from "@/components/search/search-pagination"
 import type { ApiError } from "@/types/api"
+import type { SearchActivityHit, SearchPostHit, SearchTagHit, SearchUserHit } from "@/types/search"
 
 type ResultBucketKey = Exclude<SearchContentType, "all">
-type ResultCardType = "post" | "activity" | "user" | "tag"
+type ResultCardType = "posts" | "activities" | "users" | "tags"
 
 const RESULT_BUCKET_KEYS: readonly ResultBucketKey[] = [
   "posts",
@@ -29,14 +30,11 @@ const RESULT_BUCKET_KEYS: readonly ResultBucketKey[] = [
   "tags",
 ] as const
 
-const BUCKET_CONFIG: Record<
-  ResultBucketKey,
-  { label: string; icon: LucideIcon; cardType: ResultCardType }
-> = {
-  posts: { label: "文章", icon: FileText, cardType: "post" },
-  activities: { label: "动态", icon: Activity, cardType: "activity" },
-  users: { label: "用户", icon: User, cardType: "user" },
-  tags: { label: "标签", icon: Hash, cardType: "tag" },
+const BUCKET_CONFIG: Record<ResultBucketKey, { label: string; icon: LucideIcon; cardType: ResultCardType }> = {
+  posts: { label: "文章", icon: FileText, cardType: "posts" },
+  activities: { label: "动态", icon: Activity, cardType: "activities" },
+  users: { label: "用户", icon: User, cardType: "users" },
+  tags: { label: "标签", icon: Hash, cardType: "tags" },
 }
 
 interface SearchResultsProps {
@@ -238,41 +236,87 @@ function createVisibleCards(
       case "posts": {
         const postBucket = searchResults.posts
         cards.push(
-          ...postBucket.items.map((item) => (
-            <SearchResultCard key={`post-${item.id}`} type="post" data={item} query={query} />
-          ))
+          ...postBucket.items.map((item): ReactElement => {
+            const cardData: SearchPostHit = {
+              id: item.id,
+              slug: item.slug,
+              title: item.title,
+              excerpt: item.excerpt,
+              coverImage: item.coverImage,
+              publishedAt: item.publishedAt ?? item.createdAt,
+              createdAt: item.createdAt,
+              authorId: item.author.id,
+              authorName: item.author.name,
+              rank: item.rank,
+            }
+            return (
+              <SearchResultCard key={`posts-${item.id}`} type="posts" data={cardData} query={query} />
+            )
+          })
         )
         break
       }
       case "activities": {
         const activityBucket = searchResults.activities
         cards.push(
-          ...activityBucket.items.map((item) => (
-            <SearchResultCard
-              key={`activity-${item.id}`}
-              type="activity"
-              data={item}
-              query={query}
-            />
-          ))
+          ...activityBucket.items.map((item): ReactElement => {
+            const cardData: SearchActivityHit = {
+              id: item.id,
+              content: item.content,
+              imageUrls: item.imageUrls,
+              createdAt: item.createdAt,
+              authorId: item.author.id,
+              authorName: item.author.name,
+              rank: item.rank,
+            }
+            return (
+              <SearchResultCard
+                key={`activities-${item.id}`}
+                type="activities"
+                data={cardData}
+                query={query}
+              />
+            )
+          })
         )
         break
       }
       case "users": {
         const userBucket = searchResults.users
         cards.push(
-          ...userBucket.items.map((item) => (
-            <SearchResultCard key={`user-${item.id}`} type="user" data={item} query={query} />
-          ))
+          ...userBucket.items.map((item): ReactElement => {
+            const cardData: SearchUserHit = {
+              id: item.id,
+              name: item.name,
+              email: item.email,
+              avatarUrl: item.avatarUrl,
+              bio: item.bio,
+              rank: item.rank,
+            }
+            return (
+              <SearchResultCard key={`users-${item.id}`} type="users" data={cardData} query={query} />
+            )
+          })
         )
         break
       }
       case "tags": {
         const tagBucket = searchResults.tags
         cards.push(
-          ...tagBucket.items.map((item) => (
-            <SearchResultCard key={`tag-${item.id}`} type="tag" data={item} query={query} />
-          ))
+          ...tagBucket.items.map((item): ReactElement => {
+            const cardData: SearchTagHit = {
+              id: item.id,
+              name: item.name,
+              slug: item.slug,
+              description: item.description,
+              color: item.color,
+              postsCount: item.postsCount,
+              rank: item.rank,
+            }
+            return (
+              <SearchResultCard key={`tags-${item.id}`} type="tags" data={cardData} query={query} />
+            )
+          })
         )
         break
       }

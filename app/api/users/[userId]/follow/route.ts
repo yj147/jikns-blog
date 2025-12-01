@@ -2,8 +2,9 @@ import { NextRequest } from "next/server"
 import { followUser, unfollowUser } from "@/lib/interactions"
 import { createSuccessResponse } from "@/lib/api/unified-response"
 import { handleFollowOperation } from "@/lib/api/follow/pipeline"
+import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
-export async function POST(
+async function handlePost(
   request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
@@ -43,7 +44,7 @@ export async function POST(
   )
 }
 
-export async function DELETE(
+async function handleDelete(
   request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
@@ -79,3 +80,6 @@ export async function DELETE(
     }
   )
 }
+
+export const POST = withApiResponseMetrics(handlePost)
+export const DELETE = withApiResponseMetrics(handleDelete)
