@@ -11,6 +11,8 @@ import { fetchJson } from "@/lib/api/fetch-json"
 import { logger } from "@/lib/utils/logger"
 import type { Database } from "@/types/database"
 import type { AdminDashboardCounterRow, MonitoringResponse, MonitoringStats } from "@/types/monitoring"
+import { createRetryScheduler } from "@/lib/realtime/retry"
+import { ensureSessionReady, useNetworkStatus, useOnlineCallback } from "@/lib/realtime/connection"
 
 interface UseRealtimeDashboardOptions {
   enabled?: boolean
@@ -44,11 +46,19 @@ export function useRealtimeDashboard({
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false)
   const [isPollingFallback, setIsPollingFallback] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [retryToken, setRetryToken] = useState(0)
 
   const supabaseRef = useRef<SupabaseClient<Database> | null>(supabaseClient)
   const channelRef = useRef<RealtimeChannel | null>(null)
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(true)
+  const retrySchedulerRef = useRef(createRetryScheduler())
+  const isOnline = useNetworkStatus()
+
+  useOnlineCallback(() => {
+    retrySchedulerRef.current.reset()
+    setRetryToken((prev) => prev + 1)
+  })
 
   useEffect(() => {
     supabaseRef.current = supabaseClient
@@ -105,7 +115,7 @@ export function useRealtimeDashboard({
   }, [])
 
   const startPolling = useCallback(() => {
-    if (pollTimerRef.current) {
+    if (pollTimerRef.current || !isOnline) {
       return
     }
     setIsRealtimeConnected(false)
@@ -113,7 +123,7 @@ export function useRealtimeDashboard({
     pollTimerRef.current = setInterval(() => {
       void fetchStats()
     }, pollInterval)
-  }, [fetchStats, pollInterval])
+  }, [fetchStats, isOnline, pollInterval])
 
   useEffect(() => {
     mountedRef.current = true
@@ -121,6 +131,30 @@ export function useRealtimeDashboard({
       setIsLoading(false)
       return () => {
         mountedRef.current = false
+      }
+    }
+
+    if (!isOnline) {
+      setIsRealtimeConnected(false)
+      setIsPollingFallback(false)
+      setIsLoading(false)
+      stopPolling()
+      return () => {
+        mountedRef.current = false
+        retrySchedulerRef.current.reset()
+      }
+    }
+
+    const channelName = "admin-dashboard:counters"
+    const retryScheduler = retrySchedulerRef.current
+
+    const scheduleRetry = () => {
+      const delay = retryScheduler.schedule(() => {
+        if (!mountedRef.current) return
+        setRetryToken((prev) => prev + 1)
+      })
+      if (delay === null) {
+        logger.warn("仪表盘订阅重试已达上限", { channelName, attempts: retryScheduler.attempts })
       }
     }
 
@@ -138,6 +172,7 @@ export function useRealtimeDashboard({
           if (mountedRef.current) {
             setError(err instanceof Error ? err : new Error(message))
             startPolling()
+            scheduleRetry()
           }
           return
         }
@@ -150,7 +185,15 @@ export function useRealtimeDashboard({
         return
       }
 
-      const channelName = "admin-dashboard:counters"
+      const sessionReady = await ensureSessionReady(supabase, channelName)
+      if (!mountedRef.current) return
+      if (!sessionReady) {
+        setIsRealtimeConnected(false)
+        startPolling()
+        scheduleRetry()
+        return
+      }
+
       logger.info("订阅 admin_dashboard_counters", { channelName })
 
       const channel = supabase
@@ -173,11 +216,19 @@ export function useRealtimeDashboard({
           if (!mountedRef.current) return
           if (status === "SUBSCRIBED") {
             setIsRealtimeConnected(true)
+            retryScheduler.reset()
             stopPolling()
           } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+            // 防止 removeChannel 同步触发 CLOSED 回调导致无限递归
+            const channelToRemove = channelRef.current
+            channelRef.current = null
             logger.warn("Realtime 订阅中断，回退轮询", { channelName, status })
             setIsRealtimeConnected(false)
+            if (channelToRemove && supabaseRef.current) {
+              supabaseRef.current.removeChannel(channelToRemove)
+            }
             startPolling()
+            scheduleRetry()
           }
         })
 
@@ -188,6 +239,7 @@ export function useRealtimeDashboard({
 
     return () => {
       mountedRef.current = false
+      retryScheduler.reset()
       stopPolling()
       if (channelRef.current && supabaseRef.current) {
         logger.info("取消订阅 admin_dashboard_counters")
@@ -195,7 +247,7 @@ export function useRealtimeDashboard({
       }
       channelRef.current = null
     }
-  }, [enabled, fetchStats, startPolling, stopPolling, updateFromRow])
+  }, [enabled, fetchStats, isOnline, startPolling, stopPolling, updateFromRow, retryToken])
 
   const connectionState: UseRealtimeDashboardResult["connectionState"] = isRealtimeConnected
     ? "realtime"

@@ -10,6 +10,8 @@ import { createClient } from "@/lib/supabase"
 import { fetchJson } from "@/lib/api/fetch-json"
 import { logger } from "@/lib/utils/logger"
 import type { NotificationListPayload, NotificationView } from "@/components/notifications/types"
+import { createRetryScheduler } from "@/lib/realtime/retry"
+import { ensureSessionReady, useNetworkStatus, useOnlineCallback } from "@/lib/realtime/connection"
 
 interface NotificationRow {
   id: string
@@ -78,9 +80,15 @@ export function useRealtimeNotifications({
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const onInsertRef = useRef(onInsert)
-  const retryRef = useRef(0)
   const supabaseClientRef = useRef<SupabaseClient<Database> | null>(null)
   const [retryToken, setRetryToken] = useState(0)
+  const retrySchedulerRef = useRef(createRetryScheduler({ maxRetry: MAX_RETRY }))
+  const isOnline = useNetworkStatus()
+
+  useOnlineCallback(() => {
+    retrySchedulerRef.current.reset()
+    setRetryToken((prev) => prev + 1)
+  })
 
   useEffect(() => {
     onInsertRef.current = onInsert
@@ -94,56 +102,34 @@ export function useRealtimeNotifications({
 
   useEffect(() => {
     if (!enabled || !userId) {
+      retrySchedulerRef.current.reset()
+      return
+    }
+
+    if (!isOnline) {
+      retrySchedulerRef.current.clear()
+      setIsSubscribed(false)
       return
     }
 
     let supabase: SupabaseClient<Database> | null = supabaseClientRef.current
     let channel: ReturnType<SupabaseClient<Database>["channel"]> | null = null
     let isActive = true
-    let retryTimer: ReturnType<typeof setTimeout> | null = null
-    const channelName = `notifications:${userId}`
+    const channelName = `notifications:user-${userId}`
+    const retryScheduler = retrySchedulerRef.current
 
     const scheduleRetry = () => {
-      if (retryRef.current < MAX_RETRY) {
-        retryRef.current += 1
-        const delay = 1000 * retryRef.current
-        retryTimer = setTimeout(() => setRetryToken((prev) => prev + 1), delay)
+      if (!isActive) return
+      if (!isOnline) {
+        retryScheduler.reset()
+        return
       }
-    }
-
-    const ensureSessionReady = async (client: SupabaseClient<Database>) => {
-      try {
-        const {
-          data: { session },
-          error: sessionError,
-        } = await client.auth.getSession()
-
-        if (sessionError) {
-          logger.error("获取 Supabase 会话失败，延迟通知订阅", { channelName }, sessionError)
-          setError(sessionError)
-          return false
-        }
-
-        if (!session) {
-          logger.warn("Supabase 会话未就绪，延迟通知订阅", {
-            channelName,
-            attempt: retryRef.current,
-          })
-          return false
-        }
-
-        logger.debug("Session ready for realtime", {
-          channelName,
-          hasAccessToken: Boolean(session.access_token),
-          userId: session.user?.id,
-          expiresAt: session.expires_at,
-        })
-
-        return true
-      } catch (err) {
-        logger.error("检查 Supabase 会话状态异常", { channelName }, err)
-        setError(err instanceof Error ? err : new Error("Unknown error"))
-        return false
+      const delay = retryScheduler.schedule(() => {
+        if (!isActive) return
+        setRetryToken((prev) => prev + 1)
+      })
+      if (delay === null) {
+        logger.warn("通知订阅重试已达上限", { channelName, attempts: retryScheduler.attempts })
       }
     }
 
@@ -191,7 +177,7 @@ export function useRealtimeNotifications({
         return
       }
 
-      const sessionReady = await ensureSessionReady(supabase)
+      const sessionReady = await ensureSessionReady(supabase, channelName, true)
       if (!isActive) return
 
       if (!sessionReady) {
@@ -296,87 +282,111 @@ export function useRealtimeNotifications({
         }),
       })
 
-      channel = client
-        .channel(channelName)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "notifications",
-            filter: `recipientId=eq.${userId}`,
-          },
-          async (payload: RealtimePostgresChangesPayload<NotificationRow>) => {
-            const newNotification = (payload.new ?? null) as NotificationRow | null
-            if (!newNotification) return
+      const handleNotificationChange = async (
+        incoming: NotificationRow | null,
+        source: "broadcast" | "postgres_changes"
+      ) => {
+        if (!incoming) return
 
-            logger.debug("收到新通知", { notificationId: newNotification.id })
+        const normalized: NotificationRow = {
+          ...incoming,
+          createdAt:
+            typeof incoming.createdAt === "string"
+              ? incoming.createdAt
+              : new Date(incoming.createdAt).toISOString(),
+          readAt: incoming.readAt ?? null,
+        }
 
-            try {
-              const hydrated =
-                (await hydrateNotification(newNotification.id)) ?? withFallback(newNotification)
-              onInsertRef.current?.(hydrated)
-            } catch (err) {
-              logger.error("处理通知变更失败", { notificationId: newNotification.id }, err)
-              setError(err instanceof Error ? err : new Error("Unknown error"))
-            }
+        logger.debug("收到新通知", { notificationId: normalized.id, source })
+
+        try {
+          const hydrated =
+            (await hydrateNotification(normalized.id)) ?? withFallback(normalized)
+          onInsertRef.current?.(hydrated)
+        } catch (err) {
+          logger.error("处理通知变更失败", { notificationId: normalized.id }, err)
+          setError(err instanceof Error ? err : new Error("Unknown error"))
+        }
+      }
+
+      const notificationChannel = client.channel(channelName)
+
+      notificationChannel.on("broadcast", { event: "INSERT" }, async (payload) => {
+        const data = (payload as { payload?: NotificationRow | null })?.payload ?? null
+        await handleNotificationChange(data, "broadcast")
+      })
+
+      notificationChannel.on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `recipientId=eq.${userId}`,
+        },
+        async (payload: RealtimePostgresChangesPayload<NotificationRow>) => {
+          await handleNotificationChange(
+            (payload.new ?? null) as NotificationRow | null,
+            "postgres_changes"
+          )
+        }
+      )
+
+      notificationChannel.subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          setIsSubscribed(true)
+          retryScheduler.reset()
+          logger.info("通知订阅成功", { channelName })
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          if (!isActive) {
+            return
           }
-        )
-        .subscribe((status) => {
-          if (status === "SUBSCRIBED") {
-            setIsSubscribed(true)
-            retryRef.current = 0
-            logger.info("通知订阅成功", { channelName })
-          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-            if (!isActive) {
-              return
-            }
-            setIsSubscribed(false)
-            setError(new Error("Failed to subscribe to notifications"))
-            void client.auth
-              .getSession()
-              .then(({ data, error: sessionError }) => {
-                if (sessionError) {
-                  logger.warn("获取 Supabase 会话用于订阅中断日志失败", {
-                    channelName,
-                    status,
-                    attempt: retryRef.current,
-                    error: sessionError,
-                  })
-                }
-                logger.error("通知订阅中断", {
+          setIsSubscribed(false)
+          setError(new Error("Failed to subscribe to notifications"))
+          void client.auth
+            .getSession()
+            .then(({ data, error: sessionError }) => {
+              if (sessionError) {
+                logger.warn("获取 Supabase 会话用于订阅中断日志失败", {
                   channelName,
                   status,
-                  attempt: retryRef.current,
-                  sessionUserId: data.session?.user?.id ?? "unknown",
+                  attempts: retryScheduler.attempts,
+                  error: sessionError,
                 })
+              }
+              logger.error("通知订阅中断", {
+                channelName,
+                status,
+                attempts: retryScheduler.attempts,
+                sessionUserId: data.session?.user?.id ?? "unknown",
               })
-              .catch((err) =>
-                logger.error(
-                  "通知订阅中断（获取会话异常）",
-                  { channelName, status, attempt: retryRef.current },
-                  err
-                )
+            })
+            .catch((err) =>
+              logger.error(
+                "通知订阅中断（获取会话异常）",
+                { channelName, status, attempts: retryScheduler.attempts },
+                err
               )
-            scheduleRetry()
-          }
-        })
+            )
+          scheduleRetry()
+        }
+      })
+
+      channel = notificationChannel
     }
 
     void setupSubscription()
 
     return () => {
       isActive = false
-      if (retryTimer) {
-        clearTimeout(retryTimer)
-      }
+      retryScheduler.reset()
       if (channel && supabase) {
         logger.info("取消订阅通知", { channelName })
         supabase.removeChannel(channel)
       }
       setIsSubscribed(false)
     }
-  }, [userId, enabled, retryToken])
+  }, [userId, enabled, isOnline, retryToken])
 
   return {
     isSubscribed,

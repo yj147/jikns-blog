@@ -15,6 +15,7 @@ type NotificationRow = {
   recipientId: string
   actorId: string
   type: NotificationType
+  activityId: string | null
   postId: string | null
   commentId: string | null
   readAt: string | null
@@ -22,12 +23,17 @@ type NotificationRow = {
 }
 
 function createChannelMock() {
-  let changeHandler: ((payload: NotificationRow) => void) | null = null
+  let postgresHandler: ((payload: NotificationRow) => void) | null = null
+  let broadcastHandler: ((payload: NotificationRow) => void) | null = null
   let statusHandler: ((status: string) => void) | null = null
 
   const channel = {
-    on: vi.fn((_event, _filter, cb) => {
-      changeHandler = (payload) => cb({ new: payload })
+    on: vi.fn((event, _filter, cb) => {
+      if (event === "postgres_changes") {
+        postgresHandler = (payload) => cb({ new: payload })
+      } else if (event === "broadcast") {
+        broadcastHandler = (payload) => cb({ event: "INSERT", payload })
+      }
       return channel
     }),
     subscribe: vi.fn((cb?: (status: string) => void) => {
@@ -35,7 +41,10 @@ function createChannelMock() {
       return channel
     }),
     triggerInsert(row: NotificationRow) {
-      changeHandler?.(row)
+      postgresHandler?.(row)
+    },
+    triggerBroadcast(row: NotificationRow) {
+      broadcastHandler?.(row)
     },
     emitStatus(status: string) {
       statusHandler?.(status)
@@ -173,6 +182,7 @@ if (missingSupabaseEnv) {
         recipientId: recipient.id,
         actorId: actor.id,
         type: NotificationType.LIKE,
+        activityId: null,
         postId: null,
         commentId: null,
         readAt: null,
