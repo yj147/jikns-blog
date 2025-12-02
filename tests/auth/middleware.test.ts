@@ -7,19 +7,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { NextRequest, NextResponse } from "next/server"
 import { middleware } from "@/middleware"
+import { prisma } from "@/lib/prisma"
 import { createTestRequest, TEST_USERS, PERMISSION_TEST_SCENARIOS } from "../helpers/test-data"
 import { setCurrentTestUser, resetMocks } from "../__mocks__/supabase"
 import { setupTestEnv } from "../helpers/test-env"
+import { resetPrismaMocks } from "../__mocks__/prisma"
+
+const prismaModule = vi.hoisted(() => require("../__mocks__/prisma"))
 
 // Mock 依赖
-vi.mock("@/lib/prisma", () => ({
-  prisma: {
-    user: {
-      findUnique: vi.fn(),
-      update: vi.fn(),
-    },
-  },
-}))
+vi.mock("@/lib/prisma", () => ({ prisma: prismaModule.mockPrisma }))
 
 vi.mock("@/lib/security", () => ({
   setSecurityHeaders: vi.fn((response) => response),
@@ -37,11 +34,12 @@ vi.mock("@/lib/security", () => ({
 }))
 
 describe("认证中间件测试", () => {
-  const mockPrisma = vi.mocked(require("@/lib/prisma").prisma)
+  const mockPrisma = vi.mocked(prisma)
 
   beforeEach(() => {
     vi.clearAllMocks()
     resetMocks()
+    resetPrismaMocks()
 
     // 使用标准化环境配置
     setupTestEnv()
@@ -98,9 +96,8 @@ describe("认证中间件测试", () => {
     })
 
     it.each(authPaths)("应该允许已认证用户访问: %s", async (path) => {
-      setCurrentTestUser("user")(mockPrisma.user.findUnique as any).mockResolvedValue(
-        TEST_USERS.user as any
-      )
+      setCurrentTestUser("user")
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(TEST_USERS.user as any)
 
       const request = createTestRequest(path)
       const response = await middleware(request as NextRequest)
@@ -162,9 +159,8 @@ describe("认证中间件测试", () => {
     })
 
     it.each(adminPaths)("应该允许管理员访问管理路径: %s", async (path) => {
-      setCurrentTestUser("admin")(mockPrisma.user.findUnique as any).mockResolvedValue(
-        TEST_USERS.admin as any
-      )
+      setCurrentTestUser("admin")
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(TEST_USERS.admin as any)
 
       const request = createTestRequest(path)
       const response = await middleware(request as NextRequest)
@@ -177,9 +173,8 @@ describe("认证中间件测试", () => {
 
     it("应该拒绝被封禁的管理员访问", async () => {
       const bannedAdmin = { ...TEST_USERS.bannedUser, role: "ADMIN" as const }
-      setCurrentTestUser("bannedUser")(mockPrisma.user.findUnique as any).mockResolvedValue(
-        bannedAdmin as any
-      )
+      setCurrentTestUser("bannedUser")
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(bannedAdmin as any)
 
       const request = createTestRequest("/admin/dashboard")
       const response = await middleware(request as NextRequest)
@@ -192,9 +187,8 @@ describe("认证中间件测试", () => {
 
   describe("权限缓存机制", () => {
     it("应该缓存用户权限信息", async () => {
-      setCurrentTestUser("user")(mockPrisma.user.findUnique as any).mockResolvedValue(
-        TEST_USERS.user as any
-      )
+      setCurrentTestUser("user")
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(TEST_USERS.user as any)
 
       const request1 = createTestRequest("/profile")
       const request2 = createTestRequest("/settings")

@@ -18,22 +18,15 @@ import {
   logSessionEvent,
   authLog,
 } from "@/lib/utils/auth-logging"
+import { authLogger } from "@/lib/utils/logger"
+import type { LoggerModuleMock } from "../helpers/logger-mock"
 
-// Mock authLogger
-const mockAuthLogger = {
-  debug: vi.fn(),
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-}
-
-vi.mock("@/lib/utils/logger", () => ({
-  authLogger: mockAuthLogger,
-}))
+let mockAuthLogger: LoggerModuleMock["authLogger"]
 
 describe("认证日志字段完整性测试", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockAuthLogger = authLogger as LoggerModuleMock["authLogger"]
   })
 
   describe("extractAuthContext", () => {

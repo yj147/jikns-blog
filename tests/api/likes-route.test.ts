@@ -14,6 +14,30 @@ import { RateLimiter } from "@/lib/security"
 import { AuthError } from "@/lib/error-handling/auth-error"
 import { API_ERROR_MESSAGES } from "@/lib/api/error-messages"
 
+const { mockLogger, createLoggerMock } = vi.hoisted(() => {
+  const logger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    child: vi.fn(),
+  }
+
+  logger.child.mockReturnValue(logger)
+
+  return {
+    mockLogger: logger,
+    createLoggerMock: vi.fn(() => logger),
+  }
+})
+
+vi.mock("@/lib/utils/logger", () => ({
+  logger: mockLogger,
+  createLogger: createLoggerMock,
+  authLogger: mockLogger,
+  apiLogger: mockLogger,
+}))
+
 // Mock 依赖
 vi.mock("@/lib/interactions", async () => {
   const actual = await vi.importActual<typeof import("@/lib/interactions")>("@/lib/interactions")

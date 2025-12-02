@@ -301,7 +301,7 @@ async function doCreate(
   targetType: LikeTargetType,
   targetId: string,
   requestId?: string
-): Promise<number> {
+): Promise<{ count: number; created: boolean }> {
   try {
     // 性能监控：记录触发器执行耗时
     const startTime = Date.now()
@@ -337,7 +337,7 @@ async function doCreate(
       duration,
       requestId,
     })
-    return count
+    return { count, created: true }
   } catch (error: unknown) {
     // P2003: 外键约束失败，目标不存在
     if (isKnownRequestError(error, "P2003")) {
@@ -354,7 +354,7 @@ async function doCreate(
         finalCount: count,
         requestId,
       })
-      return count
+      return { count, created: false }
     }
     throw error
   }
@@ -418,8 +418,16 @@ export async function toggleLike(
       return { isLiked: false, count }
     } else {
       await assertCanLikeTarget(targetType, targetId, actor)
-      const count = await doCreate(targetFilter, userId, targetType, targetId, requestId)
-      await maybeNotifyLike(targetType, targetId, userId)
+      const { count, created } = await doCreate(
+        targetFilter,
+        userId,
+        targetType,
+        targetId,
+        requestId
+      )
+      if (created) {
+        await maybeNotifyLike(targetType, targetId, userId)
+      }
       return { isLiked: true, count }
     }
   } catch (error) {
@@ -448,7 +456,16 @@ export async function setLike(
     if (desired) {
       const actor = await loadActor(userId)
       await assertCanLikeTarget(targetType, targetId, actor)
-      const count = await doCreate(targetFilter, userId, targetType, targetId, requestId)
+      const { count, created } = await doCreate(
+        targetFilter,
+        userId,
+        targetType,
+        targetId,
+        requestId
+      )
+      if (created) {
+        await maybeNotifyLike(targetType, targetId, userId)
+      }
       return { isLiked: true, count }
     } else {
       await prisma.like.deleteMany({ where: { authorId: userId, ...targetFilter } })

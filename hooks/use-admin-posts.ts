@@ -25,6 +25,7 @@ interface ApiPostItem {
   published: boolean
   isPinned: boolean
   coverImage: string | null
+   signedCoverImage?: string | null
   viewCount: number
   createdAt: string
   publishedAt: string | null
@@ -78,7 +79,8 @@ function mapApiPostToCard(post: ApiPostItem): Post {
     slug: post.slug,
     summary: post.excerpt || undefined,
     content: "",
-    coverImage: post.coverImage || undefined,
+    coverImage: post.coverImage || post.signedCoverImage || undefined,
+    signedCoverImage: post.signedCoverImage || undefined,
     tags: post.tags.map((tag) => tag.name),
     isPublished: post.published,
     isPinned: post.isPinned,

@@ -23,7 +23,7 @@ async function handleGet() {
     } = await supabase.auth.getUser()
 
     if (userError || !authUser) {
-      return NextResponse.json({ error: "未授权访问" }, { status: 401 })
+      return NextResponse.json({ error: { code: "UNAUTHORIZED", message: "未授权访问" } }, { status: 401 })
     }
 
     // 优先同步 Supabase 数据到数据库，保证 name/avatar 最新
@@ -133,7 +133,10 @@ async function handleGet() {
     return NextResponse.json({ user: userResponse })
   } catch (error) {
     authLogger.error("获取用户信息失败", {}, error)
-    return NextResponse.json({ error: "服务器错误" }, { status: 500 })
+    return NextResponse.json(
+      { error: { code: "UNKNOWN_ERROR", message: "服务器错误" } },
+      { status: 500 }
+    )
   }
 }
 

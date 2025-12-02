@@ -1,4 +1,4 @@
-import type { Notification, NotificationType } from "@/lib/generated/prisma"
+import { NotificationType, type Notification } from "@/lib/generated/prisma"
 import { prisma } from "@/lib/prisma"
 import { createServiceRoleClient } from "@/lib/supabase"
 import { createLogger } from "@/lib/utils/logger"
@@ -13,6 +13,7 @@ type NotificationPayload = {
   postId?: string | null
   commentId?: string | null
   activityId?: string | null
+  followerId?: string | null
 }
 
 type NotificationBroadcastPayload = {
@@ -23,6 +24,7 @@ type NotificationBroadcastPayload = {
   postId: string | null
   commentId: string | null
   activityId: string | null
+  followerId: string | null
   readAt: string | null
   createdAt: string
 }
@@ -55,14 +57,34 @@ export async function notify(
   const enabled = await isNotificationEnabled(recipientId, type)
   if (!enabled) return null
 
+  const postId = data.postId ?? null
+  const activityId = data.activityId ?? null
+  let followerId = data.followerId ?? null
+
+  if (!postId && !activityId && !followerId) {
+    if (type === NotificationType.FOLLOW) {
+      followerId = data.actorId
+    } else if (type === NotificationType.SYSTEM) {
+      followerId = recipientId
+    }
+  }
+
+  const targetCount = [postId, activityId, followerId].filter(Boolean).length
+  if (targetCount !== 1) {
+    throw new Error(
+      `notification target must be exactly one of postId/activityId/followerId (got ${targetCount})`
+    )
+  }
+
   const notification = await prisma.notification.create({
     data: {
       recipientId,
       actorId: data.actorId,
       type,
-      postId: data.postId ?? null,
+      postId,
       commentId: data.commentId ?? null,
-      activityId: data.activityId ?? null,
+      activityId,
+      followerId,
     },
   })
 
@@ -110,6 +132,7 @@ async function broadcastNotification(recipientId: string, notification: Notifica
       postId: notification.postId,
       commentId: notification.commentId,
       activityId: notification.activityId,
+      followerId: notification.followerId,
       readAt: notification.readAt ? notification.readAt.toISOString() : null,
       createdAt: notification.createdAt.toISOString(),
     }

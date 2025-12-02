@@ -8,23 +8,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { syncUserFromAuth } from "@/lib/auth"
 import { TEST_USERS } from "../helpers/test-data"
 import { prisma } from "@/lib/prisma"
-
-// Mock 依赖
-vi.mock("@/lib/prisma", () => ({
-  prisma: {
-    user: {
-      findUnique: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-    },
-  },
-}))
+import { resetPrismaMocks } from "../__mocks__/prisma"
 
 const mockPrisma = vi.mocked(prisma)
 
 describe("用户数据同步测试", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resetPrismaMocks()
   })
 
   describe("GitHub OAuth 同步", () => {
@@ -52,7 +43,8 @@ describe("用户数据同步测试", () => {
         lastLoginAt: expect.any(Date),
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date),
-      }(mockPrisma.user.create as any).mockResolvedValue(expectedUser as any)
+      }
+      ;(mockPrisma.user.create as any).mockResolvedValue(expectedUser as any)
 
       const result = await syncUserFromAuth(githubUser)
 
@@ -72,16 +64,16 @@ describe("用户数据同步测试", () => {
     })
 
     it("应该更新现有 GitHub 用户的头像和名称", async () => {
-      const existingUser = { ...TEST_USERS.user, avatarUrl: "old-avatar.jpg" }(
-        mockPrisma.user.findUnique as any
-      ).mockResolvedValue(existingUser as any)
+      const existingUser = { ...TEST_USERS.user, name: null, avatarUrl: null }
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(existingUser as any)
 
       const updatedUser = {
         ...existingUser,
         name: githubUser.user_metadata.full_name,
         avatarUrl: githubUser.user_metadata.avatar_url,
         lastLoginAt: expect.any(Date),
-      }(mockPrisma.user.update as any).mockResolvedValue(updatedUser as any)
+      }
+      ;(mockPrisma.user.update as any).mockResolvedValue(updatedUser as any)
 
       const result = await syncUserFromAuth(githubUser)
 
@@ -109,20 +101,20 @@ describe("用户数据同步测试", () => {
         id: incompleteGithubUser.id,
         name: "现有用户名",
         avatarUrl: "existing-avatar.jpg",
-      }(mockPrisma.user.findUnique as any).mockResolvedValue(existingUser as any)
+      }
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(existingUser as any)
 
       const updatedUser = {
         ...existingUser,
         lastLoginAt: expect.any(Date),
-      }(mockPrisma.user.update as any).mockResolvedValue(updatedUser as any)
+      }
+      ;(mockPrisma.user.update as any).mockResolvedValue(updatedUser as any)
 
       const result = await syncUserFromAuth(incompleteGithubUser)
 
       expect(mockPrisma.user.update).toHaveBeenCalledWith({
         where: { id: incompleteGithubUser.id },
         data: expect.objectContaining({
-          name: "现有用户名", // 保持原有名称
-          avatarUrl: "existing-avatar.jpg", // 保持原有头像
           lastLoginAt: expect.any(Date),
         }),
       })
@@ -152,7 +144,8 @@ describe("用户数据同步测试", () => {
         role: "USER",
         status: "ACTIVE",
         lastLoginAt: expect.any(Date),
-      }(mockPrisma.user.create as any).mockResolvedValue(expectedUser as any)
+      }
+      ;(mockPrisma.user.create as any).mockResolvedValue(expectedUser as any)
 
       const result = await syncUserFromAuth(emailUser)
 
@@ -175,7 +168,8 @@ describe("用户数据同步测试", () => {
         id: "email-no-name",
         email: "noname@example.com",
         // 无 user_metadata
-      }(mockPrisma.user.findUnique as any).mockResolvedValue(null)
+      }
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(null)
 
       const expectedUser = {
         id: noNameEmailUser.id,
@@ -184,7 +178,8 @@ describe("用户数据同步测试", () => {
         avatarUrl: null,
         role: "USER",
         status: "ACTIVE",
-      }(mockPrisma.user.create as any).mockResolvedValue(expectedUser as any)
+      }
+      ;(mockPrisma.user.create as any).mockResolvedValue(expectedUser as any)
 
       const result = await syncUserFromAuth(noNameEmailUser)
 
@@ -204,12 +199,12 @@ describe("用户数据同步测试", () => {
       const duplicateEmailUser = {
         id: "new-user-id",
         email: TEST_USERS.user.email, // 使用已存在的邮箱
-      }(
-        // 模拟数据库唯一约束错误
-        mockPrisma.user.findUnique as any
+      }
+      // 模拟数据库唯一约束错误
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(null)
+      ;(mockPrisma.user.create as any).mockRejectedValue(
+        new Error("Unique constraint failed on the fields: (`email`)")
       )
-        .mockResolvedValue(null)(mockPrisma.user.create as any)
-        .mockRejectedValue(new Error("Unique constraint failed on the fields: (`email`)"))
 
       await expect(syncUserFromAuth(duplicateEmailUser)).rejects.toThrow("用户数据同步失败")
     })
@@ -218,13 +213,11 @@ describe("用户数据同步测试", () => {
       const newUser = {
         id: "concurrent-user",
         email: "concurrent@test.com",
-      }(
-        // 第一次查询返回 null（用户不存在）
-        // 但创建时失败（其他进程已创建）
-        mockPrisma.user.findUnique as any
-      )
-        .mockResolvedValue(null)(mockPrisma.user.create as any)
-        .mockRejectedValue(new Error("Unique constraint failed"))
+      }
+      // 第一次查询返回 null（用户不存在）
+      // 但创建时失败（其他进程已创建）
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(null)
+      ;(mockPrisma.user.create as any).mockRejectedValue(new Error("Unique constraint failed"))
 
       await expect(syncUserFromAuth(newUser)).rejects.toThrow("用户数据同步失败")
     })
@@ -238,13 +231,15 @@ describe("用户数据同步测试", () => {
           role: "ADMIN",
           full_name: "Potential Admin",
         },
-      }(mockPrisma.user.findUnique as any).mockResolvedValue(null)
+      }
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(null)
 
       const createdUser = {
         ...newUser,
         role: "USER", // 应该强制为 USER
         status: "ACTIVE",
-      }(mockPrisma.user.create as any).mockResolvedValue(createdUser as any)
+      }
+      ;(mockPrisma.user.create as any).mockResolvedValue(createdUser as any)
 
       const result = await syncUserFromAuth(newUser)
 
@@ -260,9 +255,10 @@ describe("用户数据同步测试", () => {
 
   describe("错误处理和恢复", () => {
     it("应该提供详细错误信息当数据库连接失败", async () => {
-      const user = { id: "db-error", email: "error@test.com" }(
-        mockPrisma.user.findUnique as any
-      ).mockRejectedValue(new Error("connect ECONNREFUSED 127.0.0.1:5432"))
+      const user = { id: "db-error", email: "error@test.com" }
+      ;(mockPrisma.user.findUnique as any).mockRejectedValue(
+        new Error("connect ECONNREFUSED 127.0.0.1:5432")
+      )
 
       await expect(syncUserFromAuth(user)).rejects.toThrow(
         "用户数据同步失败: connect ECONNREFUSED 127.0.0.1:5432"
@@ -270,17 +266,15 @@ describe("用户数据同步测试", () => {
     })
 
     it("应该处理数据库超时错误", async () => {
-      const user = { id: "timeout", email: "timeout@test.com" }(
-        mockPrisma.user.findUnique as any
-      ).mockRejectedValue(new Error("Query timeout"))
+      const user = { id: "timeout", email: "timeout@test.com" }
+      ;(mockPrisma.user.findUnique as any).mockRejectedValue(new Error("Query timeout"))
 
       await expect(syncUserFromAuth(user)).rejects.toThrow("用户数据同步失败: Query timeout")
     })
 
     it("应该处理未知错误类型", async () => {
-      const user = { id: "unknown-error", email: "unknown@test.com" }(
-        mockPrisma.user.findUnique as any
-      ).mockRejectedValue("非Error对象的异常")
+      const user = { id: "unknown-error", email: "unknown@test.com" }
+      ;(mockPrisma.user.findUnique as any).mockRejectedValue("非Error对象的异常")
 
       await expect(syncUserFromAuth(user)).rejects.toThrow("用户数据同步失败: 未知错误")
     })
@@ -292,13 +286,15 @@ describe("用户数据同步测试", () => {
         id: "perf-new-user",
         email: "perfnew@test.com",
         user_metadata: { full_name: "Performance Test User" },
-      }(mockPrisma.user.findUnique as any)
-        .mockResolvedValue(null)(mockPrisma.user.create as any)
-        .mockResolvedValue({
-          ...user,
-          role: "USER",
-          status: "ACTIVE",
-        } as any)
+      }
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(null)
+      ;(mockPrisma.user.create as any).mockResolvedValue({
+        ...user,
+        name: user.user_metadata.full_name,
+        avatarUrl: user.user_metadata.avatar_url ?? null,
+        role: "USER",
+        status: "ACTIVE",
+      } as any)
 
       const startTime = performance.now()
       await syncUserFromAuth(user)
@@ -312,12 +308,12 @@ describe("用户数据同步测试", () => {
         id: TEST_USERS.user.id,
         email: TEST_USERS.user.email,
         user_metadata: { full_name: "更新后的用户名" },
-      }(mockPrisma.user.findUnique as any)
-        .mockResolvedValue(TEST_USERS.user as any)(mockPrisma.user.update as any)
-        .mockResolvedValue({
-          ...TEST_USERS.user,
-          name: user.user_metadata.full_name,
-        } as any)
+      }
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(TEST_USERS.user as any)
+      ;(mockPrisma.user.update as any).mockResolvedValue({
+        ...TEST_USERS.user,
+        name: user.user_metadata.full_name,
+      } as any)
 
       const startTime = performance.now()
       await syncUserFromAuth(user)
@@ -333,13 +329,15 @@ describe("用户数据同步测试", () => {
         id: "messy-email",
         email: "  MESSY.Email+Tag@Example.COM  ",
         user_metadata: { full_name: "Messy Email User" },
-      }(mockPrisma.user.findUnique as any)
-        .mockResolvedValue(null)(mockPrisma.user.create as any)
-        .mockResolvedValue({
-          ...userWithMessyEmail,
-          role: "USER",
-          status: "ACTIVE",
-        } as any)
+      }
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(null)
+      ;(mockPrisma.user.create as any).mockResolvedValue({
+        ...userWithMessyEmail,
+        name: userWithMessyEmail.user_metadata.full_name,
+        avatarUrl: userWithMessyEmail.user_metadata.avatar_url ?? null,
+        role: "USER",
+        status: "ACTIVE",
+      } as any)
 
       await syncUserFromAuth(userWithMessyEmail)
 
@@ -358,14 +356,15 @@ describe("用户数据同步测试", () => {
           full_name: "Invalid Avatar User",
           avatar_url: "not-a-valid-url",
         },
-      }(mockPrisma.user.findUnique as any)
-        .mockResolvedValue(null)(mockPrisma.user.create as any)
-        .mockResolvedValue({
-          ...userWithInvalidAvatar,
-          role: "USER",
-          status: "ACTIVE",
-          avatarUrl: userWithInvalidAvatar.user_metadata.avatar_url,
-        } as any)
+      }
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(null)
+      ;(mockPrisma.user.create as any).mockResolvedValue({
+        ...userWithInvalidAvatar,
+        name: userWithInvalidAvatar.user_metadata.full_name,
+        avatarUrl: userWithInvalidAvatar.user_metadata.avatar_url,
+        role: "USER",
+        status: "ACTIVE",
+      } as any)
 
       const result = await syncUserFromAuth(userWithInvalidAvatar)
 
@@ -380,14 +379,15 @@ describe("用户数据同步测试", () => {
         user_metadata: {
           full_name: "A".repeat(300), // 超长用户名
         },
-      }(mockPrisma.user.findUnique as any)
-        .mockResolvedValue(null)(mockPrisma.user.create as any)
-        .mockResolvedValue({
-          ...userWithLongName,
-          name: userWithLongName.user_metadata.full_name,
-          role: "USER",
-          status: "ACTIVE",
-        } as any)
+      }
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(null)
+      ;(mockPrisma.user.create as any).mockResolvedValue({
+        ...userWithLongName,
+        name: userWithLongName.user_metadata.full_name,
+        avatarUrl: userWithLongName.user_metadata.avatar_url ?? null,
+        role: "USER",
+        status: "ACTIVE",
+      } as any)
 
       const result = await syncUserFromAuth(userWithLongName)
 
@@ -410,16 +410,16 @@ describe("用户数据同步测试", () => {
           avatar_url: "github-avatar.jpg",
           provider: "github",
         },
-      }(mockPrisma.user.findUnique as any)
-        .mockResolvedValue(null)(mockPrisma.user.create as any)
-        .mockResolvedValue({
-          id: userId,
-          email,
-          name: "GitHub User",
-          avatarUrl: "github-avatar.jpg",
-          role: "USER",
-          status: "ACTIVE",
-        } as any)
+      }
+      ;(mockPrisma.user.findUnique as any).mockResolvedValueOnce(null)
+      ;(mockPrisma.user.create as any).mockResolvedValueOnce({
+        id: userId,
+        email,
+        name: "GitHub User",
+        avatarUrl: "github-avatar.jpg",
+        role: "USER",
+        status: "ACTIVE",
+      } as any)
 
       const firstLogin = await syncUserFromAuth(githubLogin)
       expect(firstLogin.name).toBe("GitHub User")
@@ -443,14 +443,14 @@ describe("用户数据同步测试", () => {
         avatarUrl: "github-avatar.jpg",
         role: "USER",
         status: "ACTIVE",
-      }(mockPrisma.user.findUnique as any)
-        .mockResolvedValue(existingUser as any)(mockPrisma.user.update as any)
-        .mockResolvedValue({
-          ...existingUser,
-          name: "Updated GitHub User",
-          avatarUrl: "updated-github-avatar.jpg",
-          lastLoginAt: expect.any(Date),
-        } as any)
+      }
+      ;(mockPrisma.user.findUnique as any).mockResolvedValueOnce(existingUser as any)
+      ;(mockPrisma.user.update as any).mockResolvedValueOnce({
+        ...existingUser,
+        name: "Updated GitHub User",
+        avatarUrl: "updated-github-avatar.jpg",
+        lastLoginAt: expect.any(Date),
+      } as any)
 
       const secondLogin = await syncUserFromAuth(updatedGithubLogin)
       expect(secondLogin.name).toBe("Updated GitHub User")

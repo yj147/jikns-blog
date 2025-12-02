@@ -6,14 +6,28 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { ProfileActivitiesTab } from "@/components/profile/profile-activities-tab"
 import { ProfileLikesTab } from "@/components/profile/profile-likes-tab"
-import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/actions/auth"
+import { prisma } from "@/lib/prisma"
 import { getQuickStats, EMPTY_QUICK_STATS, type QuickStats } from "@/lib/profile/stats"
 import { logger } from "@/lib/utils/logger"
 import { calculateReadingMinutes } from "@/lib/utils/reading-time"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { Calendar, LinkIcon, Mail, Settings, Heart, BookOpen, Users, Clock } from "lucide-react"
+import {
+  Calendar,
+  LinkIcon,
+  Mail,
+  Settings,
+  Heart,
+  BookOpen,
+  Users,
+  Clock,
+  Github,
+  Twitter,
+  Linkedin,
+} from "lucide-react"
+import type { LucideIcon } from "lucide-react"
+import { socialLinksSchema } from "@/types/user-settings"
 
 interface ProfilePostSummary {
   id: string
@@ -171,18 +185,68 @@ export default async function ProfilePage() {
     : null
 
   // 解析社交链接
-  let socialLinks = {}
-  try {
-    if (user.socialLinks && typeof user.socialLinks === "object") {
-      socialLinks = user.socialLinks as any
-    }
-  } catch (e) {
+  const parsedSocialLinks = socialLinksSchema.safeParse(user.socialLinks ?? {})
+  const socialLinks = parsedSocialLinks.success ? parsedSocialLinks.data : {}
+  if (!parsedSocialLinks.success) {
     logger.warn("解析社交链接失败", {
       module: "ProfilePage",
       userId: user.id,
-      error: e instanceof Error ? e.message : String(e),
+      error: parsedSocialLinks.error?.message,
     })
   }
+
+  const socialLinkItems: {
+    key: string
+    label: string
+    href: string
+    displayText: string
+    Icon: LucideIcon
+  }[] = (
+    [
+      socialLinks.website
+        ? {
+            key: "website",
+            label: "网站",
+            href: socialLinks.website,
+            displayText: socialLinks.website,
+            Icon: LinkIcon,
+          }
+        : null,
+      socialLinks.github
+        ? {
+            key: "github",
+            label: "GitHub",
+            href: socialLinks.github,
+            displayText: socialLinks.github,
+            Icon: Github,
+          }
+        : null,
+      socialLinks.twitter
+        ? {
+            key: "twitter",
+            label: "Twitter",
+            href: socialLinks.twitter,
+            displayText: socialLinks.twitter,
+            Icon: Twitter,
+          }
+        : null,
+      socialLinks.linkedin
+        ? {
+            key: "linkedin",
+            label: "LinkedIn",
+            href: socialLinks.linkedin,
+            displayText: socialLinks.linkedin,
+            Icon: Linkedin,
+          }
+        : null,
+    ] as const
+  ).filter(Boolean) as {
+    key: string
+    label: string
+    href: string
+    displayText: string
+    Icon: LucideIcon
+  }[]
   return (
     <div className="bg-background min-h-screen">
 
@@ -222,17 +286,20 @@ export default async function ProfilePage() {
                         <Mail className="mr-1 h-4 w-4" />
                         {user.email}
                       </div>
-                      {(socialLinks as any)?.website && (
-                        <div className="flex items-center">
-                          <LinkIcon className="mr-1 h-4 w-4" />
-                          <Link
-                            href={(socialLinks as any).website}
-                            className="text-primary hover:underline"
-                          >
-                            {(socialLinks as any).website}
-                          </Link>
-                        </div>
-                      )}
+                      {socialLinkItems.map((item) => (
+                        <Link
+                          key={item.key}
+                          href={item.href}
+                          className="text-primary flex max-w-full items-center gap-1 hover:underline"
+                          target="_blank"
+                          rel="noreferrer"
+                          title={item.href}
+                        >
+                          <item.Icon className="h-4 w-4" />
+                          <span className="sr-only">{item.label}</span>
+                          <span className="truncate">{item.displayText}</span>
+                        </Link>
+                      ))}
                       <div className="flex items-center">
                         <Calendar className="mr-1 h-4 w-4" />
                         加入于 {joinDate}

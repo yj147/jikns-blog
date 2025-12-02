@@ -22,6 +22,8 @@ export const notificationSchema = z.object({
   type: notificationTypeSchema,
   postId: z.string().uuid().nullable().optional(),
   commentId: z.string().uuid().nullable().optional(),
+  activityId: z.string().uuid().nullable().optional(),
+  followerId: z.string().uuid().nullable().optional(),
   readAt: nullableDateSchema,
   createdAt: requiredDateSchema,
 })

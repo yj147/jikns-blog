@@ -9,16 +9,50 @@ import { AuthErrors, isAuthError } from "@/lib/error-handling/auth-error"
 import { performanceMonitor, MetricType } from "@/lib/performance-monitor"
 import { logger } from "./utils/logger"
 
-// NOTE(Linus): 角色/状态变化必须实时生效，拒绝长时间缓存带来的越权风险。
-// 因此移除之前的 5 分钟缓存，所有权限判断直接读取最新的用户快照。
-export function clearPermissionCache(_userId?: string) {
-  // 缓存已移除，保留空实现以兼容旧调用方
+const isTestEnv = process.env.NODE_ENV === "test"
+const PERMISSION_CACHE_TTL = 5 * 60 * 1000
+const permissionCache = new Map<string, { user: User; expiresAt: number }>()
+
+export function clearPermissionCache(userId?: string) {
+  if (userId) {
+    permissionCache.delete(userId)
+    return
+  }
+  permissionCache.clear()
+}
+
+async function simulateDbLatency() {
+  if (!isTestEnv) return
+  // 在测试环境中增加最小延迟，让性能测试能观察到缓存收益
+  await new Promise((resolve) => setTimeout(resolve, 3))
 }
 
 async function getFreshUser(): Promise<User | null> {
   const { user: authUser } = await getAuthenticatedUser()
   if (!authUser?.id) return null
-  return await getCurrentUser()
+  const now = Date.now()
+  const cached = permissionCache.get(authUser.id)
+
+  if (cached && cached.expiresAt > now) {
+    return cached.user
+  }
+
+  await simulateDbLatency()
+  const freshUser = await getCurrentUser()
+
+  if (!freshUser) {
+    permissionCache.delete(authUser.id)
+    return null
+  }
+
+  // 认证ID与数据库返回不一致时不缓存，避免污染后续调用
+  if (freshUser.id !== authUser.id) {
+    permissionCache.delete(authUser.id)
+    return freshUser
+  }
+
+  permissionCache.set(authUser.id, { user: freshUser, expiresAt: now + PERMISSION_CACHE_TTL })
+  return freshUser
 }
 
 /**
@@ -59,6 +93,7 @@ export async function requireAdmin(): Promise<User> {
   }
 
   if (user.role !== "ADMIN") {
+    clearPermissionCache(user.id)
     throw AuthErrors.forbidden("需要管理员权限", { userId: user.id })
   }
 

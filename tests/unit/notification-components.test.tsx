@@ -129,6 +129,7 @@ beforeEach(() => {
   useSWRInfiniteMock.mockReset()
   fetchJsonMock.mockReset()
   useAuthMock.mockReset()
+  useAuthMock.mockReturnValue({ user: { id: "user-1" }, loading: false, supabase: undefined })
   toastMock.mockReset()
   routerPushMock.mockReset()
   MockIntersectionObserver.instances = []
@@ -181,6 +182,21 @@ describe("NotificationItem", () => {
 
     expect(onMarkRead).toHaveBeenCalledWith("nav")
     expect(routerPushMock).toHaveBeenCalledWith("/blog/nav")
+  })
+
+  it("FOLLOW 通知缺省 targetUrl 时跳转到关注者主页", async () => {
+    const notification = createNotification({
+      id: "follow-nav",
+      type: NotificationType.FOLLOW,
+      targetUrl: undefined,
+      actor: { id: "follower-42", name: "Follow Me", avatarUrl: null, email: "f@x.com" },
+    })
+
+    render(<NotificationItem notification={notification} />)
+
+    await userEvent.click(screen.getByRole("link"))
+
+    expect(routerPushMock).toHaveBeenCalledWith("/profile/follower-42")
   })
 
   it("展示相对时间", () => {

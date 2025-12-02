@@ -14,6 +14,8 @@ import { assertPolicy, fetchSessionUserProfile } from "@/lib/auth/session"
 import type { AuthError } from "@/lib/error-handling/auth-error"
 import { signAvatarUrl } from "@/lib/storage/signed-url"
 
+const isTestEnv = process.env.NODE_ENV === "test"
+
 /**
  * Supabase Auth User 类型定义
  * 兼容 Supabase 的 User 类型，支持多种数据源
@@ -76,7 +78,7 @@ function logSessionMissing(stage: string) {
  * 安全性增强: 使用 getUser() 替代 getSession() 来获取经过验证的用户数据
  * 使用 React cache 优化，在同一请求中避免重复查询
  */
-export const getAuthenticatedUser = cache(async () => {
+const getAuthenticatedUserImpl = async () => {
   if (await shouldSkipAuthLookup()) {
     return { user: null, error: null }
   }
@@ -109,13 +111,15 @@ export const getAuthenticatedUser = cache(async () => {
     authLogger.error("用户认证查询异常", { stage: "getAuthenticatedUser" }, error)
     return { user: null, error }
   }
-})
+}
+
+export const getAuthenticatedUser = isTestEnv ? getAuthenticatedUserImpl : cache(getAuthenticatedUserImpl)
 
 /**
  * 获取当前用户会话（兼容性保留）
  * @deprecated 建议使用 getAuthenticatedUser() 获取经过验证的用户数据
  */
-export const getUserSession = cache(async () => {
+const getUserSessionImpl = async () => {
   if (await shouldSkipAuthLookup()) {
     return { session: null, error: null }
   }
@@ -148,7 +152,9 @@ export const getUserSession = cache(async () => {
     authLogger.error("会话查询异常", { stage: "getUserSession" }, error)
     return { session: null, error }
   }
-})
+}
+
+export const getUserSession = isTestEnv ? getUserSessionImpl : cache(getUserSessionImpl)
 
 /**
  * 获取用户信息的核心函数（不带缓存）
@@ -184,7 +190,7 @@ export function isConfiguredAdminEmail(email?: string | null): boolean {
  * 从数据库获取完整的用户信息，包括权限等业务数据
  * 使用经过身份验证的用户数据确保安全性
  */
-export const getCurrentUser = cache(async (): Promise<User | null> => {
+const getCurrentUserImpl = async (): Promise<User | null> => {
   const user = await fetchSessionUserProfile()
   if (!user) return null
 
@@ -198,7 +204,9 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
   }
 
   return user
-})
+}
+
+export const getCurrentUser = isTestEnv ? getCurrentUserImpl : cache(getCurrentUserImpl)
 
 /**
  * 验证用户是否为管理员（Server Actions 专用）

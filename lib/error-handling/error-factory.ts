@@ -223,24 +223,28 @@ class ErrorFactory {
   static fromError(error: Error, context?: Partial<ErrorContext>): AppError {
     // 网络连接错误
     if (error.name === "TypeError" && error.message.includes("fetch")) {
-      return this.createNetworkError(
+      const appError = this.createNetworkError(
         NetworkErrorType.CONNECTION_FAILED,
         error.message,
         "网络连接失败，请检查网络后重试",
         context,
         { originalError: error.name }
       )
+
+      return { ...appError, stackTrace: error.stack }
     }
 
     // 超时错误
     if (error.name === "AbortError" || error.message.includes("timeout")) {
-      return this.createNetworkError(
+      const appError = this.createNetworkError(
         NetworkErrorType.TIMEOUT,
         error.message,
         "请求超时，请稍后重试",
         context,
         { originalError: error.name }
       )
+
+      return { ...appError, stackTrace: error.stack }
     }
 
     // 默认系统错误

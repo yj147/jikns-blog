@@ -27,6 +27,7 @@ import {
 } from "@/lib/search/search-schemas"
 import { SEARCH_BUCKET_LIMITS_FOR_ALL } from "@/lib/search/search-buckets"
 import { createPerformanceTimer, createSearchApiError } from "./utils"
+import { createSignedUrlIfNeeded } from "@/lib/storage/signed-url"
 
 async function executeSearchQueries(validated: SearchParams): Promise<{
   posts: SearchResultBucket<SearchPostResult>
@@ -169,6 +170,28 @@ async function executeSearchQueries(validated: SearchParams): Promise<{
   }
 }
 
+const POST_IMAGE_SIGN_EXPIRES_IN = 60 * 60
+
+async function signPostBucket(
+  bucket: SearchResultBucket<SearchPostResult>
+): Promise<SearchResultBucket<SearchPostResult>> {
+  if (!bucket.items.length) return bucket
+
+  const signedCovers = await Promise.all(
+    bucket.items.map((item) =>
+      createSignedUrlIfNeeded(item.coverImage, POST_IMAGE_SIGN_EXPIRES_IN, "post-images")
+    )
+  )
+
+  return {
+    ...bucket,
+    items: bucket.items.map((item, index) => ({
+      ...item,
+      coverImage: signedCovers[index] ?? item.coverImage,
+    })),
+  }
+}
+
 export async function searchContent(
   params: Partial<SearchParams>
 ): Promise<ApiResponse<SearchResults>> {
@@ -218,7 +241,8 @@ export async function searchContent(
       onlyPublished: currentUser?.role === "ADMIN" ? validated.onlyPublished : true,
     }
 
-    const { posts, activities, users, tags } = await executeSearchQueries(effectiveParams)
+    const { activities, users, tags, posts: rawPosts } = await executeSearchQueries(effectiveParams)
+    const posts = await signPostBucket(rawPosts)
 
     const relevantTotals: number[] = []
     if (effectiveParams.type === "all" || effectiveParams.type === "posts") {

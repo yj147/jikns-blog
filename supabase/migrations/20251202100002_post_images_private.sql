@@ -5,17 +5,13 @@ UPDATE storage.buckets
 SET public = FALSE
 WHERE id = 'post-images';
 
--- 2) 移除公开读取策略（兼容历史命名）
 DROP POLICY IF EXISTS "Public read access for post-images" ON storage.objects;
 DROP POLICY IF EXISTS "post-images public select" ON storage.objects;
 DROP POLICY IF EXISTS "Enable public view for post-images" ON storage.objects;
 DROP POLICY IF EXISTS "Enable public read access on post-images bucket" ON storage.buckets;
 
--- 3) 添加认证用户读取策略（上传/更新/删除策略沿用既有版本）
-CREATE POLICY "Authenticated read for post-images"
-ON storage.objects
-FOR SELECT TO authenticated
-USING (bucket_id = 'post-images');
+-- 3) 移除认证用户直接读取策略，强制通过签名 URL 访问
+DROP POLICY IF EXISTS "Authenticated read for post-images" ON storage.objects;
 
 -- 4) bucket 元数据仅对认证用户可见
 CREATE POLICY "Authenticated bucket read for post-images"

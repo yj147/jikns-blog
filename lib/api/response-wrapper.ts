@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server"
 import { performanceMonitor } from "@/lib/performance-monitor"
 import { generateRequestId } from "@/lib/utils/request-id"
 
-type ApiHandler = (request: NextRequest, ...args: any[]) => Promise<Response> | Response
+type ApiHandler = (request: NextRequest | Request, ...args: any[]) => Promise<Response> | Response
 
 const clampSampleRate = (value?: number): number => {
   if (!Number.isFinite(value as number)) return 1
@@ -23,23 +23,33 @@ export function withApiResponseMetrics<Handler extends ApiHandler>(
   handler: Handler,
   options?: { sampleRate?: number }
 ): Handler {
-  return (async (request: NextRequest, ...args: any[]) => {
-    const requestId = request.headers.get("x-request-id") ?? generateRequestId()
-    const traceStart = resolveTraceStart(request.headers.get("x-trace-start"))
+  return (async (request: NextRequest | Request | undefined, ...args: any[]) => {
+    // 在测试或直接调用时可能没有传入 request，对齐 Next.js 行为创建安全的占位对象
+    const safeRequest: NextRequest | Request =
+      request ??
+      new Request("http://localhost/health", {
+        method: "GET",
+        headers: new Headers(),
+      })
+
+    const headers = safeRequest.headers ?? new Headers()
+    const requestId = headers.get("x-request-id") ?? generateRequestId()
+    const traceStart = resolveTraceStart(headers.get("x-trace-start"))
     const sampleRate = resolveSampleRate(options?.sampleRate)
-    const metricsSampleHeader = request.headers.get("x-metrics-sample")
+    const metricsSampleHeader = headers.get("x-metrics-sample")
     const allowRecording = metricsSampleHeader !== "0"
     const shouldRecord = allowRecording && sampleRate > 0 && Math.random() < sampleRate
 
     const recordMetric = (success: boolean) => {
       if (!shouldRecord) return
       const duration = Math.max(Date.now() - traceStart, 0)
-      const endpoint = request.nextUrl?.pathname ?? new URL(request.url).pathname
-      performanceMonitor.recordApiResponse(endpoint, request.method, duration, success)
+      const endpoint = (safeRequest as any).nextUrl?.pathname ?? new URL(safeRequest.url).pathname
+      const method = (safeRequest as any).method ?? "GET"
+      performanceMonitor.recordApiResponse(endpoint, method, duration, success)
     }
 
     try {
-      const response = await handler(request, ...args)
+      const response = await handler(safeRequest as NextRequest, ...args)
 
       if (!response.headers.has("x-request-id")) {
         response.headers.set("x-request-id", requestId)

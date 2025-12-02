@@ -46,6 +46,7 @@ type NotificationRecord = {
   type: NotificationType
   postId: string | null
   commentId: string | null
+  followerId: string | null
   readAt: Date | null
   createdAt: Date
 }
@@ -57,6 +58,7 @@ type NotificationRow = {
   type: NotificationType
   postId: string | null
   commentId: string | null
+  followerId?: string | null
   readAt: string | null
   createdAt: string
 }
@@ -185,6 +187,7 @@ function createPrismaMock() {
           type: data.type,
           postId: data.postId ?? null,
           commentId: data.commentId ?? null,
+          followerId: data.followerId ?? null,
           readAt: data.readAt ?? null,
           createdAt: data.createdAt ? new Date(data.createdAt) : new Date(),
         }
@@ -354,6 +357,7 @@ describe("Follow notifications", () => {
     expect(record.actorId).toBe(follower.id)
     expect(record.postId).toBeNull()
     expect(record.commentId).toBeNull()
+    expect(record.followerId).toBe(follower.id)
 
     const authUser = { ...TEST_USERS.user, id: target.id, email: target.email, name: target.name }
     vi.mocked(assertPolicy).mockResolvedValue([authUser as any, null])

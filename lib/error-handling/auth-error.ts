@@ -235,7 +235,7 @@ export const AuthErrors = {
    * 账号被封禁错误
    */
   accountBanned: (context?: { requestId?: string; userId?: string }) =>
-    new AuthError("账号已被封禁", "ACCOUNT_BANNED", 403, context),
+    new AuthError("账户已被封禁", "ACCOUNT_BANNED", 403, context),
 
   /**
    * 凭据无效错误

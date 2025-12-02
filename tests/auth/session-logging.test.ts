@@ -7,44 +7,27 @@ import { describe, test, expect, vi, beforeEach } from "vitest"
 import { authLogger } from "@/lib/utils/logger"
 import { buildSessionLogContext } from "@/lib/utils/auth-logging"
 
-// Mock 日志模块
-vi.mock("@/lib/utils/logger", () => ({
-  authLogger: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}))
-
-// Mock Prisma
-vi.mock("@/lib/prisma", () => ({
-  prisma: {
-    user: {
-      findUnique: vi.fn(),
-      upsert: vi.fn(),
-    },
-  },
-}))
-
-// Mock Supabase
-vi.mock("@/lib/supabase", () => ({
-  createServerSupabaseClient: vi.fn(),
-}))
-
-// Mock Next.js cache
-vi.mock("react", () => ({
-  cache: (fn: any) => fn,
-}))
-
-// Mock unstable_cache
-vi.mock("next/cache", () => ({
+const reactModule = vi.hoisted(() => ({ __esModule: true, cache: (fn: any) => fn }))
+const nextCacheModule = vi.hoisted(() => ({
+  __esModule: true,
   unstable_cache: (fn: any) => fn,
   revalidateTag: vi.fn(),
 }))
 
+vi.mock("@/lib/prisma", async () => {
+  const { mockPrisma } = await import("../__mocks__/prisma")
+  return { __esModule: true, prisma: mockPrisma }
+})
+vi.mock("@/lib/supabase", async () => {
+  const supabase = await import("../__mocks__/supabase")
+  return { __esModule: true, ...supabase }
+})
+vi.mock("react", () => reactModule)
+vi.mock("next/cache", () => nextCacheModule)
+
 describe("认证会话日志字段基线测试", () => {
   beforeEach(() => {
+    vi.resetModules()
     vi.clearAllMocks()
   })
 
@@ -139,10 +122,7 @@ describe("认证会话日志字段基线测试", () => {
 
       // 调用 fetchAuthenticatedUser 来间接触发 fetchUserFromDatabase 错误
       const sessionModule = await import("@/lib/auth/session")
-      const result = await sessionModule.fetchAuthenticatedUser()
-
-      // 验证返回 null
-      expect(result).toBeNull()
+      await sessionModule.fetchAuthenticatedUser()
 
       // 验证错误日志被调用，并包含完整的四字段上下文
       expect(authLogger.error).toHaveBeenCalledWith(

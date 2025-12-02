@@ -34,6 +34,7 @@ Object.values(TEST_USERS).forEach((user) => {
  */
 function createMockPrismaMethod<T extends (...args: any[]) => Promise<any>>(implementation: T) {
   const mockFn = vi.fn(implementation)
+  ;(mockFn as any)._baseImplementation = implementation
   return mockFn as typeof mockFn & {
     mockResolvedValue: (value: Awaited<ReturnType<T>>) => typeof mockFn
     mockRejectedValue: (error: any) => typeof mockFn
@@ -770,7 +771,11 @@ export function resetPrismaMocks() {
     if (typeof model === "object" && model !== null) {
       Object.values(model).forEach((method) => {
         if (vi.isMockFunction(method)) {
-          method.mockClear()
+          const baseImpl = (method as any)._baseImplementation
+          method.mockReset()
+          if (baseImpl) {
+            method.mockImplementation(baseImpl)
+          }
         }
       })
     }

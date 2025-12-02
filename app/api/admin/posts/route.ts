@@ -11,6 +11,9 @@ import type { User } from "@/lib/generated/prisma"
 import { logger } from "@/lib/utils/logger"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 import { enqueueNewPostNotification } from "@/lib/services/email-queue"
+import { createSignedUrlIfNeeded } from "@/lib/storage/signed-url"
+
+const POST_IMAGE_SIGN_EXPIRES_IN = 60 * 60
 
 /**
  * 获取所有文章列表（管理员视图）
@@ -51,7 +54,7 @@ async function getPostsHandler(request: NextRequest, admin: User) {
     // 分页查询
     const skip = (page - 1) * limit
 
-    const [posts, totalCount] = await Promise.all([
+    const [postsRaw, totalCount] = await Promise.all([
       prisma.post.findMany({
         where,
         skip,
@@ -94,6 +97,17 @@ async function getPostsHandler(request: NextRequest, admin: User) {
       }),
       prisma.post.count({ where }),
     ])
+
+    const signedCoverImages = await Promise.all(
+      postsRaw.map((post) =>
+        createSignedUrlIfNeeded(post.coverImage, POST_IMAGE_SIGN_EXPIRES_IN, "post-images")
+      )
+    )
+
+    const posts = postsRaw.map((post, index) => ({
+      ...post,
+      signedCoverImage: signedCoverImages[index],
+    }))
 
     const totalPages = Math.ceil(totalCount / limit)
 

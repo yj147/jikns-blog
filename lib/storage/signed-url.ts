@@ -9,8 +9,10 @@ import { logger } from "@/lib/utils/logger"
 import type { ActivityListItem } from "@/lib/repos/activity-repo"
 
 const DEFAULT_EXPIRES_IN_SECONDS = 60 * 60 // 1 hour
-const DEFAULT_BUCKET = "activity-images"
-const SIGNABLE_BUCKETS = new Set<string>([DEFAULT_BUCKET, "post-images"])
+const ACTIVITY_IMAGES_BUCKET = "activity-images"
+const POST_IMAGES_BUCKET = "post-images"
+const DEFAULT_BUCKET = ACTIVITY_IMAGES_BUCKET
+const SIGNABLE_BUCKETS = new Set<string>([ACTIVITY_IMAGES_BUCKET, POST_IMAGES_BUCKET])
 
 type StorageTarget = {
   bucket: string

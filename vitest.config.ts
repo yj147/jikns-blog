@@ -49,14 +49,28 @@ export default defineConfig({
     setupFiles: "./tests/setup.ts",
     globals: true,
 
+    // 避免跨文件复用 mock 状态
+    clearMocks: true,
+
     // 优化测试性能和稳定性
     testTimeout: 15000,
     hookTimeout: 10000,
     teardownTimeout: 5000,
 
-    // 减少并发数量提高稳定性
-    pool: "forks", // 替代 threads: false
-    maxConcurrency: 3,
+    // 使用单线程 Worker 严格串行执行，配合较大堆限制
+    pool: "threads",
+    maxConcurrency: 1,
+    poolOptions: {
+      threads: {
+        singleThread: true,
+        resourceLimits: {
+          maxOldGenerationSizeMb: 8192,
+        },
+      },
+    },
+
+    // 共享模块缓存以降低重复加载的内存占用，单线程下依赖 beforeEach/afterEach 做好隔离
+    isolate: false,
 
     // 测试文件匹配模式 - 扩展测试覆盖范围
     include: includeFromEnv?.length
@@ -67,6 +81,7 @@ export default defineConfig({
           "tests/unit/utils-basic.test.ts",
           "tests/unit/utils.test.ts",
           "tests/unit/notification-service.test.ts",
+          "tests/unit/notification-components.test.tsx",
           "tests/unit/email-queue.test.ts",
           "tests/unit/email-queue-cron.test.ts",
           "tests/unit/realtime-notifications.test.ts",
@@ -157,6 +172,7 @@ export default defineConfig({
       NEXT_PUBLIC_SUPABASE_URL: "http://localhost:54321",
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
       NEXT_PUBLIC_SITE_URL: "http://localhost:3000",
+      NODE_OPTIONS: process.env.NODE_OPTIONS ?? "--max-old-space-size=4096",
     },
   },
   resolve: {

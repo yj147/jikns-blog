@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { NextRequest, NextResponse } from "next/server"
 import { createTestRequest, TEST_USERS } from "../helpers/test-data"
+import { setCurrentTestUser } from "../__mocks__/supabase"
 // 在测试中动态导入避免模块级导入问题
 // 这些函数将在测试用例中按需动态导入
 
@@ -26,6 +27,14 @@ describe("邮箱认证流程集成测试", () => {
     // 动态导入Supabase客户端
     const { createClient } = await import("@/lib/supabase")
     mockSupabaseClient = createClient()
+
+    // 确保需要的 auth 方法存在且可 stub
+    const auth = mockSupabaseClient.auth ?? {}
+    mockSupabaseClient.auth = auth
+    auth.signUp = auth.signUp ?? vi.fn()
+    auth.resetPasswordForEmail = auth.resetPasswordForEmail ?? vi.fn()
+    auth.updateUser = auth.updateUser ?? vi.fn()
+    auth.signInWithPassword = auth.signInWithPassword ?? vi.fn()
   })
 
   afterEach(() => {
@@ -45,7 +54,7 @@ describe("邮箱认证流程集成测试", () => {
       const { prisma } = await import("@/lib/prisma")
 
       const mockPrisma = vi.mocked(prisma)
-      mockPrisma.user.findUnique = vi.fn().mockResolvedValue(null)
+      mockPrisma.user.findUnique.mockResolvedValue(null)
 
       const isRegistered = await isEmailRegistered(newUserData.email)
       expect(isRegistered).toBe(false)
@@ -82,22 +91,19 @@ describe("邮箱认证流程集成测试", () => {
       expect(signUpResult.data.user).toBeDefined()
       expect(signUpResult.data.user.email).toBe(newUserData.email)
       expect(signUpResult.data.session).toBeNull() // 需要邮箱验证
-      expect(signUpResult.error)
-        .toBeNull()(
-          // 验证用户数据同步
-          mockPrisma.user.create as any
-        )
-        .mockResolvedValue({
-          id: mockUser.id,
-          email: mockUser.email,
-          name: mockUser.user_metadata.full_name,
-          avatarUrl: null,
-          role: "USER",
-          status: "ACTIVE",
-          lastLoginAt: new Date(),
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        } as any)
+      expect(signUpResult.error).toBeNull()
+
+      mockPrisma.user.create.mockResolvedValue({
+        id: mockUser.id,
+        email: mockUser.email,
+        name: mockUser.user_metadata.full_name,
+        avatarUrl: null,
+        role: "USER",
+        status: "ACTIVE",
+        lastLoginAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any)
 
       const { syncUserFromAuth } = await import("@/lib/auth")
       const syncedUser = await syncUserFromAuth({
@@ -114,12 +120,8 @@ describe("邮箱认证流程集成测试", () => {
 
     it("应该拒绝已注册的邮箱", async () => {
       const { prisma } = await import("@/lib/prisma")
-      const mockPrisma = vi
-        .mocked(prisma)(
-          // 邮箱已存在
-          mockPrisma.user.findUnique as any
-        )
-        .mockResolvedValue(TEST_USERS.user as any)
+      const mockPrisma = vi.mocked(prisma)
+      mockPrisma.user.findUnique.mockResolvedValue(TEST_USERS.user as any)
 
       const { isEmailRegistered } = await import("@/lib/auth")
       const isRegistered = await isEmailRegistered(TEST_USERS.user.email)
@@ -187,12 +189,8 @@ describe("邮箱认证流程集成测试", () => {
 
     it("应该成功登录已验证的用户", async () => {
       const { prisma } = await import("@/lib/prisma")
-      const mockPrisma = vi
-        .mocked(prisma)(
-          // 用户存在且已激活
-          mockPrisma.user.findUnique as any
-        )
-        .mockResolvedValue(TEST_USERS.user as any)
+      const mockPrisma = vi.mocked(prisma)
+      mockPrisma.user.findUnique.mockResolvedValue(TEST_USERS.user as any)
 
       // 模拟成功登录
       const mockSession = {
@@ -225,15 +223,12 @@ describe("邮箱认证流程集成测试", () => {
 
       expect(loginResult.data.session).toBeDefined()
       expect(loginResult.data.user.email).toBe(loginData.email)
-      expect(loginResult.error)
-        .toBeNull()(
-          // 验证登录时间更新
-          mockPrisma.user.update as any
-        )
-        .mockResolvedValue({
-          ...TEST_USERS.user,
-          lastLoginAt: new Date(),
-        } as any)
+      expect(loginResult.error).toBeNull()
+
+      mockPrisma.user.update.mockResolvedValue({
+        ...TEST_USERS.user,
+        lastLoginAt: new Date(),
+      } as any)
 
       const { syncUserFromAuth } = await import("@/lib/auth")
       const updatedUser = await syncUserFromAuth({
@@ -265,12 +260,8 @@ describe("邮箱认证流程集成测试", () => {
 
     it("应该拒绝被封禁用户的登录", async () => {
       const { prisma } = await import("@/lib/prisma")
-      const mockPrisma = vi
-        .mocked(prisma)(
-          // 用户被封禁
-          mockPrisma.user.findUnique as any
-        )
-        .mockResolvedValue(TEST_USERS.bannedUser as any)
+      const mockPrisma = vi.mocked(prisma)
+      mockPrisma.user.findUnique.mockResolvedValue(TEST_USERS.bannedUser as any)
 
       // Supabase 认证成功，但应用层阻止
       mockSupabaseClient.auth.signInWithPassword.mockResolvedValue({
@@ -534,9 +525,8 @@ describe("邮箱认证流程集成测试", () => {
   describe("邮箱认证性能测试", () => {
     it("应该快速完成邮箱存在性检查", async () => {
       const { prisma } = await import("@/lib/prisma")
-      const mockPrisma = vi
-        .mocked(prisma)(mockPrisma.user.findUnique as any)
-        .mockResolvedValue(null)
+      const mockPrisma = vi.mocked(prisma)
+      mockPrisma.user.findUnique.mockResolvedValue(null)
 
       const startTime = performance.now()
       const { isEmailRegistered } = await import("@/lib/auth")
@@ -576,9 +566,8 @@ describe("邮箱认证流程集成测试", () => {
     it("应该处理极长的邮箱地址", async () => {
       const longEmail = "a".repeat(240) + "@example.com" // 超长邮箱
       const { prisma } = await import("@/lib/prisma")
-      const mockPrisma = vi
-        .mocked(prisma)(mockPrisma.user.findUnique as any)
-        .mockResolvedValue(null)
+      const mockPrisma = vi.mocked(prisma)
+      mockPrisma.user.findUnique.mockResolvedValue(null)
 
       const { isEmailRegistered } = await import("@/lib/auth")
       const result = await isEmailRegistered(longEmail)

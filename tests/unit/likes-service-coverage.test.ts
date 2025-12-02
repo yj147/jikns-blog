@@ -1,16 +1,4 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
-import {
-  toggleLike,
-  setLike,
-  ensureLiked,
-  ensureUnliked,
-  getLikeStatus,
-  getLikeUsers,
-  getBatchLikeStatus,
-  getLikeCount,
-  clearUserLikes,
-} from "@/lib/interactions/likes"
-import { prisma } from "@/lib/prisma"
 import { InteractionNotAllowedError } from "@/lib/interactions/errors"
 import { Role, UserStatus, Prisma } from "@/lib/generated/prisma"
 import { logger } from "@/lib/utils/logger"
@@ -19,45 +7,79 @@ const { notifyMock } = vi.hoisted(() => {
   return { notifyMock: vi.fn() }
 })
 
+const { mockLogger, createLoggerMock } = vi.hoisted(() => {
+  const logger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    child: vi.fn(),
+  }
+
+  logger.child.mockReturnValue(logger)
+
+  return {
+    mockLogger: logger,
+    createLoggerMock: vi.fn(() => logger),
+  }
+})
+
+const mockPrisma = vi.hoisted(() => ({
+  like: {
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    delete: vi.fn(),
+    deleteMany: vi.fn(),
+    count: vi.fn(),
+    groupBy: vi.fn(),
+  },
+  post: {
+    findFirst: vi.fn(),
+    findUnique: vi.fn(),
+  },
+  activity: {
+    findFirst: vi.fn(),
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+  },
+  user: {
+    findUnique: vi.fn(),
+  },
+  $transaction: vi.fn(async (fn: any) => fn(mockPrisma as any)),
+}))
+
 vi.mock("@/lib/utils/logger", () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+  logger: mockLogger,
+  createLogger: createLoggerMock,
+  authLogger: mockLogger,
+  apiLogger: mockLogger,
 }))
 
 vi.mock("@/lib/services/notification", () => ({
   notify: notifyMock,
 }))
 
-vi.mock("@/lib/prisma", () => {
-  const mockPrisma = {
-    like: {
-      findFirst: vi.fn(),
-      findMany: vi.fn(),
-      findUnique: vi.fn(),
-      create: vi.fn(),
-      delete: vi.fn(),
-      deleteMany: vi.fn(),
-      count: vi.fn(),
-      groupBy: vi.fn(),
-    },
-    post: {
-      findFirst: vi.fn(),
-      findUnique: vi.fn(),
-    },
-    activity: {
-      findFirst: vi.fn(),
-      findUnique: vi.fn(),
-      findMany: vi.fn(),
-      update: vi.fn(),
-      updateMany: vi.fn(),
-    },
-    user: {
-      findUnique: vi.fn(),
-    },
-  }
-  return { prisma: mockPrisma, default: mockPrisma }
-})
+vi.mock("@/lib/prisma", () => ({
+  prisma: mockPrisma,
+}))
 
 const asAny = (v: any) => v as any
+
+let likesService: typeof import("@/lib/interactions/likes")
+let prisma: typeof import("@/lib/prisma")["prisma"]
+let toggleLike: typeof import("@/lib/interactions/likes").toggleLike
+let setLike: typeof import("@/lib/interactions/likes").setLike
+let ensureLiked: typeof import("@/lib/interactions/likes").ensureLiked
+let ensureUnliked: typeof import("@/lib/interactions/likes").ensureUnliked
+let getLikeStatus: typeof import("@/lib/interactions/likes").getLikeStatus
+let getLikeUsers: typeof import("@/lib/interactions/likes").getLikeUsers
+let getBatchLikeStatus: typeof import("@/lib/interactions/likes").getBatchLikeStatus
+let getLikeCount: typeof import("@/lib/interactions/likes").getLikeCount
+let clearUserLikes: typeof import("@/lib/interactions/likes").clearUserLikes
 
 describe("likes service coverage sweep", () => {
   const activeUser = {
@@ -69,10 +91,36 @@ describe("likes service coverage sweep", () => {
   avatarUrl: null,
   }
 
-  beforeEach(() => {
-    vi.clearAllMocks()
+  beforeEach(async () => {
+    vi.resetModules()
+    vi.resetAllMocks()
+
+    const prismaModule = await import("@/lib/prisma")
+    prisma = prismaModule.prisma
+    likesService = await import("@/lib/interactions/likes")
+
+    ;({
+      toggleLike,
+      setLike,
+      ensureLiked,
+      ensureUnliked,
+      getLikeStatus,
+      getLikeUsers,
+      getBatchLikeStatus,
+      getLikeCount,
+      clearUserLikes,
+    } = likesService)
+
     vi.mocked(prisma.user.findUnique).mockResolvedValue(activeUser as any)
     notifyMock.mockReset()
+
+    // 默认返回空结果，避免未设定 mock 时出现 undefined
+    vi.mocked(prisma.like.findMany).mockResolvedValue([] as any)
+    vi.mocked(prisma.like.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.like.count).mockResolvedValue(0)
+    vi.mocked(prisma.like.groupBy).mockResolvedValue([] as any)
+    vi.mocked(prisma.activity.findMany).mockResolvedValue([] as any)
+    vi.mocked(prisma.activity.updateMany).mockResolvedValue({ count: 0 } as any)
   })
 
   it("covers like status and batch helpers", async () => {
@@ -181,9 +229,9 @@ describe("likes service coverage sweep", () => {
       ...activeUser,
       status: UserStatus.BANNED,
     } as any)
-    await expect(toggleLike("post", "p1", activeUser.id)).rejects.toBeInstanceOf(
-      InteractionNotAllowedError
-    )
+    await expect(toggleLike("post", "p1", activeUser.id)).rejects.toMatchObject({
+      reason: "ACTOR_INACTIVE",
+    })
   })
 
   it("handles unique constraint conflict on create (P2002)", async () => {
@@ -301,8 +349,8 @@ describe("likes service coverage sweep", () => {
     } as any)
     vi.mocked(prisma.like.findFirst).mockResolvedValue(null)
 
-    await expect(toggleLike("activity", "a-del", activeUser.id)).rejects.toBeInstanceOf(
-      InteractionNotAllowedError
-    )
+    await expect(toggleLike("activity", "a-del", activeUser.id)).rejects.toMatchObject({
+      reason: "TARGET_DELETED",
+    })
   })
 })

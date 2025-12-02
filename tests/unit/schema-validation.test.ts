@@ -57,6 +57,8 @@ describe("Prisma schema 用户设置扩展", () => {
         "createdAt",
         "postId",
         "commentId",
+        "activityId",
+        "followerId",
       ])
     )
 

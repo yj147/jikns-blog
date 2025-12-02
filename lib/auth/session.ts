@@ -14,6 +14,8 @@ import { performanceMonitor, MetricType } from "@/lib/performance-monitor"
 import { buildSessionLogContext } from "@/lib/utils/auth-logging"
 import { generateRequestId } from "@/lib/utils/request-id"
 
+const isTestEnv = process.env.NODE_ENV === "test"
+
 /**
  * 策略化守卫类型映射
  * 通过策略确保类型安全
@@ -118,7 +120,7 @@ async function hasSupabaseSessionCookie(request?: NextRequest): Promise<boolean>
   }
 }
 
-const getSupabaseUser = cache(async () => {
+const getSupabaseUserImpl = async () => {
   const hasSession = await hasSupabaseSessionCookie()
   if (!hasSession) {
     authLogger.debug("未检测到 Supabase 认证 Cookie，跳过 getUser 查询")
@@ -151,7 +153,9 @@ const getSupabaseUser = cache(async () => {
     })
     return null
   }
-})
+}
+
+const getSupabaseUser = isTestEnv ? getSupabaseUserImpl : cache(getSupabaseUserImpl)
 
 /**
  * 从数据库获取用户信息（核心函数）
@@ -181,6 +185,9 @@ async function fetchUserFromDatabase(userId: string): Promise<User | null> {
  * 返回完整的 User 对象，映射在 fetchAuthenticatedUser() 中完成
  */
 async function getCachedUser(userId: string): Promise<User | null> {
+  if (isTestEnv) {
+    return fetchUserFromDatabase(userId)
+  }
   const cachedFn = unstable_cache(
     async () => fetchUserFromDatabase(userId),
     [`user-profile-${userId}`],
@@ -210,7 +217,7 @@ export async function fetchSessionUserProfile(): Promise<User | null> {
  * 获取认证用户（统一入口）
  * Server Components 和 Server Actions 专用
  */
-export const fetchAuthenticatedUser = cache(async (): Promise<AuthenticatedUser | null> => {
+const fetchAuthenticatedUserImpl = async (): Promise<AuthenticatedUser | null> => {
   const timerId = `auth-session-${Date.now()}-${Math.random().toString(16).slice(2)}`
   performanceMonitor.startTimer(timerId)
 
@@ -293,7 +300,11 @@ export const fetchAuthenticatedUser = cache(async (): Promise<AuthenticatedUser 
       endTimer({ success: false, userPresent: false, source: "unexpected" })
     }
   }
-})
+}
+
+export const fetchAuthenticatedUser = isTestEnv
+  ? fetchAuthenticatedUserImpl
+  : cache(fetchAuthenticatedUserImpl)
 
 export async function getOptionalViewer(options?: {
   request?: NextRequest

@@ -22,22 +22,26 @@ import type {
 } from "@/types/search"
 
 type SearchResultCardProps =
-  | { type: "posts"; data: SearchPostHit; query: string }
-  | { type: "activities"; data: SearchActivityHit; query: string }
-  | { type: "users"; data: SearchUserHit; query: string }
-  | { type: "tags"; data: SearchTagHit; query: string }
+  | { type: "posts" | "post"; data: SearchPostHit; query: string }
+  | { type: "activities" | "activity"; data: SearchActivityHit; query: string }
+  | { type: "users" | "user"; data: SearchUserHit; query: string }
+  | { type: "tags" | "tag"; data: SearchTagHit; query: string }
 
 const CARD_TRANSITION = { duration: 0.2 }
 
 export function SearchResultCard(props: SearchResultCardProps) {
   switch (props.type) {
     case "posts":
+    case "post":
       return <PostCard data={props.data} query={props.query} />
     case "activities":
+    case "activity":
       return <ActivityCard data={props.data} query={props.query} />
     case "users":
+    case "user":
       return <UserCard data={props.data} query={props.query} />
     case "tags":
+    case "tag":
       return <TagCard data={props.data} query={props.query} />
     default:
       return null
@@ -51,15 +55,18 @@ function PostCard({ data, query }: { data: SearchPostHit; query: string }) {
     <ResultCardShell>
       <Card className="group transition-shadow hover:shadow-lg">
         <CardHeader className="space-y-2">
-          <div className="text-muted-foreground flex items-center gap-3 text-xs">
-            <Calendar className="h-4 w-4" />
-            <span>{published ? formatDate(published) : "未知时间"}</span>
-            {published && (
-              <span className="flex items-center gap-1">
-                <Clock className="h-4 w-4" />
-                <span>{formatRelativeTime(published)}</span>
-              </span>
-            )}
+          <div className="flex items-start justify-between gap-3">
+            <div className="text-muted-foreground flex items-center gap-3 text-xs">
+              <Calendar className="h-4 w-4" />
+              <span>{published ? formatDate(published) : "未知时间"}</span>
+              {published && (
+                <span className="flex items-center gap-1">
+                  <Clock className="h-4 w-4" />
+                  <span>{formatRelativeTime(published)}</span>
+                </span>
+              )}
+            </div>
+            <RelevanceBadge rank={data.rank} />
           </div>
 
           <Link href={`/blog/${data.slug}`}>
@@ -101,12 +108,15 @@ function ActivityCard({ data, query }: { data: SearchActivityHit; query: string 
               <UserIcon className="h-4 w-4" />
               <span>{data.authorName || "匿名用户"}</span>
             </div>
-            {created && (
-              <div className="flex items-center gap-1">
-                <Clock className="h-4 w-4" />
-                <span>{formatRelativeTime(created)}</span>
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              {created && (
+                <div className="flex items-center gap-1">
+                  <Clock className="h-4 w-4" />
+                  <span>{formatRelativeTime(created)}</span>
+                </div>
+              )}
+              <RelevanceBadge rank={data.rank} />
+            </div>
           </div>
           <p className="text-sm leading-relaxed">{highlightText(data.content, query)}</p>
           <Badge variant="outline">动态</Badge>
@@ -129,13 +139,16 @@ function UserCard({ data, query }: { data: SearchUserHit; query: string }) {
           </Avatar>
 
           <div className="min-w-0 flex-1 space-y-2">
-            <div className="flex items-center gap-2">
-              <Link href={`/profile/${data.id}`}>
-                <h3 className="hover:text-primary line-clamp-1 cursor-pointer text-base font-semibold transition-colors">
-                  {highlightText(data.name || data.email, query)}
-                </h3>
-              </Link>
-              <Badge variant="secondary">用户</Badge>
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Link href={`/profile/${data.id}`}>
+                  <h3 className="hover:text-primary line-clamp-1 cursor-pointer text-base font-semibold transition-colors">
+                    {highlightText(data.name || data.email, query)}
+                  </h3>
+                </Link>
+                <Badge variant="secondary">用户</Badge>
+              </div>
+              <RelevanceBadge rank={data.rank} />
             </div>
             <p className="text-muted-foreground line-clamp-2 text-sm">{highlightText(bio, query)}</p>
             <p className="text-xs text-muted-foreground break-all">{data.email}</p>
@@ -155,7 +168,7 @@ function TagCard({ data, query }: { data: SearchTagHit; query: string }) {
     <ResultCardShell>
       <Link href={`/blog?tag=${data.slug}`}>
         <Card className="group cursor-pointer transition-shadow hover:shadow-lg">
-          <CardContent className="flex items-center justify-between gap-3 pt-6">
+          <CardContent className="flex items-start justify-between gap-3 pt-6">
             <div className="flex items-center gap-3">
               <div className="bg-primary/10 text-primary flex h-10 w-10 items-center justify-center rounded-lg">
                 <Hash className="h-5 w-5" />
@@ -172,7 +185,10 @@ function TagCard({ data, query }: { data: SearchTagHit; query: string }) {
                 <p className="text-muted-foreground text-xs">被使用 {data.postsCount} 次</p>
               </div>
             </div>
-            <Badge variant="outline">标签</Badge>
+            <div className="flex flex-col items-end gap-2">
+              <Badge variant="outline">标签</Badge>
+              <RelevanceBadge rank={data.rank} />
+            </div>
           </CardContent>
         </Card>
       </Link>
@@ -189,6 +205,17 @@ function ResultCardShell({ children }: { children: ReactNode }) {
     >
       {children}
     </motion.div>
+  )
+}
+
+function RelevanceBadge({ rank }: { rank: number }) {
+  if (!Number.isFinite(rank)) return null
+  const display = formatRelevance(rank)
+  return (
+    <div className="text-muted-foreground flex items-center gap-1 text-xs" aria-label="relevance-score">
+      <span>相关度</span>
+      <span className="font-semibold text-foreground">{display}</span>
+    </div>
   )
 }
 
@@ -227,4 +254,10 @@ function normalizeDate(value: Date | string | null | undefined): string | undefi
   } catch {
     return undefined
   }
+}
+
+function formatRelevance(rank: number): string {
+  const normalized = Math.min(1, Math.max(0, rank))
+  const percentage = Math.round(normalized * 100)
+  return `${percentage}%`
 }

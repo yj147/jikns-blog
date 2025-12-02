@@ -265,6 +265,7 @@ model User {
   likes                   Like[]
   notificationsSent       Notification[]           @relation("NotificationActor")
   notificationsReceived   Notification[]           @relation("NotificationRecipient")
+  notificationsFollowed   Notification[]           @relation("NotificationFollower")
   performanceMetrics      PerformanceMetric[]
   posts                   Post[]
   series                  Series[]
@@ -279,7 +280,7 @@ model User {
 }
 
 model Notification {
-  /// DB CHECK: at most one of postId/commentId/activityId is non-null.
+  /// DB CHECK: exactly one of postId/activityId/followerId is non-null.
   id          String           @id @default(uuid())
   recipientId String
   actorId     String
@@ -289,14 +290,17 @@ model Notification {
   postId      String?
   commentId   String?
   activityId  String?
+  followerId  String?
   actor       User             @relation("NotificationActor", fields: [actorId], references: [id], onDelete: Cascade)
   comment     Comment?         @relation("NotificationComment", fields: [commentId], references: [id])
   post        Post?            @relation("NotificationPost", fields: [postId], references: [id])
   activity    Activity?        @relation(fields: [activityId], references: [id])
+  follower    User?            @relation("NotificationFollower", fields: [followerId], references: [id], onDelete: SetNull)
   recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
   emailQueue  EmailQueue[]
 
   @@index([recipientId, readAt])
+  @@index([followerId])
   @@map("notifications")
 }
 

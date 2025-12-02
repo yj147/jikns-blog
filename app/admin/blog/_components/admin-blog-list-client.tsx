@@ -14,6 +14,7 @@ export type AdminBlogPostDTO = {
   slug: string
   summary?: string | null
   coverImage?: string | null
+   signedCoverImage?: string | null
   tags: string[]
   isPublished: boolean
   isPinned: boolean
@@ -40,7 +41,8 @@ function deserializePost(post: AdminBlogPostDTO): Post {
     slug: post.slug,
     summary: post.summary ?? undefined,
     content: "",
-    coverImage: post.coverImage ?? undefined,
+    coverImage: post.signedCoverImage ?? post.coverImage ?? undefined,
+    signedCoverImage: post.signedCoverImage ?? undefined,
     tags: post.tags,
     isPublished: post.isPublished,
     isPinned: post.isPinned,

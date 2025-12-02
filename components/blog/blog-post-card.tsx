@@ -6,6 +6,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { motion } from "framer-motion"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -20,6 +21,7 @@ import {
   formatNumber,
   generateTagColor,
 } from "@/lib/utils/blog-helpers"
+import { getOptimizedImageUrl } from "@/lib/images/optimizer"
 
 interface BlogPostCardProps {
   post: PostListItem
@@ -27,6 +29,11 @@ interface BlogPostCardProps {
 }
 
 export function BlogPostCard({ post, index = 0 }: BlogPostCardProps) {
+  const coverSource = post.signedCoverImage ?? post.coverImage ?? undefined
+  const coverImageUrl =
+    coverSource &&
+    (getOptimizedImageUrl(coverSource, { width: 1280, height: 720, quality: 80 }) ?? coverSource)
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 50 }}
@@ -36,6 +43,19 @@ export function BlogPostCard({ post, index = 0 }: BlogPostCardProps) {
       layout
     >
       <Card className="from-background to-muted/10 group relative overflow-hidden border-0 bg-gradient-to-br transition-all duration-300 hover:shadow-xl">
+        {coverImageUrl && (
+          <div className="relative h-56 w-full overflow-hidden">
+            <Image
+              src={coverImageUrl}
+              alt={post.title}
+              fill
+              className="object-cover"
+              sizes="(max-width: 768px) 100vw, (max-width: 1280px) 75vw, 50vw"
+              priority={index === 0}
+              loading={index === 0 ? "eager" : "lazy"}
+            />
+          </div>
+        )}
         {/* 置顶标识 */}
         {post.isPinned && (
           <div className="absolute right-4 top-4 z-10">

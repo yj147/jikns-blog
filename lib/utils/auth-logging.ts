@@ -35,14 +35,16 @@ interface ExtraFields {
 export function logAuthEvent(
   level: "info" | "warn" | "error",
   message: string,
-  context: AuthContext,
+  context?: AuthContext | null,
   extra: ExtraFields = {}
 ): void {
+  const safeContext = context || {}
+
   const logData = {
-    requestId: context.requestId || "unknown",
-    path: context.path || "unknown",
-    ip: context.ip || "unknown",
-    userId: context.userId || undefined,
+    requestId: safeContext.requestId || "unknown",
+    path: safeContext.path || "unknown",
+    ip: safeContext.ip || "unknown",
+    userId: safeContext.userId || undefined,
     timestamp: new Date().toISOString(),
     ...extra,
   }

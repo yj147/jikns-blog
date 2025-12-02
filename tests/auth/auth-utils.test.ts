@@ -15,21 +15,68 @@ import {
   getAuthRedirectUrl,
   validateRedirectUrl,
 } from "@/lib/auth"
-import { setCurrentTestUser, resetMocks } from "../__mocks__/supabase"
-import { TEST_USERS, createTestSession } from "../helpers/test-data"
+import { TEST_USERS } from "../helpers/test-data"
+import * as supabaseModule from "../__mocks__/supabase"
 import { mockPrisma, resetPrismaMocks } from "../__mocks__/prisma"
-
-// Mock 外部依赖
-vi.mock("@/lib/supabase", () => import("../__mocks__/supabase"))
-vi.mock("@/lib/prisma", () => ({
-  prisma: mockPrisma,
-}))
-vi.mock("@/lib/security", () => ({
+const securityModule = vi.hoisted(() => ({
+  __esModule: true,
   SessionSecurity: {
     isSessionExpired: vi.fn(() => false),
     shouldRefreshSession: vi.fn(() => false),
   },
 }))
+
+// Mock 外部依赖（使用 hoisted 确保 Vitest 提前加载）
+vi.mock("@/lib/auth/session", async () => {
+  const supabase = await import("../__mocks__/supabase")
+  const { AuthErrors } = await import("@/lib/error-handling/auth-error")
+
+  const resolveCurrentUser = async () => {
+    const current = supabase.getCurrentTestUser()
+    if (!current) return null
+
+    try {
+      const dbUser = await mockPrisma.user.findUnique({ where: { id: current.id } })
+      return (dbUser as any) || (current as any)
+    } catch {
+      return null
+    }
+  }
+
+  const buildError = (type: keyof typeof AuthErrors, message: string) => {
+    const err = AuthErrors[type]()
+    err.message = message
+    return err
+  }
+
+  return {
+    __esModule: true,
+    assertPolicy: vi.fn(async (policy: string) => {
+      const user = await resolveCurrentUser()
+      if (!user) return [null as any, buildError("unauthorized", "未登录用户")]
+
+      if (policy === "admin") {
+        if (user.status === "BANNED") {
+          return [null as any, buildError("accountBanned", "账户已被封禁")]
+        }
+        if (user.role !== "ADMIN") {
+          return [null as any, buildError("forbidden", "需要管理员权限")]
+        }
+      }
+
+      if (policy === "user-active" && user.status === "BANNED") {
+        return [null as any, buildError("accountBanned", "账户已被封禁")]
+      }
+
+      return [user as any, null]
+    }),
+    fetchSessionUserProfile: vi.fn(async () => resolveCurrentUser()),
+  }
+})
+vi.mock("@/lib/security", () => securityModule)
+
+const { setCurrentTestUser, resetMocks } =
+  supabaseModule as typeof import("../__mocks__/supabase")
 
 describe("认证工具函数测试", () => {
   beforeEach(() => {
@@ -305,20 +352,20 @@ describe("认证工具函数测试", () => {
     it("应该生成基础回调 URL", () => {
       const url = getAuthRedirectUrl()
 
-      expect(url).toBe("http://localhost:54321/auth/v1/callback")
+      expect(url).toBe("http://localhost:3000/auth/callback")
     })
 
     it("应该生成带重定向参数的 URL", () => {
       const url = getAuthRedirectUrl("/admin/posts")
 
-      expect(url).toContain("redirect_to=%2Fadmin%2Fposts")
-      expect(url).toContain("http://localhost:54321/auth/v1/callback")
+      expect(url).toContain("redirect=%2Fadmin%2Fposts")
+      expect(url).toContain("http://localhost:3000/auth/callback")
     })
 
     it("应该忽略根路径重定向", () => {
       const url = getAuthRedirectUrl("/")
 
-      expect(url).toBe("http://localhost:54321/auth/v1/callback")
+      expect(url).toBe("http://localhost:3000/auth/callback")
     })
   })
 

@@ -4,9 +4,11 @@ import { apiLogger } from "@/lib/utils/logger"
 import { generateRequestId } from "@/lib/auth/session"
 import type { Prisma } from "@/lib/generated/prisma"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
+import { createSignedUrlIfNeeded, signAvatarUrl } from "@/lib/storage/signed-url"
 
 const DEFAULT_LIMIT = 10
 const MAX_LIMIT = 50
+const POST_IMAGE_SIGN_EXPIRES_IN = 60 * 60
 
 interface ActivityLikeItem {
   type: "activity"
@@ -176,7 +178,8 @@ function mapActivityLike(
 
 function mapPostLike(
   post: NonNullable<LikeWithRelations["post"]>,
-  likedAt: Date
+  likedAt: Date,
+  signed?: { cover?: string | null; avatar?: string | null }
 ): PostLikeItem {
   const tags =
     post.tags
@@ -200,13 +203,14 @@ function mapPostLike(
       published: post.published,
       isPinned: post.isPinned,
       coverImage: post.coverImage,
+      signedCoverImage: signed?.cover ?? undefined,
       viewCount: post.viewCount ?? 0,
       publishedAt: post.publishedAt ? post.publishedAt.toISOString() : null,
       createdAt: post.createdAt.toISOString(),
       author: {
         id: post.author?.id ?? "",
         name: post.author?.name ?? null,
-        avatarUrl: post.author?.avatarUrl ?? null,
+        avatarUrl: signed?.avatar ?? post.author?.avatarUrl ?? null,
       },
       tags,
       stats: {
@@ -264,10 +268,37 @@ async function handleGet(
         skip,
         take: limit,
         orderBy: { createdAt: "desc" },
-        include: likeInclude,
-      }),
+      include: likeInclude,
+    }),
       prisma.like.count({ where }),
     ])
+
+    const postLikes = likes.filter(
+      (like): like is LikeWithRelations & { post: NonNullable<LikeWithRelations["post"]> } =>
+        Boolean(like.post)
+    )
+
+    const signedCoverMap = new Map<string, string | null>()
+    const signedAvatarMap = new Map<string, string | null>()
+
+    await Promise.all(
+      postLikes.map(async (like) => {
+        if (!signedCoverMap.has(like.post.id)) {
+          const signedCover = await createSignedUrlIfNeeded(
+            like.post.coverImage,
+            POST_IMAGE_SIGN_EXPIRES_IN,
+            "post-images"
+          )
+          signedCoverMap.set(like.post.id, signedCover)
+        }
+
+        const authorId = like.post.author?.id
+        if (authorId && !signedAvatarMap.has(authorId)) {
+          const signedAvatar = await signAvatarUrl(like.post.author?.avatarUrl)
+          signedAvatarMap.set(authorId, signedAvatar)
+        }
+      })
+    )
 
     const data: LikeResponseItem[] = likes
       .map((like) => {
@@ -275,7 +306,10 @@ async function handleGet(
           return mapActivityLike(like.activity, like.createdAt, like.authorId === userId)
         }
         if (like.post) {
-          return mapPostLike(like.post, like.createdAt)
+          return mapPostLike(like.post, like.createdAt, {
+            cover: signedCoverMap.get(like.post.id) ?? null,
+            avatar: like.post.author?.id ? signedAvatarMap.get(like.post.author.id) ?? null : null,
+          })
         }
         return null
       })

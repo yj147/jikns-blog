@@ -3,7 +3,7 @@
  * 实时订阅通知插入事件
  */
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { RealtimePostgresChangesPayload, SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/database"
 import { createClient } from "@/lib/supabase"
@@ -64,9 +64,12 @@ interface UseRealtimeNotificationsOptions {
   enabled?: boolean
   onInsert?: (notification: NotificationView) => void
   supabase?: SupabaseClient<Database> | null
+  pollInterval?: number
 }
 
 const MAX_RETRY = 3
+const DEFAULT_POLL_INTERVAL = 30000
+const DELIVERED_CACHE_LIMIT = 400
 
 /**
  * 订阅通知的 INSERT 事件，仅监听当前用户
@@ -76,17 +79,51 @@ export function useRealtimeNotifications({
   enabled = true,
   onInsert,
   supabase: supabaseFromProps,
+  pollInterval = DEFAULT_POLL_INTERVAL,
 }: UseRealtimeNotificationsOptions) {
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const [isPollingFallback, setIsPollingFallback] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const onInsertRef = useRef(onInsert)
   const supabaseClientRef = useRef<SupabaseClient<Database> | null>(null)
   const [retryToken, setRetryToken] = useState(0)
   const retrySchedulerRef = useRef(createRetryScheduler({ maxRetry: MAX_RETRY }))
   const isOnline = useNetworkStatus()
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const deliveredIdsRef = useRef<Set<string>>(new Set())
+  const deliveredQueueRef = useRef<string[]>([])
+  const mountedRef = useRef(true)
+  const refreshInFlightRef = useRef(false)
+  const isPollingRef = useRef(false)
+
+  const rememberDelivered = useCallback((id: string) => {
+    if (deliveredIdsRef.current.has(id)) return
+    deliveredIdsRef.current.add(id)
+    deliveredQueueRef.current.push(id)
+    if (deliveredQueueRef.current.length > DELIVERED_CACHE_LIMIT) {
+      const oldest = deliveredQueueRef.current.shift()
+      if (oldest) {
+        deliveredIdsRef.current.delete(oldest)
+      }
+    }
+  }, [])
+
+  const clearDelivered = useCallback(() => {
+    deliveredIdsRef.current.clear()
+    deliveredQueueRef.current = []
+  }, [])
 
   useOnlineCallback(() => {
     retrySchedulerRef.current.reset()
+    setIsSubscribed(false)
+    clearDelivered()
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current)
+      pollTimerRef.current = null
+    }
+    isPollingRef.current = false
+    setIsPollingFallback(false)
     setRetryToken((prev) => prev + 1)
   })
 
@@ -101,14 +138,101 @@ export function useRealtimeNotifications({
   }, [supabaseFromProps])
 
   useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  const stopPolling = useCallback(
+    (skipStateUpdate = false) => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current)
+        pollTimerRef.current = null
+      }
+      isPollingRef.current = false
+      if (!skipStateUpdate) {
+        setIsPollingFallback(false)
+      }
+    },
+    []
+  )
+
+  const pollNotifications = useCallback(async () => {
+    if (!enabled || !userId || !isOnline || refreshInFlightRef.current) return
+    refreshInFlightRef.current = true
+    setIsRefreshing(true)
+    try {
+      const response = await fetchJson<{ success: boolean; data: NotificationListPayload }>(
+        "/api/notifications",
+        { params: { limit: 20 } }
+      )
+      const items = response?.data?.items ?? []
+      for (const item of [...items].reverse()) {
+        if (deliveredIdsRef.current.has(item.id)) continue
+        rememberDelivered(item.id)
+        onInsertRef.current?.({
+          ...item,
+          targetUrl:
+            item.targetUrl ??
+            buildTargetUrl({
+              type: item.type,
+              post: item.post,
+              comment: item.comment
+                ? { postId: item.comment.postId ?? undefined, activityId: item.comment.activityId }
+                : null,
+              activityId: item.activityId ?? undefined,
+              actorId: item.actorId ?? item.actor?.id ?? "",
+              actor: item.actor ?? undefined,
+              postId: item.post?.id ?? item.post?.postId,
+            }),
+        })
+      }
+    } catch (err) {
+      logger.warn("通知轮询失败", { error: err })
+      if (mountedRef.current) {
+        setError((prev) => prev ?? (err instanceof Error ? err : new Error("Failed to poll")))
+      }
+    } finally {
+      if (mountedRef.current) {
+        setIsRefreshing(false)
+      }
+      refreshInFlightRef.current = false
+    }
+  }, [enabled, isOnline, rememberDelivered, userId])
+
+  const refresh = useCallback(async () => {
+    await pollNotifications()
+  }, [pollNotifications])
+
+  const startPolling = useCallback(() => {
+    if (pollTimerRef.current || !isOnline) {
+      isPollingRef.current = Boolean(pollTimerRef.current)
+      setIsPollingFallback(isPollingRef.current)
+      return
+    }
+
+    isPollingRef.current = true
+    setIsPollingFallback(true)
+    void pollNotifications()
+    pollTimerRef.current = setInterval(() => {
+      void pollNotifications()
+    }, pollInterval)
+  }, [isOnline, pollInterval, pollNotifications])
+
+  useEffect(() => {
     if (!enabled || !userId) {
       retrySchedulerRef.current.reset()
+      stopPolling()
+      clearDelivered()
       return
     }
 
     if (!isOnline) {
       retrySchedulerRef.current.clear()
       setIsSubscribed(false)
+      stopPolling()
+      clearDelivered()
       return
     }
 
@@ -129,7 +253,17 @@ export function useRealtimeNotifications({
         setRetryToken((prev) => prev + 1)
       })
       if (delay === null) {
-        logger.warn("通知订阅重试已达上限", { channelName, attempts: retryScheduler.attempts })
+        logger.warn("通知订阅重试已达上限，启动轮询降级", {
+          channelName,
+          attempts: retryScheduler.attempts,
+        })
+        startPolling()
+      }
+    }
+
+    const pollOnceIfFallback = () => {
+      if (isPollingRef.current && !pollTimerRef.current) {
+        startPolling()
       }
     }
 
@@ -302,6 +436,7 @@ export function useRealtimeNotifications({
         try {
           const hydrated =
             (await hydrateNotification(normalized.id)) ?? withFallback(normalized)
+          rememberDelivered(hydrated.id)
           onInsertRef.current?.(hydrated)
         } catch (err) {
           logger.error("处理通知变更失败", { notificationId: normalized.id }, err)
@@ -336,6 +471,8 @@ export function useRealtimeNotifications({
         if (status === "SUBSCRIBED") {
           setIsSubscribed(true)
           retryScheduler.reset()
+          stopPolling()
+          setIsPollingFallback(false)
           logger.info("通知订阅成功", { channelName })
         } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
           if (!isActive) {
@@ -369,6 +506,7 @@ export function useRealtimeNotifications({
               )
             )
           scheduleRetry()
+          pollOnceIfFallback()
         }
       })
 
@@ -384,12 +522,24 @@ export function useRealtimeNotifications({
         logger.info("取消订阅通知", { channelName })
         supabase.removeChannel(channel)
       }
+      stopPolling(true)
+      clearDelivered()
       setIsSubscribed(false)
     }
-  }, [userId, enabled, isOnline, retryToken])
+  }, [userId, enabled, isOnline, retryToken, startPolling, stopPolling, rememberDelivered])
 
   return {
     isSubscribed,
     error,
+    isPollingFallback,
+    isRefreshing,
+    refresh,
+    connectionState: isSubscribed
+      ? "realtime"
+      : isPollingFallback
+        ? "polling"
+        : error
+          ? "error"
+          : "disconnected",
   }
 }

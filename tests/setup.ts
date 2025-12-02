@@ -11,9 +11,19 @@ import { setupTestEnv, cleanupTestEnv } from "./helpers/test-env"
 // 让 Testing Library 能识别 Vitest 的 fake timers
 ;(globalThis as any).jest = vi
 
+// 全局关闭 console 噪声，避免 Vitest 缓存大量日志导致内存膨胀
+const consoleSpies = ["log", "info", "warn", "error", "debug"].map((method) =>
+  vi.spyOn(console, method as keyof Console).mockImplementation(() => {})
+)
+
 // 清理 React 测试环境
 afterEach(() => {
   cleanup()
+})
+
+// 统一清理 mock 调用记录
+afterEach(() => {
+  vi.clearAllMocks()
 })
 
 // 全局模拟 Next.js 相关模块
@@ -48,6 +58,12 @@ vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }))
 
+// 全局结构化日志 mock，避免跨文件污染
+vi.mock("@/lib/utils/logger", async () => {
+  const { createLoggerModuleMock } = await import("./helpers/logger-mock")
+  return { __esModule: true, ...createLoggerModuleMock() }
+})
+
 // 模拟 Prisma 客户端
 vi.mock("@/lib/prisma", async () => {
   const { prisma } = await import("./__mocks__/prisma-compatible")
@@ -75,6 +91,10 @@ beforeAll(() => {
 
 afterAll(() => {
   cleanupTestEnv()
+})
+
+afterAll(() => {
+  consoleSpies.forEach((spy) => spy.mockRestore())
 })
 
 // 全局 fetch mock 配置 - 解决 AuthProvider 测试失败
@@ -161,6 +181,11 @@ afterEach(() => {
   // 清理事件监听器防止内存泄漏
   process.removeAllListeners("unhandledRejection")
   process.removeAllListeners("uncaughtException")
+})
+
+afterEach(() => {
+  // 强制触发 GC，避免长时间运行测试时堆内存累积
+  global.gc?.()
 })
 
 // 测试工具类型定义

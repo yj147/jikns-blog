@@ -34,6 +34,7 @@ function serializePost(post: AdminPostSource): AdminBlogPostDTO {
     slug: post.slug,
     summary: post.excerpt,
     coverImage: post.signedCoverImage ?? post.coverImage ?? undefined,
+    signedCoverImage: post.signedCoverImage ?? null,
     tags: post.tags.map((tag) => tag.name),
     isPublished: post.published,
     isPinned: post.isPinned,

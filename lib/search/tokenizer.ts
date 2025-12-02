@@ -132,7 +132,10 @@ export function buildActivityTokens(content?: string | null): string {
 }
 
 function basicTokenize(input: string): string {
-  return input
+  // 在缺少 nodejieba 时，先为连续的中文字符插入空格，避免整段中文变成一个 token
+  const separated = input.replace(/([\p{Script=Han}])/gu, "$1 ")
+
+  return separated
     .split(/[\s,，。.!?？；;、"'“”‘’()（）[\]{}<>《》|\\/\-_=+]+/)
     .map(normalizeToken)
     .filter((token): token is string => Boolean(token))

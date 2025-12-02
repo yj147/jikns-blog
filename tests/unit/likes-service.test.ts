@@ -18,67 +18,73 @@ import {
   ensureUnliked,
 } from "@/lib/interactions/likes"
 
-// Mock Prisma
-vi.mock("@/lib/prisma", () => ({
-  prisma: {
-    like: {
-      findFirst: vi.fn(),
-      findUnique: vi.fn(),
-      findMany: vi.fn(),
-      create: vi.fn(),
-      delete: vi.fn(),
-      deleteMany: vi.fn(),
-      count: vi.fn(),
-      groupBy: vi.fn(),
-    },
-    post: {
-      findFirst: vi.fn(),
-      findUnique: vi.fn(),
-    },
-    activity: {
-      findFirst: vi.fn(),
-      findUnique: vi.fn(),
-      findMany: vi.fn(),
-      update: vi.fn(),
-      updateMany: vi.fn(),
-    },
-    user: {
-      findUnique: vi.fn(),
-    },
-    $transaction: vi.fn(async (fn: any) => {
-      // Mock transaction: 直接执行回调并传入 prisma 对象
-      const mockPrisma = {
-        like: {
-          findFirst: vi.fn(),
-          findUnique: vi.fn(),
-          findMany: vi.fn(),
-          create: vi.fn(),
-          delete: vi.fn(),
-          deleteMany: vi.fn(),
-          count: vi.fn(),
-          groupBy: vi.fn(),
-        },
-        post: { findFirst: vi.fn(), findUnique: vi.fn() },
-        activity: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
-      }
-      return await fn(mockPrisma)
-    }),
-  },
-}))
-
-// Mock logger
-vi.mock("@/lib/utils/logger", () => ({
-  logger: {
+const { mockLogger, createLoggerMock } = vi.hoisted(() => {
+  const logger = {
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
     debug: vi.fn(),
+    child: vi.fn(),
+  }
+
+  logger.child.mockReturnValue(logger)
+
+  return {
+    mockLogger: logger,
+    createLoggerMock: vi.fn(() => logger),
+  }
+})
+
+const mockNotify = vi.hoisted(() => vi.fn())
+
+const mockPrisma = vi.hoisted(() => ({
+  like: {
+    findFirst: vi.fn(),
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    delete: vi.fn(),
+    deleteMany: vi.fn(),
+    count: vi.fn(),
+    groupBy: vi.fn(),
   },
+  post: {
+    findFirst: vi.fn(),
+    findUnique: vi.fn(),
+  },
+  activity: {
+    findFirst: vi.fn(),
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+  },
+  user: {
+    findUnique: vi.fn(),
+  },
+  $transaction: vi.fn(async (fn: any) => fn(mockPrisma as any)),
+}))
+
+vi.mock("@/lib/prisma", () => ({
+  prisma: mockPrisma,
+}))
+
+// Mock logger
+vi.mock("@/lib/utils/logger", () => ({
+  logger: mockLogger,
+  createLogger: createLoggerMock,
+  authLogger: mockLogger,
+  apiLogger: mockLogger,
+}))
+
+// Mock notification service
+vi.mock("@/lib/services/notification", () => ({
+  notify: mockNotify,
 }))
 
 describe("Likes Service", () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
 
     vi.mocked(prisma.user.findUnique).mockImplementation(async ({ where }: any) => ({
       id: where.id,
@@ -425,6 +431,40 @@ describe("Likes Service", () => {
       await expect(toggleLike("post", postId, userId)).rejects.toBeInstanceOf(
         InteractionNotAllowedError
       )
+    })
+
+    it("点赞 activity 会向作者发送 LIKE 通知", async () => {
+      const activityId = "activity-notify"
+      const authorId = "author-1"
+      const userId = "actor-1"
+
+      vi.mocked(prisma.like.findFirst).mockResolvedValue(null)
+      vi.mocked(prisma.activity.findFirst).mockResolvedValue({
+        id: activityId,
+        authorId,
+        deletedAt: null,
+        isPinned: false,
+        author: { id: authorId, status: UserStatus.ACTIVE, role: Role.USER },
+      } as any)
+      vi.mocked(prisma.activity.findUnique).mockResolvedValue({ authorId } as any)
+      vi.mocked(prisma.like.create).mockResolvedValue({
+        id: "like-activity-1",
+        authorId: userId,
+        activityId,
+        postId: null,
+        createdAt: new Date(),
+      } as any)
+      vi.mocked(prisma.like.count).mockResolvedValue(1)
+      vi.mocked(prisma.activity.updateMany).mockResolvedValue({ count: 1 } as any)
+
+      const result = await toggleLike("activity", activityId, userId)
+
+      expect(result).toEqual({ isLiked: true, count: 1 })
+      expect(mockNotify).toHaveBeenCalledTimes(1)
+      expect(mockNotify).toHaveBeenCalledWith(authorId, "LIKE", {
+        actorId: userId,
+        activityId,
+      })
     })
   })
 
@@ -1056,6 +1096,49 @@ describe("Likes Service", () => {
       await expect(ensureLiked("post", postId, userId)).rejects.toBeInstanceOf(
         InteractionTargetNotFoundError
       )
+    })
+  })
+
+  describe("ensureLiked 通知", () => {
+    it("activity 首次 ensureLiked 发送通知，重复调用不重复发送", async () => {
+      const activityId = "activity-ensure"
+      const authorId = "author-ensure"
+      const userId = "actor-ensure"
+
+      vi.mocked(prisma.activity.findFirst).mockResolvedValue({
+        id: activityId,
+        authorId,
+        deletedAt: null,
+        isPinned: false,
+        author: { id: authorId, status: UserStatus.ACTIVE, role: Role.USER },
+      } as any)
+      vi.mocked(prisma.activity.findUnique).mockResolvedValue({ authorId } as any)
+      vi.mocked(prisma.like.count).mockResolvedValue(1)
+      vi.mocked(prisma.activity.updateMany).mockResolvedValue({ count: 1 } as any)
+
+      const uniqueErr = new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+        code: "P2002",
+        clientVersion: "5.0.0",
+      })
+
+      vi.mocked(prisma.like.create)
+        .mockResolvedValueOnce({
+          id: "like-ensure-1",
+          authorId: userId,
+          activityId,
+          postId: null,
+          createdAt: new Date(),
+        } as any)
+        .mockRejectedValueOnce(uniqueErr)
+
+      await ensureLiked("activity", activityId, userId)
+      await ensureLiked("activity", activityId, userId)
+
+      expect(mockNotify).toHaveBeenCalledTimes(1)
+      expect(mockNotify).toHaveBeenCalledWith(authorId, "LIKE", {
+        actorId: userId,
+        activityId,
+      })
     })
   })
 

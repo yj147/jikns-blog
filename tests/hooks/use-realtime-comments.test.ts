@@ -3,19 +3,12 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest"
 import { useRealtimeComments } from "@/hooks/use-realtime-comments"
 import { createSupabaseRealtimeMock, type SupabaseRealtimeMock } from "../helpers/realtime-mock"
 
-vi.mock("@/lib/utils/logger", () => ({
-  logger: {
-    info: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}))
+const createClientMock = vi.hoisted(() => vi.fn())
 
 let supabaseCtx: SupabaseRealtimeMock
-const createClientMock = vi.fn()
 
 vi.mock("@/lib/supabase", () => ({
+  __esModule: true,
   createClient: (...args: any[]) => createClientMock(...args),
 }))
 
@@ -27,6 +20,12 @@ const flushEffects = async () => {
   await act(async () => {
     await Promise.resolve()
   })
+}
+
+const waitForChannel = async (index?: number) => {
+  await waitFor(() => expect(supabaseCtx.channels.length).toBeGreaterThan(0))
+  const targetIndex = index !== undefined ? index : supabaseCtx.channels.length - 1
+  return supabaseCtx.channels[targetIndex]
 }
 
 describe("useRealtimeComments", () => {
@@ -58,7 +57,7 @@ describe("useRealtimeComments", () => {
     )
 
     await flushEffects()
-    const channel = supabaseCtx.channels[0]
+    const channel = await waitForChannel()
     act(() => channel.emitStatus("SUBSCRIBED"))
 
     await act(async () => {
@@ -87,7 +86,7 @@ describe("useRealtimeComments", () => {
     )
 
     await flushEffects()
-    const channel = supabaseCtx.channels[0]
+    const channel = await waitForChannel()
     act(() => channel.emitStatus("SUBSCRIBED"))
 
     await act(async () => {
@@ -127,12 +126,12 @@ describe("useRealtimeComments", () => {
 
     await flushEffects()
 
-    expect(supabaseCtx.channels.length).toBe(1)
+    await waitFor(() => expect(supabaseCtx.channels.length).toBeGreaterThan(0))
 
-    const channel = supabaseCtx.channels[0]
+    const channel = await waitForChannel(0)
     act(() => channel.emitStatus("SUBSCRIBED"))
 
-    expect(result.current.connectionState).toBe("realtime")
+    await waitFor(() => expect(result.current.connectionState).toBe("realtime"))
     expect(vi.getTimerCount()).toBe(0)
     expect(supabaseCtx.supabase.auth.getSession).not.toHaveBeenCalled()
   })
@@ -150,8 +149,8 @@ describe("useRealtimeComments", () => {
     )
 
     const emitFailure = async (advanceMs: number) => {
+      const channel = await waitForChannel()
       await act(async () => {
-        const channel = supabaseCtx.channels[supabaseCtx.channels.length - 1]
         channel.emitStatus("CHANNEL_ERROR")
         vi.advanceTimersByTime(advanceMs)
         await Promise.resolve()
@@ -194,8 +193,8 @@ describe("useRealtimeComments", () => {
     await flushEffects()
 
     const fail = async (advance: number) => {
+      const channel = await waitForChannel()
       await act(async () => {
-        const channel = supabaseCtx.channels[supabaseCtx.channels.length - 1]
         channel.emitStatus("CHANNEL_ERROR")
         vi.advanceTimersByTime(advance)
         await Promise.resolve()
@@ -225,8 +224,8 @@ describe("useRealtimeComments", () => {
     await flushEffects()
 
     const emitFailure = async (advanceMs: number) => {
+      const channel = await waitForChannel()
       await act(async () => {
-        const channel = supabaseCtx.channels[supabaseCtx.channels.length - 1]
         channel.emitStatus("CHANNEL_ERROR")
         vi.advanceTimersByTime(advanceMs)
         await Promise.resolve()
@@ -252,7 +251,7 @@ describe("useRealtimeComments", () => {
     )
 
     await flushEffects()
-    const firstChannel = supabaseCtx.channels[0]
+    const firstChannel = await waitForChannel(0)
     act(() => firstChannel.emitStatus("SUBSCRIBED"))
 
     setOnline(false)
@@ -264,7 +263,7 @@ describe("useRealtimeComments", () => {
     act(() => vi.runOnlyPendingTimers())
     await flushEffects()
 
-    const secondChannel = supabaseCtx.channels[supabaseCtx.channels.length - 1]
+    const secondChannel = await waitForChannel()
     act(() => secondChannel.emitStatus("SUBSCRIBED"))
 
     expect(result.current.connectionState).toBe("realtime")
@@ -282,7 +281,7 @@ describe("useRealtimeComments", () => {
     )
 
     await flushEffects()
-    const channel = supabaseCtx.channels[0]
+    const channel = await waitForChannel()
     act(() => channel.emitStatus("SUBSCRIBED"))
 
     await act(async () => {
@@ -310,7 +309,7 @@ describe("useRealtimeComments", () => {
     )
 
     await flushEffects()
-    const channel = supabaseCtx.channels[0]
+    const channel = await waitForChannel()
     act(() => channel.emitStatus("SUBSCRIBED"))
 
     await act(async () => {
@@ -365,8 +364,8 @@ describe("useRealtimeComments", () => {
     )
 
     await flushEffects()
-    expect(result.current.isPollingFallback).toBe(true)
-    expect(result.current.error).toBeInstanceOf(Error)
+    await waitFor(() => expect(result.current.isPollingFallback).toBe(true))
+    await waitFor(() => expect(result.current.error).toBeInstanceOf(Error))
   })
 
   it("缺少 channel 方法时直接降级", async () => {
@@ -403,7 +402,7 @@ describe("useRealtimeComments", () => {
     )
 
     await flushEffects()
-    const channel = supabaseCtx.channels[0]
+    const channel = await waitForChannel()
     act(() => channel.emitStatus("SUBSCRIBED"))
 
     await act(async () => {
@@ -426,7 +425,7 @@ describe("useRealtimeComments", () => {
     )
     await flushEffects()
 
-    const channel = supabaseCtx.channels[0]
+    const channel = await waitForChannel()
     act(() => channel.emitStatus("TIMED_OUT"))
     await act(async () => {
       vi.runAllTimers()

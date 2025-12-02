@@ -4,11 +4,14 @@ import { apiLogger } from "@/lib/utils/logger"
 import { generateRequestId } from "@/lib/auth/session"
 import { calculateReadingMinutes } from "@/lib/utils/reading-time"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
+import { createSignedUrlIfNeeded } from "@/lib/storage/signed-url"
 
 function parsePositiveInt(value: string | null, fallback: number): number {
   const parsed = Number.parseInt(value ?? "", 10)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
+
+const POST_IMAGE_SIGN_EXPIRES_IN = 60 * 60
 
 async function handleGet(
   request: NextRequest,
@@ -90,12 +93,19 @@ async function handleGet(
       prisma.post.count({ where }),
     ])
 
-    const normalizedPosts = posts.map((post) => ({
+    const signedCoverImages = await Promise.all(
+      posts.map((post) =>
+        createSignedUrlIfNeeded(post.coverImage, POST_IMAGE_SIGN_EXPIRES_IN, "post-images")
+      )
+    )
+
+    const normalizedPosts = posts.map((post, index) => ({
       id: post.id,
       title: post.title,
       slug: post.slug,
       excerpt: post.excerpt,
       coverImage: post.coverImage,
+      signedCoverImage: signedCoverImages[index],
       publishedAt: (post.publishedAt ?? post.createdAt)?.toISOString() ?? null,
       viewCount: post.viewCount,
       readTimeMinutes: calculateReadingMinutes(post.content),

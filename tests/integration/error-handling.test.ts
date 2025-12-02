@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach, vi, Mock } from "vitest"
 import { ErrorFactory, errorHandler, RetryManager, ErrorLogger } from "@/lib/error-handling"
+import { logger } from "@/lib/utils/logger"
 import { ErrorType, SecurityErrorType, NetworkErrorType, BusinessErrorType } from "@/types/error"
 
 // Mock 依赖
@@ -177,16 +178,12 @@ describe("错误处理系统集成测试", () => {
 
     beforeEach(() => {
       errorLogger = new ErrorLogger()
-      // Mock console methods
-      vi.spyOn(console, "error").mockImplementation(() => {})
-      vi.spyOn(console, "warn").mockImplementation(() => {})
-      vi.spyOn(console, "log").mockImplementation(() => {})
     })
 
     it("应该记录到控制台", async () => {
       await errorLogger.log(mockError, { console: true, server: false })
 
-      expect(console.error).toHaveBeenCalled()
+      expect(logger.error).toHaveBeenCalled()
     })
 
     it("应该发送日志到服务器", async () => {
@@ -230,8 +227,8 @@ describe("错误处理系统集成测试", () => {
 
       await errorLogger.logBatch(errors, { console: true })
 
-      expect(console.error).toHaveBeenCalledTimes(1) // System error
-      expect(console.warn).toHaveBeenCalledTimes(1) // Network error
+      expect(logger.error).toHaveBeenCalledTimes(1) // System error
+      expect(logger.warn).toHaveBeenCalledTimes(1) // Network error
     })
   })
 

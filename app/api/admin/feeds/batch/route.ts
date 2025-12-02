@@ -55,7 +55,11 @@ const postHandler = withApiAuth(async (request: NextRequest, user: User) => {
             await adjustTagActivitiesCountForActivities(tx, activeIds, "decrement")
           }
 
-          await tx.activity.deleteMany({ where: { id: { in: deletable.map((item) => item.id) } } })
+          const deleteWhere = isAdmin
+            ? { id: { in: deletable.map((item) => item.id) } }
+            : { id: { in: deletable.map((item) => item.id) }, authorId: user.id }
+
+          await tx.activity.deleteMany({ where: deleteWhere })
           return deletable.length
         }
         case "pin": {
@@ -93,7 +97,11 @@ const postHandler = withApiAuth(async (request: NextRequest, user: User) => {
           await adjustTagActivitiesCountForActivities(tx, idsToHide, "decrement")
 
           await tx.activity.updateMany({
-            where: { id: { in: idsToHide } },
+            where: {
+              id: { in: idsToHide },
+              deletedAt: null,
+              ...(isAdmin ? {} : { authorId: user.id }),
+            },
             data: { deletedAt: now },
           })
           return idsToHide.length
@@ -110,7 +118,10 @@ const postHandler = withApiAuth(async (request: NextRequest, user: User) => {
           if (idsToUnhide.length === 0) return 0
 
           await tx.activity.updateMany({
-            where: { id: { in: idsToUnhide } },
+            where: {
+              id: { in: idsToUnhide },
+              ...(isAdmin ? {} : { authorId: user.id }),
+            },
             data: { deletedAt: null },
           })
 

@@ -9,26 +9,49 @@ import { TEST_USERS, createTestRequest } from "../helpers/test-data"
 import { setCurrentTestUser, resetMocks } from "../__mocks__/supabase"
 import { mockPrisma, resetPrismaMocks } from "../__mocks__/prisma"
 
-// Mock 中间件模块
+// 强制权限模块使用测试版 auth/prisma/supabase
+const authMock = vi.hoisted(async () => {
+  const actual = await vi.importActual<typeof import("@/lib/auth")>("@/lib/auth")
+  const { getCurrentTestUser } = await import("../__mocks__/supabase")
+  const { mockPrisma } = await import("../__mocks__/prisma")
+
+  return {
+    __esModule: true,
+    ...actual,
+    getAuthenticatedUser: vi.fn(async () => {
+      const user = getCurrentTestUser()
+      return { user: user ? { id: user.id, email: user.email } : null, error: null }
+    }),
+    getCurrentUser: vi.fn(async () => {
+      const user = getCurrentTestUser()
+      if (!user) return null
+      return (await mockPrisma.user.findUnique({ where: { id: user.id } })) as any
+    }),
+  }
+})
+
+vi.mock("@/lib/auth", () => authMock)
 vi.mock("@/lib/permissions", async () => {
   const actual = await vi.importActual("@/lib/permissions")
   return actual
 })
 
 describe("中间件性能和缓存集成测试", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetMocks()
     resetPrismaMocks()
     vi.clearAllMocks()
+    const { clearPermissionCache } = await import("@/lib/permissions")
+    clearPermissionCache()
   })
 
   describe("权限检查性能测试", () => {
     it("单次权限检查应在 10ms 内完成", async () => {
       setCurrentTestUser("user")
 
-      const startTime = performance.now()
-
       const { requireAuth } = await import("@/lib/permissions")
+
+      const startTime = performance.now()
       await requireAuth()
 
       const endTime = performance.now()

@@ -148,6 +148,7 @@ describe("useRealtimeNotifications", () => {
 
   afterEach(() => {
     vi.clearAllMocks()
+    vi.useRealTimers()
   })
 
   it("INSERT 事件应触发 onInsert 回调并返回补全后的通知", async () => {
@@ -297,5 +298,454 @@ describe("useRealtimeNotifications", () => {
     act(() => channel.emitStatus("SUBSCRIBED"))
 
     await waitFor(() => expect(result.current.isSubscribed).toBe(true))
+  })
+
+  it("重试 3 次后降级到轮询并继续拉取通知", async () => {
+    vi.useFakeTimers()
+    ensureSessionReadyMock.mockResolvedValue(false)
+
+    const scheduleSequence: Array<number | null> = [0, 0, null]
+    retryScheduler.schedule.mockImplementation((task: () => void) => {
+      const delay = scheduleSequence.shift() ?? null
+      if (delay !== null) {
+        scheduledTask = task
+      } else {
+        scheduledTask = null
+      }
+      return delay
+    })
+
+    const onInsert = vi.fn()
+    const pollNotification: NotificationView = {
+      id: "poll-1",
+      type: NotificationType.LIKE,
+      readAt: null,
+      createdAt: new Date().toISOString(),
+      recipientId: "user-poll",
+      actorId: "actor-1",
+      actor: { id: "actor-1", name: null, avatarUrl: null, email: null },
+      post: null,
+      comment: null,
+    }
+    fetchJsonMock.mockResolvedValue({
+      success: true,
+      data: {
+        items: [pollNotification],
+        pagination: { limit: 20, hasMore: false, nextCursor: null },
+        unreadCount: 1,
+        filteredUnreadCount: 1,
+      },
+    } as any)
+
+    const { result } = renderHook(() =>
+      useRealtimeNotifications({
+        userId: "user-poll",
+        enabled: true,
+        onInsert,
+        pollInterval: 10,
+      })
+    )
+
+    await waitFor(() => expect(retryScheduler.schedule).toHaveBeenCalledTimes(1))
+
+    act(() => {
+      scheduledTask?.()
+    })
+    await waitFor(() => expect(retryScheduler.schedule).toHaveBeenCalledTimes(2))
+
+    act(() => {
+      scheduledTask?.()
+    })
+
+    await waitFor(() => expect(retryScheduler.schedule).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(result.current.isPollingFallback).toBe(true))
+    await waitFor(() =>
+      expect(onInsert).toHaveBeenCalledWith(expect.objectContaining({ id: "poll-1" }))
+    )
+
+    act(() => {
+      vi.advanceTimersByTime(10)
+    })
+
+    await waitFor(() => expect(fetchJsonMock).toHaveBeenCalledTimes(2))
+    vi.useRealTimers()
+  })
+
+  it("refresh 可以手动触发一次轮询请求", async () => {
+    const onInsert = vi.fn()
+    fetchJsonMock.mockResolvedValue({
+      success: true,
+      data: {
+        items: [
+          {
+            id: "manual-1",
+            type: NotificationType.LIKE,
+            readAt: null,
+            createdAt: new Date().toISOString(),
+            recipientId: "user-refresh",
+            actorId: "actor-2",
+            actor: { id: "actor-2", name: null, avatarUrl: null, email: null },
+            post: null,
+            comment: null,
+          } satisfies NotificationView,
+        ],
+        pagination: { limit: 20, hasMore: false, nextCursor: null },
+        unreadCount: 1,
+        filteredUnreadCount: 1,
+      },
+    } as any)
+
+    const { result } = renderHook(() =>
+      useRealtimeNotifications({ userId: "user-refresh", enabled: true, onInsert })
+    )
+
+    await waitFor(() => expect(supabaseMock.channel).toHaveBeenCalled())
+    act(() => channel.emitStatus("SUBSCRIBED"))
+    await waitFor(() => expect(result.current.isSubscribed).toBe(true))
+
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    expect(fetchJsonMock).toHaveBeenCalled()
+    await waitFor(() =>
+      expect(onInsert).toHaveBeenCalledWith(expect.objectContaining({ id: "manual-1" }))
+    )
+  })
+
+  it("网络恢复后应停止轮询并重新尝试 realtime 订阅", async () => {
+    vi.useFakeTimers()
+    ensureSessionReadyMock.mockResolvedValueOnce(false).mockResolvedValue(true)
+    retryScheduler.schedule.mockReturnValueOnce(null)
+
+    const { result } = renderHook(() =>
+      useRealtimeNotifications({ userId: "user-recover", enabled: true, onInsert: vi.fn() })
+    )
+
+    await waitFor(() => expect(result.current.isPollingFallback).toBe(true))
+
+    act(() => {
+      onlineCallback?.()
+    })
+
+    await waitFor(() => expect(retryScheduler.reset).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(supabaseMock.channel).toHaveBeenCalledTimes(1))
+
+    act(() => channel.emitStatus("SUBSCRIBED"))
+
+    await waitFor(() => expect(result.current.connectionState).toBe("realtime"))
+    expect(result.current.isPollingFallback).toBe(false)
+    vi.useRealTimers()
+  })
+
+  it("禁用时应跳过订阅并复用外部 supabase 客户端", async () => {
+    const { result } = renderHook(() =>
+      useRealtimeNotifications({
+        userId: undefined,
+        enabled: false,
+        onInsert: vi.fn(),
+        supabase: supabaseMock,
+      })
+    )
+
+    expect(supabaseMock.channel).not.toHaveBeenCalled()
+    expect(result.current.connectionState).toBe("disconnected")
+  })
+
+  it("轮询时应构建各类型通知的 targetUrl 覆盖分支", async () => {
+    const onInsert = vi.fn()
+    const now = new Date().toISOString()
+    fetchJsonMock.mockResolvedValueOnce({
+      success: true,
+      data: {
+        items: [
+          {
+            id: "follow-1",
+            type: NotificationType.FOLLOW,
+            readAt: null,
+            createdAt: now,
+            recipientId: "user-target",
+            actorId: "actor-follow",
+            actor: { id: "actor-follow", name: null, avatarUrl: null, email: null },
+            post: null,
+            comment: null,
+          },
+          {
+            id: "comment-activity",
+            type: NotificationType.COMMENT,
+            readAt: null,
+            createdAt: now,
+            recipientId: "user-target",
+            actorId: "actor-comment",
+            actor: { id: "actor-comment", name: null, avatarUrl: null, email: null },
+            post: null,
+            comment: { postId: null, activityId: "activity-1" },
+          },
+          {
+            id: "comment-post",
+            type: NotificationType.COMMENT,
+            readAt: null,
+            createdAt: now,
+            recipientId: "user-target",
+            actorId: "actor-comment-2",
+            actor: { id: "actor-comment-2", name: null, avatarUrl: null, email: null },
+            post: { id: "post-1", slug: "slug-1" },
+            comment: { postId: "slug-1", activityId: null },
+          },
+          {
+            id: "like-activity",
+            type: NotificationType.LIKE,
+            readAt: null,
+            createdAt: now,
+            recipientId: "user-target",
+            actorId: "actor-like",
+            actor: { id: "actor-like", name: null, avatarUrl: null, email: null },
+            activityId: "activity-like",
+            post: null,
+            comment: null,
+          },
+          {
+            id: "system-1",
+            type: NotificationType.SYSTEM,
+            readAt: null,
+            createdAt: now,
+            recipientId: "user-target",
+            actorId: "actor-system",
+            actor: { id: "actor-system", name: null, avatarUrl: null, email: null },
+            post: null,
+            comment: null,
+          },
+        ],
+        pagination: { limit: 20, hasMore: false, nextCursor: null },
+        unreadCount: 5,
+        filteredUnreadCount: 5,
+      },
+    } as any)
+
+    const { result } = renderHook(() =>
+      useRealtimeNotifications({ userId: "user-target", enabled: true, onInsert })
+    )
+
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    await waitFor(() => expect(onInsert).toHaveBeenCalledTimes(5))
+    const calls = onInsert.mock.calls.map(([payload]) => ({
+      id: (payload as NotificationView).id,
+      targetUrl: (payload as NotificationView).targetUrl,
+    }))
+
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "follow-1", targetUrl: "/profile/actor-follow" }),
+        expect.objectContaining({ id: "comment-activity", targetUrl: "/feed?highlight=activity-1" }),
+        expect.objectContaining({ id: "comment-post", targetUrl: "/blog/slug-1#comments" }),
+        expect.objectContaining({ id: "like-activity", targetUrl: "/feed?highlight=activity-like" }),
+        expect.objectContaining({ id: "system-1", targetUrl: null }),
+      ])
+    )
+  })
+
+  it("轮询重复数据时应去重避免重复触发 onInsert", async () => {
+    const onInsert = vi.fn()
+    const duplicate: NotificationView = {
+      id: "dup-1",
+      type: NotificationType.LIKE,
+      readAt: null,
+      createdAt: new Date().toISOString(),
+      recipientId: "user-dup",
+      actorId: "actor-dup",
+      actor: { id: "actor-dup", name: null, avatarUrl: null, email: null },
+      post: null,
+      comment: null,
+    }
+    fetchJsonMock.mockResolvedValue({
+      success: true,
+      data: {
+        items: [duplicate],
+        pagination: { limit: 20, hasMore: false, nextCursor: null },
+        unreadCount: 1,
+        filteredUnreadCount: 1,
+      },
+    } as any)
+
+    const { result } = renderHook(() =>
+      useRealtimeNotifications({ userId: "user-dup", enabled: true, onInsert })
+    )
+
+    await act(async () => {
+      await result.current.refresh()
+    })
+    await waitFor(() => expect(onInsert).toHaveBeenCalledTimes(1))
+
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    await waitFor(() => expect(onInsert).toHaveBeenCalledTimes(1))
+    expect(fetchJsonMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("轮询失败时应记录错误并结束刷新状态", async () => {
+    const pollError = new Error("poll failed")
+    fetchJsonMock.mockRejectedValueOnce(pollError)
+
+    const { result } = renderHook(() =>
+      useRealtimeNotifications({ userId: "user-error", enabled: true, onInsert: vi.fn() })
+    )
+
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    await waitFor(() => expect(result.current.error).toBe(pollError))
+    expect(result.current.isRefreshing).toBe(false)
+    expect(result.current.connectionState).toBe("error")
+  })
+
+  it("hydrate 失败时应捕获错误并转换 createdAt", async () => {
+    const hydrateError = new Error("hydrate failed")
+    singleMock.mockRejectedValueOnce(hydrateError)
+
+    const { result } = renderHook(() =>
+      useRealtimeNotifications({
+        userId: "user-hydrate-error",
+        enabled: true,
+        onInsert: vi.fn(),
+      })
+    )
+
+    await waitFor(() => expect(supabaseMock.channel).toHaveBeenCalled())
+    act(() => channel.emitStatus("SUBSCRIBED"))
+
+    const createdAt = new Date("2024-01-01T00:00:00.000Z")
+
+    act(() => {
+      channel.triggerInsert({
+        id: "hydrate-error",
+        recipientId: "user-hydrate-error",
+        actorId: "actor-x",
+        type: NotificationType.LIKE,
+        activityId: null,
+        postId: null,
+        commentId: null,
+        readAt: null,
+        createdAt,
+      })
+    })
+
+    await waitFor(() => expect(result.current.error).toBe(hydrateError))
+  })
+
+  it("fallback 应为评论通知构建 comment 对象和 targetUrl", async () => {
+    const onInsert = vi.fn()
+    fetchJsonMock.mockResolvedValue({ success: true, data: { items: [] } } as any)
+    singleMock.mockResolvedValueOnce({ data: null, error: null })
+
+    const { result } = renderHook(() =>
+      useRealtimeNotifications({
+        userId: "user-comment-fallback",
+        enabled: true,
+        onInsert,
+      })
+    )
+
+    await waitFor(() => expect(supabaseMock.channel).toHaveBeenCalled())
+    act(() => channel.emitStatus("SUBSCRIBED"))
+
+    act(() => {
+      channel.triggerBroadcast({
+        id: "comment-fallback",
+        recipientId: "user-comment-fallback",
+        actorId: "actor-c1",
+        type: NotificationType.COMMENT,
+        activityId: "act-c1",
+        postId: "post-c1",
+        commentId: "comment-c1",
+        readAt: null,
+        createdAt: new Date().toISOString(),
+      })
+    })
+
+    await waitFor(() =>
+      expect(onInsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "comment-fallback",
+          comment: expect.objectContaining({ id: "comment-c1", postId: "post-c1" }),
+          targetUrl: "/feed?highlight=act-c1",
+        })
+      )
+    )
+  })
+
+  it("订阅通道异常时应设置错误并触发重试", async () => {
+    const { result } = renderHook(() =>
+      useRealtimeNotifications({
+        userId: "user-channel-error",
+        enabled: true,
+        onInsert: vi.fn(),
+      })
+    )
+
+    await waitFor(() => expect(supabaseMock.channel).toHaveBeenCalled())
+
+    act(() => {
+      channel.emitStatus("CHANNEL_ERROR")
+    })
+
+    await waitFor(() =>
+      expect(result.current.error?.message).toBe("Failed to subscribe to notifications")
+    )
+    expect(retryScheduler.schedule).toHaveBeenCalled()
+    await waitFor(() => expect(getSessionMock).toHaveBeenCalled())
+  })
+
+  it("订阅异常且获取 session 返回错误时也应记录日志并重试", async () => {
+    getSessionMock.mockResolvedValueOnce({ data: { session: null }, error: { message: "boom" } })
+
+    const { result } = renderHook(() =>
+      useRealtimeNotifications({
+        userId: "user-session-error",
+        enabled: true,
+        onInsert: vi.fn(),
+      })
+    )
+
+    await waitFor(() => expect(supabaseMock.channel).toHaveBeenCalled())
+
+    act(() => {
+      channel.emitStatus("TIMED_OUT")
+    })
+
+    await waitFor(() =>
+      expect(result.current.error?.message).toBe("Failed to subscribe to notifications")
+    )
+    expect(retryScheduler.schedule).toHaveBeenCalled()
+    await waitFor(() => expect(getSessionMock).toHaveBeenCalled())
+  })
+
+  it("订阅异常且获取 session 抛出异常时仍应调度重试", async () => {
+    getSessionMock.mockRejectedValueOnce(new Error("session crash"))
+
+    const { result } = renderHook(() =>
+      useRealtimeNotifications({
+        userId: "user-session-throw",
+        enabled: true,
+        onInsert: vi.fn(),
+      })
+    )
+
+    await waitFor(() => expect(supabaseMock.channel).toHaveBeenCalled())
+
+    act(() => {
+      channel.emitStatus("CLOSED")
+    })
+
+    await waitFor(() =>
+      expect(result.current.error?.message).toBe("Failed to subscribe to notifications")
+    )
+    expect(retryScheduler.schedule).toHaveBeenCalled()
+    await waitFor(() => expect(getSessionMock).toHaveBeenCalled())
   })
 })
