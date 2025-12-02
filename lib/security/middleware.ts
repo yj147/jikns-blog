@@ -36,7 +36,17 @@ export class SecurityMiddleware {
         sameSite: "strict",
         maxAge: 60 * 60 * 24, // 24小时
       },
-      skipPaths: ["/api/auth/callback", "/api/health", "/api/webhooks", "/api/dev", "/api/csrf-token", "/api/upload"],
+      skipPaths: [
+        "/api/auth/callback",
+        "/api/health",
+        "/api/webhooks",
+        "/api/dev",
+        "/api/csrf-token",
+        "/api/subscribe",
+        "/api/subscribe/verify",
+        "/api/subscribe/unsubscribe",
+        "/api/cron/email-queue",
+      ],
     },
     xss: {
       allowedTags: [

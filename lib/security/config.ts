@@ -43,6 +43,10 @@ export const defaultSecurityConfig: SecurityConfig = {
       "/api/webhooks",
       "/auth/callback",
       "/api/csrf-token",
+      "/api/subscribe",
+      "/api/subscribe/verify",
+      "/api/subscribe/unsubscribe",
+      "/api/cron/email-queue",
     ],
   },
 

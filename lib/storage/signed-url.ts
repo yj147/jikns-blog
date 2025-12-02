@@ -10,6 +10,7 @@ import type { ActivityListItem } from "@/lib/repos/activity-repo"
 
 const DEFAULT_EXPIRES_IN_SECONDS = 60 * 60 // 1 hour
 const DEFAULT_BUCKET = "activity-images"
+const SIGNABLE_BUCKETS = new Set<string>([DEFAULT_BUCKET, "post-images"])
 
 type StorageTarget = {
   bucket: string
@@ -33,7 +34,10 @@ function getServiceClient() {
  * - activity-images/avatars/{uid}/xxx
  * - avatars/{uid}/xxx  (默认 bucket: activity-images)
  */
-export function parseStorageTarget(input?: string | null): StorageTarget | null {
+export function parseStorageTarget(
+  input?: string | null,
+  defaultBucket = DEFAULT_BUCKET
+): StorageTarget | null {
   if (!input) return null
 
   // data: URL 或非字符串不处理
@@ -42,10 +46,17 @@ export function parseStorageTarget(input?: string | null): StorageTarget | null 
   // 直接传入相对路径
   const normalized = input.replace(/^\/+/, "")
   if (!normalized.startsWith("http")) {
-    if (normalized.startsWith(`${DEFAULT_BUCKET}/`)) {
+    if (SIGNABLE_BUCKETS.has(normalized.split("/")[0])) {
+      const [bucket, ...rest] = normalized.split("/")
+      const path = rest.join("/")
+      if (!bucket || !path) return null
+      return { bucket, path }
+    }
+
+    if (normalized.startsWith(`${defaultBucket}/`)) {
       return {
-        bucket: DEFAULT_BUCKET,
-        path: normalized.slice(DEFAULT_BUCKET.length + 1),
+        bucket: defaultBucket,
+        path: normalized.slice(defaultBucket.length + 1),
       }
     }
 
@@ -55,7 +66,15 @@ export function parseStorageTarget(input?: string | null): StorageTarget | null 
       normalized.startsWith("users/")
     ) {
       return {
-        bucket: DEFAULT_BUCKET,
+        bucket: defaultBucket,
+        path: normalized,
+      }
+    }
+
+    // 对于非默认 bucket（例如 post-images）允许裸路径落在指定 bucket 下
+    if (defaultBucket !== DEFAULT_BUCKET) {
+      return {
+        bucket: defaultBucket,
         path: normalized,
       }
     }
@@ -82,12 +101,28 @@ export function parseStorageTarget(input?: string | null): StorageTarget | null 
   }
 }
 
+function normalizePath(bucket: string, path: string) {
+  const cleaned = path.replace(/^\/+/, "")
+  if (cleaned.startsWith(`${bucket}/`)) {
+    return cleaned.slice(bucket.length + 1)
+  }
+  return cleaned
+}
+
+function isSignableBucket(bucket: string) {
+  return SIGNABLE_BUCKETS.has(bucket)
+}
+
 async function signSingle(target: StorageTarget, expiresInSeconds = DEFAULT_EXPIRES_IN_SECONDS) {
   try {
+    if (!isSignableBucket(target.bucket)) {
+      return null
+    }
+
     const supabase = getServiceClient()
     const { data, error } = await supabase.storage
       .from(target.bucket)
-      .createSignedUrl(target.path, expiresInSeconds)
+      .createSignedUrl(normalizePath(target.bucket, target.path), expiresInSeconds)
 
     if (error || !data?.signedUrl) {
       logger.warn("签名 URL 生成失败", {
@@ -114,15 +149,11 @@ async function signSingle(target: StorageTarget, expiresInSeconds = DEFAULT_EXPI
  */
 export async function createSignedUrlIfNeeded(
   input?: string | null,
-  expiresInSeconds = DEFAULT_EXPIRES_IN_SECONDS
+  expiresInSeconds = DEFAULT_EXPIRES_IN_SECONDS,
+  defaultBucket = DEFAULT_BUCKET
 ): Promise<string | null> {
-  const target = parseStorageTarget(input)
+  const target = parseStorageTarget(input, defaultBucket)
   if (!target) return input ?? null
-
-  // 非默认 bucket 的资源保持原样，避免误签第三方资源
-  if (target.bucket !== DEFAULT_BUCKET) {
-    return input ?? null
-  }
 
   const signed = await signSingle(target, expiresInSeconds)
   return signed ?? input ?? null
@@ -133,14 +164,14 @@ export async function createSignedUrlIfNeeded(
  */
 export async function createSignedUrls(
   inputs: Array<string | null | undefined>,
-  expiresInSeconds = DEFAULT_EXPIRES_IN_SECONDS
+  expiresInSeconds = DEFAULT_EXPIRES_IN_SECONDS,
+  defaultBucket = DEFAULT_BUCKET
 ): Promise<string[]> {
   const cache = new Map<string, Promise<string | null>>()
 
   const tasks = inputs.map(async (value) => {
-    const target = parseStorageTarget(value)
+    const target = parseStorageTarget(value, defaultBucket)
     if (!target) return value ?? null
-    if (target.bucket !== DEFAULT_BUCKET) return value ?? null
 
     const cacheKey = `${target.bucket}:${target.path}:${expiresInSeconds}`
     if (!cache.has(cacheKey)) {
@@ -169,6 +200,23 @@ export async function signActivityImages(
 ): Promise<string[]> {
   if (!imageUrls || imageUrls.length === 0) return []
   return createSignedUrls(imageUrls)
+}
+
+/**
+ * 通用的签名 URL 生成器
+ */
+export async function getSignedUrl(
+  bucket: string,
+  path: string,
+  expiresInSeconds = DEFAULT_EXPIRES_IN_SECONDS
+): Promise<string | null> {
+  if (!bucket || !path) return null
+
+  const normalizedBucket = bucket.trim()
+  const normalizedPath = normalizePath(normalizedBucket, path)
+  if (!normalizedPath) return null
+
+  return signSingle({ bucket: normalizedBucket, path: normalizedPath }, expiresInSeconds)
 }
 
 /**

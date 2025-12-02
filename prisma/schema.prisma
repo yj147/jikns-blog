@@ -82,14 +82,16 @@ model Bookmark {
   @@map("bookmarks")
 }
 
+/// 评论模型
+/// 数据库约束: comments_target_xor_check - postId 和 activityId 互斥（最多一个非空）
 model Comment {
   id            String         @id @default(uuid())
   content       String
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   authorId      String
-  postId        String?
-  activityId    String?
+  postId        String?        /// 与 activityId 互斥（数据库 CHECK 约束）
+  activityId    String?        /// 与 postId 互斥（数据库 CHECK 约束）
   parentId      String?
   deletedAt     DateTime?      @db.Timestamp(6)
   activity      Activity?      @relation(fields: [activityId], references: [id], onDelete: Cascade)
@@ -124,12 +126,14 @@ model Follow {
   @@map("follows")
 }
 
+/// 点赞模型
+/// 数据库约束: likes_target_xor_check - postId 和 activityId 互斥（最多一个非空）
 model Like {
   id         String    @id @default(uuid())
   createdAt  DateTime  @default(now())
   authorId   String
-  postId     String?
-  activityId String?
+  postId     String?   /// 与 activityId 互斥（数据库 CHECK 约束）
+  activityId String?   /// 与 postId 互斥（数据库 CHECK 约束）
   activity   Activity? @relation(fields: [activityId], references: [id], onDelete: Cascade)
   author     User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
   post       Post?     @relation(fields: [postId], references: [id], onDelete: Cascade)
@@ -178,6 +182,7 @@ model Post {
   comments             Comment[]
   likes                Like[]
   notifications        Notification[]           @relation("NotificationPost")
+  emailQueue           EmailQueue[]
   tags                 PostTag[]
   author               User                     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   series               Series?                  @relation(fields: [seriesId], references: [id])
@@ -260,9 +265,11 @@ model User {
   likes                   Like[]
   notificationsSent       Notification[]           @relation("NotificationActor")
   notificationsReceived   Notification[]           @relation("NotificationRecipient")
+  performanceMetrics      PerformanceMetric[]
   posts                   Post[]
   series                  Series[]
   systemSettingsUpdated   SystemSetting[]          @relation("SystemSettingUpdatedBy")
+  emailSubscriptions      EmailSubscriber[]
 
   @@index([bio(ops: raw("gin_trgm_ops"))], map: "idx_users_bio_trgm", type: Gin)
   @@index([name(ops: raw("gin_trgm_ops"))], map: "idx_users_name_trgm", type: Gin)
@@ -272,6 +279,7 @@ model User {
 }
 
 model Notification {
+  /// DB CHECK: at most one of postId/commentId/activityId is non-null.
   id          String           @id @default(uuid())
   recipientId String
   actorId     String
@@ -286,9 +294,56 @@ model Notification {
   post        Post?            @relation("NotificationPost", fields: [postId], references: [id])
   activity    Activity?        @relation(fields: [activityId], references: [id])
   recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  emailQueue  EmailQueue[]
 
   @@index([recipientId, readAt])
   @@map("notifications")
+}
+
+model EmailSubscriber {
+  id                   String                    @id @default(uuid())
+  email                String                    @unique
+  userId               String?
+  status               EmailSubscriptionStatus   @default(PENDING)
+  verifyTokenHash      String?                   @unique
+  verifyExpiresAt      DateTime?
+  unsubscribeTokenHash String                    @unique
+  verifiedAt           DateTime?
+  lastDigestAt         DateTime?
+  preferences          Json                      @default("{}")
+  source               String?
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  emailQueue EmailQueue[]
+
+  @@index([email])
+  @@index([status])
+  @@map("email_subscribers")
+}
+
+model EmailQueue {
+  id             String           @id @default(uuid())
+  subscriberId   String?
+  type           NotificationType
+  payload        Json
+  scheduledAt    DateTime         @default(now())
+  status         EmailQueueStatus @default(PENDING)
+  attempts       Int              @default(0)
+  lastError      String?
+  sentAt         DateTime?
+  notificationId String?
+  postId         String?
+  createdAt      DateTime         @default(now())
+
+  subscriber   EmailSubscriber? @relation(fields: [subscriberId], references: [id], onDelete: SetNull)
+  notification Notification?    @relation(fields: [notificationId], references: [id], onDelete: SetNull)
+  post         Post?            @relation(fields: [postId], references: [id], onDelete: SetNull)
+
+  @@index([status, scheduledAt])
+  @@index([type])
+  @@map("email_queue")
 }
 
 model PerformanceMetric {
@@ -301,9 +356,11 @@ model PerformanceMetric {
   tags      String[]   @default([])
   requestId String?
   userId    String?
+  user      User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([type, timestamp(sort: Desc)])
   @@index([tags])
+  @@index([userId])
   @@map("performance_metrics")
 }
 
@@ -335,6 +392,21 @@ enum NotificationType {
   COMMENT
   FOLLOW
   SYSTEM
+  NEW_POST
+}
+
+enum EmailSubscriptionStatus {
+  PENDING
+  VERIFIED
+  UNSUBSCRIBED
+  BOUNCED
+}
+
+enum EmailQueueStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
 }
 
 enum MetricType {
