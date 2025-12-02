@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/sync-view-counts",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/email-queue",
+      "schedule": "* * * * *"
     }
   ]
 }
