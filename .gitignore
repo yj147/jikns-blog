@@ -41,6 +41,12 @@ lighthouse-*.json
 /test-results/
 /playwright-report/
 
+# coverage reports
+/coverage/
+
+# logs
+/logs/
+
 # performance reports
 /perf-results/
 
