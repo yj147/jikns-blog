@@ -11,6 +11,9 @@ export const TEST_ENV = {
 
   // 站点配置
   NEXT_PUBLIC_SITE_URL: "http://localhost:3000",
+  APP_URL: "http://localhost:3000",
+  RESEND_API_KEY: "test-resend-key",
+  EMAIL_FROM: "noreply@example.com",
   NODE_ENV: "test",
 
   // 数据库配置 - 连接到 Supabase 本地实例

@@ -25,6 +25,8 @@ const baseCoverageInclude = [
   "lib/interactions/likes.ts",
   "lib/interactions/comments.ts",
   "lib/profile/stats.ts",
+  "lib/services/email-subscription.ts",
+  "lib/services/resend.ts",
   "types/notification.ts",
   "types/user-settings.ts",
   // 性能指标监控功能覆盖率
@@ -36,6 +38,8 @@ const baseCoverageInclude = [
   "hooks/use-metrics-timeseries.ts",
   "components/admin/metrics-chart.tsx",
   "components/admin/monitoring-dashboard.tsx",
+  // Realtime 基础设施
+  "lib/realtime/**/*.ts",
 ]
 
 export default defineConfig({
@@ -63,14 +67,19 @@ export default defineConfig({
           "tests/unit/utils-basic.test.ts",
           "tests/unit/utils.test.ts",
           "tests/unit/notification-service.test.ts",
+          "tests/unit/email-queue.test.ts",
+          "tests/unit/email-queue-cron.test.ts",
           "tests/unit/realtime-notifications.test.ts",
           "tests/unit/activity-tags.test.ts",
+          "tests/unit/email-subscription.test.ts",
+          "tests/unit/email-subscription.test.tsx",
           "tests/unit/search-tokenizer.test.ts",
           "tests/unit/prisma-token-extension.test.ts",
           "tests/unit/schema-validation.test.ts",
           "tests/unit/admin-settings-page.test.tsx",
           "tests/unit/profile-*.test.{ts,tsx}",
           "tests/unit/likes-*.test.{ts,tsx}",
+          "tests/unit/lib/realtime/**/*.test.ts",
           readingTimeTestPattern,
           "tests/middleware/auth-middleware.test.ts",
           "tests/auth/**/*.test.ts",
@@ -87,6 +96,7 @@ export default defineConfig({
           "tests/ui/**/*.test.{ts,tsx}",
           "tests/ui/**/*.spec.{ts,tsx}",
           "tests/integration/**/*.test.{ts,tsx}",
+          "tests/integration/subscribe-api.test.ts",
         ],
 
     // 排除不稳定的测试文件
