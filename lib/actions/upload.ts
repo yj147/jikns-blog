@@ -8,6 +8,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase"
 import { requireAuth } from "@/lib/auth"
 import { logger } from "@/lib/utils/logger"
+import { getSignedUrl } from "@/lib/storage/signed-url"
 
 // 定义 ApiResponse 类型（避免导入问题）
 interface ApiError {
@@ -43,11 +44,13 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB (与 RLS 策略一致)
 const UPLOAD_BUCKET = "post-images"
 const MAX_RETRIES = 3
 const RETRY_DELAY = 1000 // 1秒
+const SIGNED_URL_TTL_SECONDS = 60 * 60
 
 export interface UploadImageResult {
-  url: string
-  publicUrl: string
-  path: string
+  url: string // 已签名的访问 URL（默认 1 小时）
+  path: string // 存储对象路径（不含 bucket）
+  bucket: string
+  expiresIn: number
   size: number
   fileName: string
 }
@@ -244,7 +247,7 @@ export async function uploadImage(formData: FormData): Promise<ApiResponse<Uploa
     const supabase = await createServerSupabaseClient()
 
     // 上传文件到 Storage（使用重试机制）
-    const { data: uploadData, error: uploadError } = await uploadWithRetry(
+    const { data: _uploadData, error: uploadError } = await uploadWithRetry(
       supabase,
       UPLOAD_BUCKET,
       filePath,
@@ -294,10 +297,9 @@ export async function uploadImage(formData: FormData): Promise<ApiResponse<Uploa
       }
     }
 
-    // 获取公共访问 URL
-    const { data: publicUrlData } = supabase.storage.from(UPLOAD_BUCKET).getPublicUrl(filePath)
+    const signedUrl = await getSignedUrl(UPLOAD_BUCKET, filePath, SIGNED_URL_TTL_SECONDS)
 
-    if (!publicUrlData.publicUrl) {
+    if (!signedUrl) {
       return {
         success: false,
         error: {
@@ -309,9 +311,10 @@ export async function uploadImage(formData: FormData): Promise<ApiResponse<Uploa
     }
 
     const result: UploadImageResult = {
-      url: publicUrlData.publicUrl,
-      publicUrl: publicUrlData.publicUrl,
+      url: signedUrl,
       path: filePath,
+      bucket: UPLOAD_BUCKET,
+      expiresIn: SIGNED_URL_TTL_SECONDS,
       size: file.size,
       fileName: file.name,
     }
@@ -426,11 +429,16 @@ export async function deleteImage(
       }
     }
 
+    // 允许传入包含 bucket 前缀的路径
+    const normalizedPath = filePath.replace(new RegExp(`^${UPLOAD_BUCKET}/`), "")
+
     // 创建服务端 Supabase 客户端（带用户会话）
     const supabase = await createServerSupabaseClient()
 
     // 从 Storage 删除文件
-    const { error: deleteError } = await supabase.storage.from(UPLOAD_BUCKET).remove([filePath])
+    const { error: deleteError } = await supabase.storage
+      .from(UPLOAD_BUCKET)
+      .remove([normalizedPath])
 
     if (deleteError) {
       logger.error("Supabase Storage 删除失败", { path: filePath }, deleteError)
@@ -447,7 +455,7 @@ export async function deleteImage(
     return {
       success: true,
       data: {
-        path: filePath,
+        path: normalizedPath,
         message: "图片删除成功",
       },
       meta: {
@@ -524,7 +532,7 @@ export async function uploadMultipleImages(
         const filePath = `${user.id}/${fileName}`
 
         // 上传文件
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const { data: _uploadData, error: uploadError } = await supabase.storage
           .from(UPLOAD_BUCKET)
           .upload(filePath, file, {
             cacheControl: "3600",
@@ -536,14 +544,14 @@ export async function uploadMultipleImages(
           continue
         }
 
-        // 获取公共访问 URL
-        const { data: publicUrlData } = supabase.storage.from(UPLOAD_BUCKET).getPublicUrl(filePath)
+        const signedUrl = await getSignedUrl(UPLOAD_BUCKET, filePath, SIGNED_URL_TTL_SECONDS)
 
-        if (publicUrlData.publicUrl) {
+        if (signedUrl) {
           results.push({
-            url: publicUrlData.publicUrl,
-            publicUrl: publicUrlData.publicUrl,
+            url: signedUrl,
             path: filePath,
+            bucket: UPLOAD_BUCKET,
+            expiresIn: SIGNED_URL_TTL_SECONDS,
             size: file.size,
             fileName: file.name,
           })
@@ -595,7 +603,7 @@ export async function uploadMultipleImages(
  * 获取用户上传的图片列表
  */
 export async function getUserImages(): Promise<
-  ApiResponse<{ name: string; size: number; url: string }[]>
+  ApiResponse<{ name: string; size: number; url: string; path: string; bucket: string; expiresIn: number }[]>
 > {
   try {
     // 验证用户认证
@@ -623,19 +631,26 @@ export async function getUserImages(): Promise<
     }
 
     // 生成带公共URL的文件列表
-    const images = files
-      .filter((file) => file.name !== ".emptyFolderPlaceholder") // 过滤占位符文件
-      .map((file) => {
-        const { data: urlData } = supabase.storage
-          .from(UPLOAD_BUCKET)
-          .getPublicUrl(`${user.id}/${file.name}`)
-
-        return {
-          name: file.name,
-          size: file.metadata?.size || 0,
-          url: urlData.publicUrl,
-        }
-      })
+    const images = (
+      await Promise.all(
+        files
+          .filter((file) => file.name !== ".emptyFolderPlaceholder") // 过滤占位符文件
+          .map(async (file) => {
+            const objectPath = `${user.id}/${file.name}`
+            const signedUrl = await getSignedUrl(UPLOAD_BUCKET, objectPath, SIGNED_URL_TTL_SECONDS)
+            return signedUrl
+              ? {
+                  name: file.name,
+                  size: file.metadata?.size || 0,
+                  url: signedUrl,
+                  path: objectPath,
+                  bucket: UPLOAD_BUCKET,
+                  expiresIn: SIGNED_URL_TTL_SECONDS,
+                }
+              : null
+          })
+      )
+    ).filter((item): item is NonNullable<typeof item> => Boolean(item))
 
     return {
       success: true,

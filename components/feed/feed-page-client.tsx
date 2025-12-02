@@ -618,7 +618,7 @@ export default function FeedPageClient({
 
             {/* Feed Tabs */}
             <div className="mb-6">
-              <Tabs value={activeTab} onValueChange={(val) => handleTabChange(val as FeedTab)}>
+              <Tabs id="feed-tabs" value={activeTab} onValueChange={(val) => handleTabChange(val as FeedTab)}>
                 <TabsList className="grid w-full grid-cols-3">
                   {featureFlags.feedFollowingStrict && (
                     <TabsTrigger

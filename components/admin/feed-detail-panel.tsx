@@ -78,7 +78,9 @@ export function FeedDetailPanel({ feed, open, onOpenChange }: FeedDetailPanelPro
               </div>
               <div>
                 <p className="text-muted-foreground">作者</p>
-                <p className="text-base font-semibold">{feed.author.name ?? feed.author.email ?? feed.authorId}</p>
+                <p className="text-base font-semibold">
+                  {feed.author.name ?? `用户${feed.author.id.substring(0, 6)}`}
+                </p>
               </div>
             </section>
 

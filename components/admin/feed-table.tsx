@@ -78,7 +78,9 @@ function FeedTableComponent({ feeds, selectedIds, onToggleItem, onToggleAll, onO
               </TableCell>
               <TableCell>
                 <div className="space-y-1 text-sm">
-                  <p className="font-medium">{feed.author.name ?? feed.author.email ?? "未命名"}</p>
+                  <p className="font-medium">
+                    {feed.author.name ?? `用户${feed.author.id.substring(0, 6)}`}
+                  </p>
                   <p className="text-xs text-muted-foreground">ID: {feed.authorId}</p>
                 </div>
               </TableCell>

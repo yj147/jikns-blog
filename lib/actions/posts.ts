@@ -7,6 +7,7 @@
 
 import { revalidatePath, revalidateTag } from "next/cache"
 import { revalidateArchiveCache } from "@/lib/actions/archive-cache"
+import { enqueueNewPostNotification } from "@/lib/services/email-queue"
 import { prisma } from "@/lib/prisma"
 import { requireAuth, requireAdmin } from "@/lib/auth"
 import { recalculateTagCounts, syncPostTags } from "@/lib/repos/tag-repo"
@@ -15,7 +16,7 @@ import { createUniqueSmartSlug } from "@/lib/utils/slug-english"
 import { logger } from "@/lib/utils/logger"
 import { AuditEventType, auditLogger } from "@/lib/audit-log"
 import { getServerContext } from "@/lib/server-context"
-import { signAvatarUrl } from "@/lib/storage/signed-url"
+import { createSignedUrlIfNeeded, signAvatarUrl } from "@/lib/storage/signed-url"
 
 function resolveErrorCode(error: unknown, fallback: string): string {
   if (error instanceof Error) {
@@ -70,6 +71,37 @@ type PostAuditAction =
   | "POST_PUBLISH"
   | "POST_UNPUBLISH"
   | "POST_TOGGLE_PIN"
+
+const POST_IMAGE_SIGN_EXPIRES_IN = 60 * 60
+
+async function signPostCoverImage(coverImage: string | null): Promise<string | null> {
+  if (!coverImage) return null
+  return createSignedUrlIfNeeded(coverImage, POST_IMAGE_SIGN_EXPIRES_IN, "post-images")
+}
+
+async function signPostContent(content: string | null | undefined): Promise<string | null | undefined> {
+  if (!content) return content ?? null
+
+  const storageUrlPattern =
+    /(https?:\/\/[^\s)]+\/storage\/v1\/object\/(?:public|sign)\/post-images\/[^\s)]+)/gi
+  const matches = Array.from(new Set(content.match(storageUrlPattern) ?? []))
+  if (matches.length === 0) {
+    return content
+  }
+
+  const replacements = await Promise.all(
+    matches.map(async (original) => {
+      const signed = await createSignedUrlIfNeeded(
+        original,
+        POST_IMAGE_SIGN_EXPIRES_IN,
+        "post-images"
+      )
+      return [original, signed ?? original] as const
+    })
+  )
+
+  return replacements.reduce((acc, [original, signed]) => acc.replaceAll(original, signed), content)
+}
 
 async function recordPostAudit(params: {
   action: PostAuditAction
@@ -189,6 +221,7 @@ interface PostResponse {
   slug: string
   title: string
   content: string
+  contentSigned?: string | null
   excerpt: string | null
   published: boolean
   isPinned: boolean
@@ -196,6 +229,7 @@ interface PostResponse {
   seoTitle: string | null
   seoDescription: string | null
   coverImage: string | null
+  signedCoverImage?: string | null
   viewCount: number
   createdAt: string
   updatedAt: string
@@ -238,6 +272,7 @@ interface PostListResponse {
     name: string | null
     avatarUrl: string | null
   }
+  signedCoverImage?: string | null
   tags: {
     name: string
     slug: string
@@ -620,9 +655,12 @@ export async function getPosts(
       prisma.post.count({ where }),
     ])
 
-    // 签名头像 URL
+    // 签名媒体 URL
     const signedAvatars = await Promise.all(
       posts.map((post) => signAvatarUrl(post.author.avatarUrl))
+    )
+    const signedCoverImages = await Promise.all(
+      posts.map((post) => signPostCoverImage(post.coverImage))
     )
 
     // 格式化响应数据
@@ -634,12 +672,13 @@ export async function getPosts(
       published: post.published,
       isPinned: post.isPinned,
       coverImage: post.coverImage,
+      signedCoverImage: signedCoverImages[index],
       viewCount: post.viewCount,
       publishedAt: post.publishedAt?.toISOString() || null,
       createdAt: post.createdAt.toISOString(),
       author: {
         ...post.author,
-        avatarUrl: signedAvatars[index],
+        avatarUrl: signedAvatars[index] ?? post.author.avatarUrl,
       },
       tags: post.tags.map((pt) => pt.tag),
       stats: {
@@ -758,12 +797,19 @@ export async function getPost(
       post.viewCount += 1
     }
 
+    const [signedCoverImage, signedAvatar, signedContent] = await Promise.all([
+      signPostCoverImage(post.coverImage),
+      signAvatarUrl(post.author.avatarUrl),
+      signPostContent(post.content),
+    ])
+
     // 格式化响应
     const response: PostResponse = {
       id: post.id,
       slug: post.slug,
       title: post.title,
       content: post.content,
+      contentSigned: signedContent ?? undefined,
       excerpt: post.excerpt,
       published: post.published,
       isPinned: post.isPinned,
@@ -771,11 +817,15 @@ export async function getPost(
       seoTitle: post.seoTitle,
       seoDescription: post.seoDescription,
       coverImage: post.coverImage,
+      signedCoverImage,
       viewCount: post.viewCount,
       createdAt: post.createdAt.toISOString(),
       updatedAt: post.updatedAt.toISOString(),
       publishedAt: post.publishedAt?.toISOString() || null,
-      author: post.author,
+      author: {
+        ...post.author,
+        avatarUrl: signedAvatar ?? post.author.avatarUrl,
+      },
       series: post.series || undefined,
       tags: post.tags.map((pt) => pt.tag),
       stats: {
@@ -1243,6 +1293,13 @@ export async function publishPost(
       success: true,
       adminId: admin.id,
       postId,
+    })
+
+    enqueueNewPostNotification(postId).catch((error) => {
+      logger.warn("发布邮件通知入队失败", {
+        postId,
+        error: error instanceof Error ? error.message : String(error),
+      })
     })
 
     return {

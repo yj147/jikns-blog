@@ -5,6 +5,11 @@ let userFindUnique: ReturnType<typeof vi.fn>
 let notificationCreate: ReturnType<typeof vi.fn>
 let notificationUpdateMany: ReturnType<typeof vi.fn>
 let notificationCount: ReturnType<typeof vi.fn>
+let createServiceRoleClientMock: ReturnType<typeof vi.fn>
+let supabaseChannelMock: ReturnType<typeof vi.fn>
+let supabaseChannelSendMock: ReturnType<typeof vi.fn>
+let supabaseRemoveChannelMock: ReturnType<typeof vi.fn>
+let enqueueEmailNotificationMock: ReturnType<typeof vi.fn>
 
 vi.mock("@/lib/prisma", () => {
   userFindUnique = vi.fn()
@@ -26,6 +31,37 @@ vi.mock("@/lib/prisma", () => {
   }
 })
 
+vi.mock("@/lib/supabase", () => {
+  supabaseChannelSendMock = vi.fn().mockResolvedValue("ok")
+  supabaseRemoveChannelMock = vi.fn().mockResolvedValue(undefined)
+  supabaseChannelMock = vi.fn(() => ({
+    send: supabaseChannelSendMock,
+    subscribe: vi.fn((callback) => {
+      // 同步触发 SUBSCRIBED 状态
+      Promise.resolve().then(() => callback("SUBSCRIBED"))
+      return { unsubscribe: vi.fn() }
+    }),
+  }))
+
+  const client = {
+    channel: supabaseChannelMock,
+    removeChannel: supabaseRemoveChannelMock,
+  }
+
+  createServiceRoleClientMock = vi.fn(() => client)
+
+  return {
+    createServiceRoleClient: createServiceRoleClientMock,
+  }
+})
+
+vi.mock("@/lib/services/email-queue", () => {
+  enqueueEmailNotificationMock = vi.fn().mockResolvedValue(null)
+  return {
+    enqueueEmailNotification: enqueueEmailNotificationMock,
+  }
+})
+
 const { notify, markAsRead, getUnreadCount } = await import("@/lib/services/notification")
 
 describe("notification service", () => {
@@ -37,6 +73,22 @@ describe("notification service", () => {
     notificationCreate.mockReset()
     notificationUpdateMany.mockReset()
     notificationCount.mockReset()
+    createServiceRoleClientMock.mockReset()
+    supabaseChannelMock.mockReset()
+    supabaseChannelSendMock.mockReset()
+    supabaseChannelSendMock.mockResolvedValue("ok")
+    supabaseRemoveChannelMock.mockReset()
+    supabaseChannelMock.mockImplementation(() => ({
+      send: supabaseChannelSendMock,
+      subscribe: vi.fn(),
+    }))
+    createServiceRoleClientMock.mockImplementation(() => ({
+      channel: supabaseChannelMock,
+      removeChannel: supabaseRemoveChannelMock,
+    }))
+    supabaseRemoveChannelMock.mockResolvedValue(undefined)
+    enqueueEmailNotificationMock.mockReset()
+    enqueueEmailNotificationMock.mockResolvedValue(null)
   })
 
   describe("notify", () => {
@@ -116,6 +168,128 @@ describe("notification service", () => {
           activityId: null,
         },
       })
+    })
+
+    it("broadcasts notification after creation", async () => {
+      userFindUnique.mockResolvedValueOnce({
+        notificationPreferences: {},
+      })
+
+      const created = {
+        id: "notif-broadcast",
+        recipientId: "recipient-5",
+        actorId: "actor-9",
+        type: NotificationType.LIKE,
+        postId: null,
+        commentId: null,
+        activityId: "activity-1",
+        readAt: null,
+        createdAt: new Date("2025-01-02T00:00:00.000Z"),
+      }
+
+      notificationCreate.mockResolvedValueOnce(created as any)
+
+      await notify("recipient-5", NotificationType.LIKE, {
+        actorId: "actor-9",
+        activityId: "activity-1",
+      })
+
+      expect(createServiceRoleClientMock).toHaveBeenCalled()
+      expect(supabaseChannelMock).toHaveBeenCalledWith("notifications:user-recipient-5", {
+        config: { broadcast: { self: false } },
+      })
+      expect(supabaseChannelSendMock).toHaveBeenCalledWith({
+        type: "broadcast",
+        event: "INSERT",
+        payload: expect.objectContaining({
+          id: created.id,
+          activityId: created.activityId,
+          readAt: null,
+          createdAt: created.createdAt.toISOString(),
+        }),
+      })
+      expect(supabaseRemoveChannelMock).toHaveBeenCalled()
+    })
+
+    it("enqueues email notification without blocking notify", async () => {
+      userFindUnique.mockResolvedValueOnce({
+        notificationPreferences: {},
+      })
+
+      const created = {
+        id: "notif-email-1",
+        recipientId: "recipient-7",
+        actorId: "actor-email",
+        type: NotificationType.LIKE,
+        postId: "post-email",
+        commentId: null,
+        activityId: null,
+        readAt: null,
+        createdAt: new Date("2025-01-04T00:00:00.000Z"),
+      }
+
+      notificationCreate.mockResolvedValueOnce(created as any)
+
+      await notify("recipient-7", NotificationType.LIKE, {
+        actorId: "actor-email",
+        postId: "post-email",
+      })
+
+      expect(enqueueEmailNotificationMock).toHaveBeenCalledWith(
+        "recipient-7",
+        NotificationType.LIKE,
+        { actorId: "actor-email", postId: "post-email" },
+        created.id
+      )
+    })
+
+    it("ignores email queue errors", async () => {
+      userFindUnique.mockResolvedValueOnce({
+        notificationPreferences: {},
+      })
+
+      const created = {
+        id: "notif-email-error",
+        recipientId: "recipient-8",
+        actorId: "actor-email-err",
+        type: NotificationType.FOLLOW,
+        postId: null,
+        commentId: null,
+        activityId: null,
+        readAt: null,
+        createdAt: new Date("2025-01-05T00:00:00.000Z"),
+      }
+
+      notificationCreate.mockResolvedValueOnce(created as any)
+      enqueueEmailNotificationMock.mockRejectedValueOnce(new Error("queue-fail"))
+
+      await expect(
+        notify("recipient-8", NotificationType.FOLLOW, { actorId: "actor-email-err" })
+      ).resolves.toBeTruthy()
+    })
+
+    it("ignores broadcast errors without failing notify", async () => {
+      userFindUnique.mockResolvedValueOnce({
+        notificationPreferences: {},
+      })
+
+      notificationCreate.mockResolvedValueOnce({
+        id: "notif-error",
+        recipientId: "recipient-6",
+        actorId: "actor-error",
+        type: NotificationType.LIKE,
+        postId: null,
+        commentId: null,
+        activityId: null,
+        readAt: null,
+        createdAt: new Date("2025-01-03T00:00:00.000Z"),
+      } as any)
+
+      supabaseChannelSendMock.mockResolvedValueOnce("error")
+
+      await expect(
+        notify("recipient-6", NotificationType.LIKE, { actorId: "actor-error" })
+      ).resolves.toBeTruthy()
     })
   })
 

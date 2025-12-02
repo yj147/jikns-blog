@@ -112,15 +112,18 @@ export interface Activity {
   authorId: string
 }
 
+// 说明：显示名回退逻辑在 API 层实现——优先使用 name，其次使用 `用户${id.substring(0, 6)}`
+export interface ActivityAuthor {
+  id: string
+  name: string | null
+  avatarUrl: string | null
+  role: "USER" | "ADMIN"
+  status?: UserStatus
+}
+
 // 扩展的动态接口（包含关联数据）
 export interface ActivityWithAuthor extends Activity {
-  author: {
-    id: string
-    name: string | null
-    avatarUrl: string | null
-    role: "USER" | "ADMIN"
-    status?: UserStatus
-  }
+  author: ActivityAuthor
   isLiked?: boolean
   canEdit?: boolean
   canDelete?: boolean

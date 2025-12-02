@@ -51,12 +51,27 @@ const slugSchema = z
     message: "URL路径不能包含连续的分隔符",
   })
 
+const coverImageSchema = z
+  .string()
+  .max(500, "封面图片地址过长")
+  .refine(
+    (value) => {
+      if (!value) return true
+      const isUrl = /^https?:\/\//.test(value)
+      const isStoragePath = /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)+$/.test(value)
+      return isUrl || isStoragePath
+    },
+    { message: "请输入有效的图片URL或存储路径" }
+  )
+  .optional()
+  .or(z.literal(""))
+
 const postFormSchema = z.object({
   title: z.string().min(1, "标题不能为空").max(200, "标题最多200个字符"),
   slug: slugSchema,
   content: z.string().min(1, "内容不能为空"),
   summary: z.string().max(500, "摘要最多500个字符").optional(),
-  coverImage: z.string().url("请输入有效的图片URL").optional().or(z.literal("")),
+  coverImage: coverImageSchema,
   tags: z.array(z.string()),
   isPublished: z.boolean(),
   isPinned: z.boolean(),
@@ -69,7 +84,7 @@ const postFormSchema = z.object({
 export type PostFormData = z.infer<typeof postFormSchema>
 
 export interface PostFormProps {
-  initialData?: Partial<PostFormData>
+  initialData?: Partial<PostFormData> & { coverImageSigned?: string | null }
   onSubmit: (data: PostFormData) => Promise<void>
   onSave?: (data: PostFormData) => Promise<void> // 保存草稿
   mode?: "create" | "edit"
@@ -94,6 +109,9 @@ export function PostForm({
   )
   const [activeTab, setActiveTab] = useState("basic")
   const [isUploadingCover, setIsUploadingCover] = useState(false)
+  const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | undefined>(
+    initialData?.coverImageSigned || initialData?.coverImage || undefined
+  )
   const [coverPreviewError, setCoverPreviewError] = useState(false)
 
   // 表单配置
@@ -127,15 +145,15 @@ export function PostForm({
   const coverImageValue = formValues.coverImage
   const optimizedCoverImage = useMemo(
     () =>
-      coverImageValue
-        ? getOptimizedImageUrl(coverImageValue, {
+      coverPreviewUrl
+        ? getOptimizedImageUrl(coverPreviewUrl, {
             width: 1600,
             height: 900,
             quality: 80,
             format: "webp",
           })
         : undefined,
-    [coverImageValue]
+    [coverPreviewUrl]
   )
   const tagNames = useMemo(() => selectedTags.map((tag) => tag.name), [selectedTags])
 
@@ -169,8 +187,31 @@ export function PostForm({
   }, [initialTagsKey, setValue])
 
   useEffect(() => {
+    if (!coverImageValue) {
+      setCoverPreviewUrl(undefined)
+      setCoverPreviewError(false)
+      return
+    }
+
+    if (
+      initialData?.coverImage &&
+      coverImageValue === initialData.coverImage &&
+      initialData.coverImageSigned
+    ) {
+      setCoverPreviewUrl(initialData.coverImageSigned || undefined)
+      setCoverPreviewError(false)
+      return
+    }
+
+    if (/^https?:\/\//.test(coverImageValue) || coverImageValue.startsWith("data:")) {
+      setCoverPreviewUrl(coverImageValue)
+      setCoverPreviewError(false)
+      return
+    }
+
+    // 对于存储路径，保持已有的预览（通常由上传响应提供的签名 URL）
     setCoverPreviewError(false)
-  }, [coverImageValue])
+  }, [coverImageValue, initialData?.coverImage, initialData?.coverImageSigned])
 
   // 自动保存配置
   const { isSaving: isAutoSaving, lastSavedAt } = useAutoSave({
@@ -232,7 +273,9 @@ export function PostForm({
       const response = await uploadImage(formData)
 
       if (response.success && response.data) {
-        setValue("coverImage", response.data.url)
+        setValue("coverImage", response.data.path, { shouldDirty: true })
+        setCoverPreviewUrl(response.data.url)
+        setCoverPreviewError(false)
         toast.success("封面图片上传成功")
       } else {
         toast.error(response.error?.message || "封面图片上传失败")
@@ -248,6 +291,8 @@ export function PostForm({
   // 清除封面图片
   const handleClearCoverImage = () => {
     setValue("coverImage", "")
+    setCoverPreviewUrl(undefined)
+    setCoverPreviewError(false)
     if (coverImageInputRef.current) {
       coverImageInputRef.current.value = ""
     }
@@ -365,7 +410,7 @@ export function PostForm({
                   </div>
 
                   {/* 封面预览 */}
-                  {coverImageValue && (
+                  {(coverImageValue || coverPreviewUrl) && (
                     <div className="relative h-40 w-full overflow-hidden rounded-lg border">
                       {coverPreviewError ? (
                         <div className="bg-muted text-muted-foreground flex h-full w-full items-center justify-center">
@@ -376,7 +421,7 @@ export function PostForm({
                         </div>
                       ) : (
                         <Image
-                          src={optimizedCoverImage ?? coverImageValue}
+                          src={optimizedCoverImage ?? coverPreviewUrl ?? coverImageValue ?? ""}
                           alt="封面预览"
                           fill
                           sizes="(max-width: 768px) 100vw, 400px"

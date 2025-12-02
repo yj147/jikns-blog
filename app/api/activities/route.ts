@@ -252,7 +252,6 @@ async function handlePost(request: NextRequest) {
             select: {
               id: true,
               name: true,
-              email: true,
               avatarUrl: true,
               role: true,
               status: true,
@@ -299,7 +298,6 @@ async function handlePost(request: NextRequest) {
       author: {
         id: created.author.id,
         name: created.author.name,
-        email: created.author.email,
         avatarUrl: created.author.avatarUrl,
         role: created.author.role,
         status: created.author.status,
@@ -532,14 +530,7 @@ function deriveAuthorDisplayName(author: ActivityListItem["author"]): string {
     return trimmed
   }
 
-  if (author.email) {
-    const emailLocal = author.email.split("@")[0]?.trim()
-    if (emailLocal) {
-      return emailLocal
-    }
-  }
-
-  return `用户${author.id.slice(0, 6)}`
+  return `用户${author.id.substring(0, 6)}`
 }
 
 function respondWithFixture(

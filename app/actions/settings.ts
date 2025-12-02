@@ -107,15 +107,29 @@ function buildApiUrl(path: string): string {
 async function buildCookieHeader(): Promise<Record<string, string>> {
   try {
     const cookieStore = await cookies()
-    const allCookies = typeof cookieStore.getAll === "function" ? cookieStore.getAll() : []
+    const cookieEntries: { name: string; value: string }[] =
+      typeof cookieStore.getAll === "function" ? [...cookieStore.getAll()] : []
 
-    if (!Array.isArray(allCookies) || allCookies.length === 0) {
-      return {}
+    const csrfCookie =
+      typeof cookieStore.get === "function" ? cookieStore.get("csrf-token") : undefined
+
+    if (csrfCookie && !cookieEntries.find((item) => item.name === csrfCookie.name)) {
+      cookieEntries.push(csrfCookie)
     }
 
-    const cookieHeader = allCookies.map((item) => `${item.name}=${item.value}`).join("; ")
+    const headers: Record<string, string> = {}
 
-    return cookieHeader ? { Cookie: cookieHeader } : {}
+    if (cookieEntries.length > 0) {
+      headers.Cookie = cookieEntries.map((item) => `${item.name}=${item.value}`).join("; ")
+    }
+
+    const csrfToken =
+      csrfCookie?.value || cookieEntries.find((item) => item.name === "csrf-token")?.value
+    if (csrfToken) {
+      headers["X-CSRF-Token"] = csrfToken
+    }
+
+    return headers
   } catch {
     return {}
   }

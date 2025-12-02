@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
-import { signAvatarUrl, signActivityListItem, resetSignedUrlCache } from "@/lib/storage/signed-url"
+import {
+  signAvatarUrl,
+  signActivityListItem,
+  resetSignedUrlCache,
+  getSignedUrl,
+} from "@/lib/storage/signed-url"
 import { createServiceRoleClient } from "@/lib/supabase"
 import { Role, UserStatus } from "@/lib/generated/prisma"
 
@@ -42,7 +47,6 @@ describe("Storage 私有化与签名 URL", () => {
       author: {
         id: "user-1",
         name: "Tester",
-        email: "tester@example.com",
         avatarUrl: "avatars/user-1/avatar.png",
         role: Role.USER,
         status: UserStatus.ACTIVE,
@@ -54,5 +58,17 @@ describe("Storage 私有化与签名 URL", () => {
     expect(signedItem.imageUrls[0]).toContain("signed/activities/user-1/photo.png")
     expect(signedItem.imageUrls[1]).toBe("https://example.com/keep.png")
     expect(signedItem.author.avatarUrl).toContain("signed/avatars/user-1/avatar.png")
+  })
+
+  it("post-images bucket 支持显式 bucket 参数签名", async () => {
+    const signed = await getSignedUrl("post-images", "user-123/cover.png", 600)
+    const client = vi.mocked(createServiceRoleClient)
+    expect(client).toHaveBeenCalled()
+
+    const storage = client.mock.results[0].value.storage
+    expect(storage.from).toHaveBeenCalledWith("post-images")
+    const createSignedUrlMock = storage.from.mock.results[0].value.createSignedUrl
+    expect(createSignedUrlMock).toHaveBeenCalledWith("user-123/cover.png", 600)
+    expect(signed).toContain("cover.png")
   })
 })

@@ -10,6 +10,7 @@ import { XSSProtection } from "@/lib/security"
 import type { User } from "@/lib/generated/prisma"
 import { logger } from "@/lib/utils/logger"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
+import { enqueueNewPostNotification } from "@/lib/services/email-queue"
 
 /**
  * 获取所有文章列表（管理员视图）
@@ -288,6 +289,15 @@ async function updatePostStatusHandler(request: NextRequest, admin: User) {
         },
       },
     })
+
+    if (!existingPost.published && published) {
+      enqueueNewPostNotification(updatedPost.id).catch((error) => {
+        logger.warn("发布邮件通知入队失败", {
+          postId: updatedPost.id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+    }
 
     return createSuccessResponse(
       {

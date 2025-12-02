@@ -1,11 +1,12 @@
 import { logger } from "@/lib/utils/logger"
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { createRouteHandlerClient } from "@/lib/supabase"
 import { assertPolicy } from "@/lib/auth/session"
 import { createErrorResponse, createSuccessResponse, ErrorCode } from "@/lib/api/unified-response"
 import { validateImageFile, generateFileName, formatFileSize } from "@/lib/upload/image-utils"
 import { createSignedUrlIfNeeded } from "@/lib/storage/signed-url"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
+import { CSRFProtection } from "@/lib/security"
 
 // 上传配置
 const uploadConfig = {
@@ -50,9 +51,24 @@ function buildUploadPath(purpose: UploadPurpose, userId: string, fileName: strin
   return `activities/${userId}/${Date.now()}/${fileName}`
 }
 
+function rejectIfCsrfInvalid(request: NextRequest) {
+  if (CSRFProtection.validateToken(request)) return null
+
+  logger.warn("CSRF token missing or invalid for upload", {
+    module: "api/upload/images",
+    path: request.nextUrl.pathname,
+    method: request.method,
+  })
+
+  return createErrorResponse(ErrorCode.FORBIDDEN, "CSRF token 缺失或无效")
+}
+
 // POST /api/upload/images - 批量图片上传
 async function handlePost(request: NextRequest) {
   try {
+    const csrfError = rejectIfCsrfInvalid(request)
+    if (csrfError) return csrfError
+
     const uploadPurpose = getUploadPurpose(request)
 
     const [activeUser, authError] = await assertPolicy("user-active", buildPolicyContext(request))
@@ -87,7 +103,8 @@ async function handlePost(request: NextRequest) {
 
     // 验证总文件大小
     const totalSize = files.reduce((sum, file) => sum + file.size, 0)
-    const maxTotalSize = uploadPurpose === "avatar" ? avatarConfig.maxSizePerFile : uploadConfig.maxTotalSize
+    const maxTotalSize =
+      uploadPurpose === "avatar" ? avatarConfig.maxSizePerFile : uploadConfig.maxTotalSize
     if (totalSize > maxTotalSize) {
       const message =
         uploadPurpose === "avatar"
@@ -209,6 +226,9 @@ async function handlePost(request: NextRequest) {
 // DELETE /api/upload/images - 删除图片
 async function handleDelete(request: NextRequest) {
   try {
+    const csrfError = rejectIfCsrfInvalid(request)
+    if (csrfError) return csrfError
+
     // 用户认证
     const [viewer] = await assertPolicy("any", buildPolicyContext(request))
     if (!viewer) {

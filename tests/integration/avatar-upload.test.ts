@@ -3,6 +3,7 @@ import { realPrisma, disconnectRealDb } from "./setup-real-db"
 import { TEST_USERS } from "../helpers/test-data"
 import { resetMocks, setCurrentTestUser } from "../__mocks__/supabase"
 import { createServiceRoleClient } from "@/lib/supabase"
+import { cookies } from "next/headers"
 
 type UpdateAvatar = typeof import("@/app/actions/settings")["updateAvatar"]
 
@@ -28,6 +29,7 @@ const adminFixture = TEST_USERS.admin
 let updateAvatar: UpdateAvatar
 let fetchSpy: ReturnType<typeof vi.spyOn> | undefined
 let dbAvailable = true
+const csrfToken = "test-csrf-token"
 
 const createFile = (size: number, type = "image/png") =>
   new File([new Uint8Array(size)], "avatar.png", { type })
@@ -117,6 +119,20 @@ describe("头像上传 Server Action", () => {
     auditLogMock.logEvent.mockReset()
     vi.mocked(createServiceRoleClient).mockClear()
     fetchSpy = undefined
+    vi.mocked(cookies).mockReturnValue({
+      getAll: vi.fn(() => [
+        { name: "csrf-token", value: csrfToken },
+        { name: "sb:token", value: "session-token" },
+      ]),
+      get: vi.fn((name: string) => {
+        if (name === "csrf-token") return { name, value: csrfToken }
+        if (name === "sb:token") return { name, value: "session-token" }
+        return undefined as any
+      }),
+      set: vi.fn(),
+      delete: vi.fn(),
+      has: vi.fn((name: string) => ["csrf-token", "sb:token"].includes(name)),
+    } as any)
     if (!dbAvailable) return
     setCurrentTestUser("user")
     await ensureUser(userFixture)
@@ -223,6 +239,9 @@ describe("头像上传 Server Action", () => {
     expect(record.avatarUrl).toBe(newPath)
 
     expect(postCalls[0]).toContain("/api/upload/images?purpose=avatar")
+    const [, postInit] = fetchSpy.mock.calls[0]
+    expect((postInit?.headers as any)["X-CSRF-Token"]).toBe(csrfToken)
+    expect((postInit?.headers as any)["Cookie"]).toContain(`csrf-token=${csrfToken}`)
     expect(deleteCalls[0]).toContain(encodeURIComponent(oldPath))
   })
 

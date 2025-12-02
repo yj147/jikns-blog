@@ -6,7 +6,7 @@
 import { useRouter } from "next/navigation"
 import { formatDistanceToNow } from "date-fns"
 import { zhCN } from "date-fns/locale"
-import { Bell, Heart, MessageCircle, UserPlus } from "lucide-react"
+import { Bell, Heart, MessageCircle, Newspaper, UserPlus } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -40,6 +40,12 @@ const TYPE_META: Record<
     background: "bg-emerald-500/10",
   },
   SYSTEM: { label: "系统", icon: Bell, tone: "text-amber-500", background: "bg-amber-500/10" },
+  NEW_POST: {
+    label: "新文章",
+    icon: Newspaper,
+    tone: "text-indigo-500",
+    background: "bg-indigo-500/10",
+  },
 }
 
 function formatRelative(value: string) {
@@ -73,7 +79,9 @@ export function NotificationItem({ notification, onMarkRead, onNavigate, compact
         ? "评论了你的内容"
         : notification.type === NotificationType.FOLLOW
           ? "关注了你"
-          : "系统通知"
+          : notification.type === NotificationType.NEW_POST
+            ? "发布了新文章"
+            : "系统通知"
 
   const router = useRouter()
 

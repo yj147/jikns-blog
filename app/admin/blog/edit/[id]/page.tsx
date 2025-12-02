@@ -50,12 +50,13 @@ export default function EditPostPage() {
         if (result.success && result.data) {
           // 转换 API 响应为表单数据格式
           const postData = result.data
-          const formData: PostFormData = {
+          const formData: PostFormData & { coverImageSigned?: string | null } = {
             title: postData.title,
             slug: postData.slug,
             content: postData.content,
             summary: postData.excerpt || "",
             coverImage: postData.coverImage || "",
+            coverImageSigned: postData.signedCoverImage ?? postData.coverImage ?? null,
             tags: postData.tags.map((tag) => tag.name),
             isPublished: postData.published,
             isPinned: postData.isPinned,

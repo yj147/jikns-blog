@@ -12,7 +12,6 @@ type ActivityWithAuthorPayload = Prisma.ActivityGetPayload<{
       select: {
         id: true
         name: true
-        email: true
         avatarUrl: true
         role: true
         status: true
@@ -53,7 +52,6 @@ export interface ActivityListItem {
   author: {
     id: string
     name: string | null
-    email: string | null
     avatarUrl: string | null
     role: Role
     status: UserStatus
@@ -240,7 +238,6 @@ export async function listActivities(params: ListActivitiesParams): Promise<List
           select: {
             id: true,
             name: true,
-            email: true,
             avatarUrl: true,
             role: true,
             status: true,
@@ -270,7 +267,6 @@ export async function listActivities(params: ListActivitiesParams): Promise<List
       author: {
         id: activity.author.id,
         name: activity.author.name,
-        email: activity.author.email,
         avatarUrl: activity.author.avatarUrl,
         role: activity.author.role,
         status: activity.author.status,

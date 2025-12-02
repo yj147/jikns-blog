@@ -231,7 +231,7 @@ export async function createComment(data: CreateCommentData): Promise<CommentWit
       await notify(targetOwnerId, "COMMENT", {
         actorId: data.authorId,
         commentId: comment.id,
-        postId: data.targetType === "post" ? data.targetId : undefined,
+        // postId 不需要，通过 commentId 可关联 post
       })
     }
 

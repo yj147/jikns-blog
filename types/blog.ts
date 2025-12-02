@@ -39,6 +39,7 @@ export interface PostListItem {
   published: boolean
   isPinned: boolean
   coverImage: string | null
+  signedCoverImage?: string | null
   viewCount: number
   publishedAt: string | null
   createdAt: string
@@ -61,10 +62,12 @@ export interface PostDetail {
   seoTitle: string | null
   seoDescription: string | null
   coverImage: string | null
+  signedCoverImage?: string | null
   viewCount: number
   createdAt: string
   updatedAt: string
   publishedAt: string | null
+  contentSigned?: string | null
   author: PostAuthor
   series?: PostSeries
   tags: PostTag[]

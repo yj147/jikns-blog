@@ -178,9 +178,9 @@ describe("核心认证功能稳定性测试", () => {
       })
     })
 
-    it("应该正确更新现有用户", async () => {
+    it("应该正确更新现有用户（仅更新 lastLoginAt，已有 name 不覆盖）", async () => {
       const existingUser = TEST_USERS.user
-      const updatedUser = { ...existingUser, name: "更新的用户名" }
+      const updatedUser = { ...existingUser, lastLoginAt: new Date() }
 
       mockPrismaUser.findUnique.mockResolvedValue(existingUser)
       mockPrismaUser.update.mockResolvedValue(updatedUser)
@@ -194,10 +194,11 @@ describe("核心认证功能稳定性测试", () => {
         },
       })
 
+      // 业务逻辑：已有 name 不会被 Auth 数据覆盖，仅更新 lastLoginAt
       expect(mockPrismaUser.update).toHaveBeenCalledWith({
         where: { id: existingUser.id },
         data: expect.objectContaining({
-          name: "更新的用户名",
+          lastLoginAt: expect.any(Date),
         }),
       })
     })

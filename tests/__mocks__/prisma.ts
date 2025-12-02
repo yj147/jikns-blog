@@ -15,8 +15,13 @@ const mockDatabase = {
   activities: new Map<string, any>(),
   likes: new Map<string, any>(),
   tags: new Map<string, any>(),
+  emailSubscribers: new Map<string, any>(),
+  emailQueues: new Map<string, any>(),
   performanceMetrics: [] as any[],
 }
+
+let emailSubscriberSeq = 0
+let emailQueueSeq = 0
 
 // 初始化测试用户数据
 Object.values(TEST_USERS).forEach((user) => {
@@ -539,6 +544,150 @@ const mockTagOperations = {
   }),
 }
 
+const mockEmailSubscriberOperations = {
+  findUnique: createMockPrismaMethod(async ({ where }: { where: any }) => {
+    const { id, email, verifyTokenHash, unsubscribeTokenHash } = where || {}
+    if (id) {
+      return mockDatabase.emailSubscribers.get(id) ?? null
+    }
+
+    return (
+      [...mockDatabase.emailSubscribers.values()].find((item) => {
+        if (email && item.email === (email.equals ?? email)) return true
+        if (verifyTokenHash && item.verifyTokenHash === verifyTokenHash) return true
+        if (unsubscribeTokenHash && item.unsubscribeTokenHash === unsubscribeTokenHash) return true
+        return false
+      }) ?? null
+    )
+  }),
+
+  findFirst: createMockPrismaMethod(async ({ where = {} }: any = {}) => {
+    const matchEmail = where.email?.equals ?? where.email
+    const matchStatus = where.status
+    const matchVerifyHash = where.verifyTokenHash
+    const matchUnsubHash = where.unsubscribeTokenHash
+
+    return (
+      [...mockDatabase.emailSubscribers.values()].find((item) => {
+        if (matchEmail && item.email !== matchEmail) return false
+        if (matchStatus && item.status !== matchStatus) return false
+        if (matchVerifyHash && item.verifyTokenHash !== matchVerifyHash) return false
+        if (matchUnsubHash && item.unsubscribeTokenHash !== matchUnsubHash) return false
+        return true
+      }) ?? null
+    )
+  }),
+
+  findMany: createMockPrismaMethod(async ({ where = {} }: any = {}) => {
+    const matchStatus = where.status?.equals ?? where.status
+
+    return [...mockDatabase.emailSubscribers.values()].filter((item) => {
+      if (matchStatus && item.status !== matchStatus) return false
+      return true
+    })
+  }),
+
+  create: createMockPrismaMethod(async ({ data }: { data: any }) => {
+    const exists = [...mockDatabase.emailSubscribers.values()].find((item) => item.email === data.email)
+    if (exists) {
+      throw new Error("Unique constraint failed on the fields: (`email`)")
+    }
+
+    const now = new Date()
+    const record = {
+      id: data.id ?? `mock-subscriber-${++emailSubscriberSeq}`,
+      email: data.email,
+      userId: data.userId ?? null,
+      status: data.status ?? "PENDING",
+      verifyTokenHash: data.verifyTokenHash ?? null,
+      verifyExpiresAt: data.verifyExpiresAt ?? null,
+      unsubscribeTokenHash: data.unsubscribeTokenHash ?? `unsub-${Date.now()}`,
+      verifiedAt: data.verifiedAt ?? null,
+      lastDigestAt: data.lastDigestAt ?? null,
+      preferences: data.preferences ?? {},
+      source: data.source ?? null,
+      createdAt: data.createdAt ?? now,
+      updatedAt: data.updatedAt ?? now,
+    }
+
+    mockDatabase.emailSubscribers.set(record.id, record)
+    return record
+  }),
+
+  update: createMockPrismaMethod(async ({ where, data }: { where: any; data: any }) => {
+    const { id, email, verifyTokenHash, unsubscribeTokenHash } = where || {}
+    const existing =
+      (id && mockDatabase.emailSubscribers.get(id)) ||
+      [...mockDatabase.emailSubscribers.values()].find((item) => {
+        if (email && item.email === email) return true
+        if (verifyTokenHash && item.verifyTokenHash === verifyTokenHash) return true
+        if (unsubscribeTokenHash && item.unsubscribeTokenHash === unsubscribeTokenHash) return true
+        return false
+      })
+
+    if (!existing) {
+      throw new Error("Record to update not found")
+    }
+
+    const updated = {
+      ...existing,
+      ...data,
+      updatedAt: new Date(),
+    }
+
+    mockDatabase.emailSubscribers.set(updated.id, updated)
+    return updated
+  }),
+}
+
+const mockEmailQueueOperations = {
+  create: createMockPrismaMethod(async ({ data }: { data: any }) => {
+    const now = new Date()
+    const record = {
+      id: data.id ?? `mock-email-queue-${++emailQueueSeq}`,
+      subscriberId: data.subscriberId ?? null,
+      type: data.type ?? "SYSTEM",
+      payload: data.payload ?? {},
+      scheduledAt: data.scheduledAt ?? now,
+      status: data.status ?? "PENDING",
+      attempts: data.attempts ?? 0,
+      lastError: data.lastError ?? null,
+      sentAt: data.sentAt ?? null,
+      notificationId: data.notificationId ?? null,
+      postId: data.postId ?? null,
+      createdAt: data.createdAt ?? now,
+    }
+
+    mockDatabase.emailQueues.set(record.id, record)
+    return record
+  }),
+
+  findMany: createMockPrismaMethod(async ({ where = {} }: any = {}) => {
+    const matchStatus = where.status
+    const matchSubscriberId = where.subscriberId
+    const matchType = where.type
+    const attemptsLt = where.attempts?.lt
+
+    return [...mockDatabase.emailQueues.values()].filter((item) => {
+      if (matchStatus && item.status !== matchStatus) return false
+      if (matchSubscriberId && item.subscriberId !== matchSubscriberId) return false
+      if (matchType && item.type !== matchType) return false
+      if (typeof attemptsLt === "number" && !(item.attempts < attemptsLt)) return false
+      return true
+    })
+  }),
+
+  update: createMockPrismaMethod(async ({ where, data }: { where: any; data: any }) => {
+    const record = mockDatabase.emailQueues.get(where.id)
+    if (!record) {
+      throw new Error("Record to update not found")
+    }
+    const updated = { ...record, ...data, updatedAt: new Date() }
+    mockDatabase.emailQueues.set(updated.id, updated)
+    return updated
+  }),
+}
+
 const mockPerformanceMetricOperations = {
   createMany: createMockPrismaMethod(async ({ data }: { data: any[] }) => {
     const metrics = Array.isArray(data) ? data : []
@@ -563,6 +712,8 @@ export const mockPrisma = {
   likes: mockLikeOperations,
   tag: mockTagOperations,
   tags: mockTagOperations,
+  emailSubscriber: mockEmailSubscriberOperations,
+  emailQueue: mockEmailQueueOperations,
   performanceMetric: mockPerformanceMetricOperations,
 
   // 事务支持
@@ -603,7 +754,11 @@ export function resetPrismaMocks() {
   mockDatabase.activities.clear()
   mockDatabase.likes.clear()
   mockDatabase.tags.clear()
+  mockDatabase.emailSubscribers.clear()
+  mockDatabase.emailQueues.clear()
   mockDatabase.performanceMetrics = []
+  emailSubscriberSeq = 0
+  emailQueueSeq = 0
 
   // 重新初始化测试用户
   Object.values(TEST_USERS).forEach((user) => {

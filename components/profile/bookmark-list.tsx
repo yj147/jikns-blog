@@ -155,105 +155,108 @@ export function BookmarkList({
   return (
     <div className="space-y-4">
       {/* 收藏列表 */}
-      {bookmarks.map((bookmark, index) => (
-        <Card
-          key={bookmark.id}
-          className="transition-all hover:shadow-md"
-          data-testid="bookmark-item"
-          style={{
-            opacity: isPending ? 0.8 : 1,
-          }}
-        >
-          <CardContent className="p-6">
-            <div className="flex items-start space-x-4">
-              {/* 封面图 */}
-              {bookmark.post.coverImage && (
-                <div className="flex-shrink-0">
-                  <Link href={`/blog/${bookmark.post.slug}`}>
-                    <Image
-                      src={
-                        getOptimizedImageUrl(bookmark.post.coverImage, {
-                          width: 256,
-                          height: 256,
-                          quality: 70,
-                          format: "webp",
-                        }) ?? bookmark.post.coverImage
-                      }
-                      alt={bookmark.post.title}
-                      width={96}
-                      height={96}
-                      className="h-24 w-24 rounded-lg object-cover transition-opacity hover:opacity-90"
-                      sizes="96px"
-                      loading={index === 0 ? "eager" : "lazy"}
-                      priority={index === 0}
-                    />
-                  </Link>
-                </div>
-              )}
-
-              {/* 内容区域 */}
-              <div className="min-w-0 flex-1">
-                {/* 标题 */}
-                <h3 className="mb-2 text-lg font-semibold">
-                  <Link
-                    href={`/blog/${bookmark.post.slug}`}
-                    className="hover:text-primary line-clamp-2 transition-colors"
-                  >
-                    {bookmark.post.title}
-                  </Link>
-                </h3>
-
-                {/* 作者和时间信息 */}
-                <div className="text-muted-foreground mb-3 flex items-center space-x-4 text-sm">
-                  {/* 作者 */}
-                  <div className="flex items-center space-x-2">
-                    <Avatar className="h-5 w-5">
-                      <AvatarImage
-                        src={bookmark.post.author.avatarUrl || "/placeholder.svg"}
-                        alt={bookmark.post.author.name || "作者"}
-                      />
-                      <AvatarFallback className="text-xs">
-                        {(bookmark.post.author.name || "U")[0].toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span>{bookmark.post.author.name || "匿名用户"}</span>
-                  </div>
-
-                  {/* 收藏时间 */}
-                  <div className="flex items-center space-x-1">
-                    <Calendar className="h-3.5 w-3.5" />
-                    <span>
-                      收藏于{" "}
-                      {format(new Date(bookmark.createdAt), "MM月dd日", {
-                        locale: zhCN,
-                      })}
-                    </span>
-                  </div>
-                </div>
-
-                {/* 操作按钮 */}
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleUnbookmark(bookmark.post.id, index)}
-                    disabled={isPending}
-                    data-testid="remove-bookmark"
-                  >
-                    <BookmarkCheck className="mr-1 h-3.5 w-3.5" />
-                    取消收藏
-                  </Button>
-                  <Button variant="ghost" size="sm" asChild>
+      {bookmarks.map((bookmark, index) => {
+        const coverSrc = bookmark.post.signedCoverImage ?? bookmark.post.coverImage
+        return (
+          <Card
+            key={bookmark.id}
+            className="transition-all hover:shadow-md"
+            data-testid="bookmark-item"
+            style={{
+              opacity: isPending ? 0.8 : 1,
+            }}
+          >
+            <CardContent className="p-6">
+              <div className="flex items-start space-x-4">
+                {/* 封面图 */}
+                {coverSrc && (
+                  <div className="flex-shrink-0">
                     <Link href={`/blog/${bookmark.post.slug}`}>
-                      阅读文章 <ChevronRight className="ml-1 h-3.5 w-3.5" />
+                      <Image
+                        src={
+                          getOptimizedImageUrl(coverSrc, {
+                            width: 256,
+                            height: 256,
+                            quality: 70,
+                            format: "webp",
+                          }) ?? coverSrc
+                        }
+                        alt={bookmark.post.title}
+                        width={96}
+                        height={96}
+                        className="h-24 w-24 rounded-lg object-cover transition-opacity hover:opacity-90"
+                        sizes="96px"
+                        loading={index === 0 ? "eager" : "lazy"}
+                        priority={index === 0}
+                      />
                     </Link>
-                  </Button>
+                  </div>
+                )}
+
+                {/* 内容区域 */}
+                <div className="min-w-0 flex-1">
+                  {/* 标题 */}
+                  <h3 className="mb-2 text-lg font-semibold">
+                    <Link
+                      href={`/blog/${bookmark.post.slug}`}
+                      className="hover:text-primary line-clamp-2 transition-colors"
+                    >
+                      {bookmark.post.title}
+                    </Link>
+                  </h3>
+
+                  {/* 作者和时间信息 */}
+                  <div className="text-muted-foreground mb-3 flex items-center space-x-4 text-sm">
+                    {/* 作者 */}
+                    <div className="flex items-center space-x-2">
+                      <Avatar className="h-5 w-5">
+                        <AvatarImage
+                          src={bookmark.post.author.avatarUrl || "/placeholder.svg"}
+                          alt={bookmark.post.author.name || "作者"}
+                        />
+                        <AvatarFallback className="text-xs">
+                          {(bookmark.post.author.name || "U")[0].toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span>{bookmark.post.author.name || "匿名用户"}</span>
+                    </div>
+
+                    {/* 收藏时间 */}
+                    <div className="flex items-center space-x-1">
+                      <Calendar className="h-3.5 w-3.5" />
+                      <span>
+                        收藏于{" "}
+                        {format(new Date(bookmark.createdAt), "MM月dd日", {
+                          locale: zhCN,
+                        })}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 操作按钮 */}
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleUnbookmark(bookmark.post.id, index)}
+                      disabled={isPending}
+                      data-testid="remove-bookmark"
+                    >
+                      <BookmarkCheck className="mr-1 h-3.5 w-3.5" />
+                      取消收藏
+                    </Button>
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href={`/blog/${bookmark.post.slug}`}>
+                        阅读文章 <ChevronRight className="ml-1 h-3.5 w-3.5" />
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+            </CardContent>
+          </Card>
+        )
+      })}
 
       {/* 加载更多按钮 */}
       {hasMore && (

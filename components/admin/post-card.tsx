@@ -50,6 +50,7 @@ export interface Post {
   summary?: string
   content: string
   coverImage?: string
+  signedCoverImage?: string | null
   tags: string[]
   isPublished: boolean
   isPinned: boolean
@@ -142,12 +143,14 @@ export function PostCard({
     return text.substring(0, maxLength) + "..."
   }
 
+  const coverSource = post.signedCoverImage ?? post.coverImage
   const coverImageUrl = useMemo(
     () =>
-      post.coverImage
-        ? getOptimizedImageUrl(post.coverImage, { width: 1280, height: 720, quality: 80 })
+      coverSource
+        ? getOptimizedImageUrl(coverSource, { width: 1280, height: 720, quality: 80 }) ??
+          coverSource
         : undefined,
-    [post.coverImage]
+    [coverSource]
   )
 
   const deleteDialog =
@@ -178,10 +181,10 @@ export function PostCard({
   if (variant === "public") {
     return (
       <Card className={cn("transition-shadow hover:shadow-lg", className)}>
-        {post.coverImage && (
+        {coverSource && (
           <div className="relative h-48 w-full overflow-hidden rounded-t-lg">
             <Image
-              src={coverImageUrl ?? post.coverImage}
+              src={coverImageUrl ?? coverSource}
               alt={post.title}
               fill
               className="object-cover"
@@ -370,10 +373,10 @@ export function PostCard({
   return (
     <>
       <Card className={cn("transition-shadow hover:shadow-md", className)}>
-        {post.coverImage && (
+        {coverSource && (
           <div className="relative h-48 w-full overflow-hidden rounded-t-lg">
             <Image
-              src={coverImageUrl ?? post.coverImage}
+              src={coverImageUrl ?? coverSource}
               alt={post.title}
               fill
               className="object-cover"

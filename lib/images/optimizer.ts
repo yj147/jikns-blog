@@ -1,7 +1,16 @@
-const SUPABASE_STORAGE_SEGMENT = "/storage/v1/object/public/"
-const SUPABASE_RENDER_SEGMENT = "/storage/v1/render/image/public/"
+const STORAGE_SEGMENTS = [
+  {
+    object: "/storage/v1/object/public/",
+    render: "/storage/v1/render/image/public/",
+  },
+  {
+    object: "/storage/v1/object/sign/",
+    render: "/storage/v1/render/image/sign/",
+  },
+]
 const DEFAULT_STORAGE_BUCKET = "activity-images"
 const STORAGE_RELATIVE_PREFIXES = ["avatars/", "activities/", "users/"]
+const PRIVATE_BUCKET_PREFIXES = ["post-images/"]
 
 type OptimizeOptions = {
   width?: number
@@ -27,8 +36,15 @@ export function getOptimizedImageUrl(
 
   // 处理 Storage 相对路径（如 avatars/xxx、activities/xxx）
   const isStorageRelativePath = STORAGE_RELATIVE_PREFIXES.some((prefix) => src.startsWith(prefix))
+  const isPrivateRelativePath = PRIVATE_BUCKET_PREFIXES.some((prefix) => src.startsWith(prefix))
+
+  // 私有 bucket 的相对路径需要先获取签名 URL，再交给调用方处理
+  if (isPrivateRelativePath) {
+    return src
+  }
+
   if (isStorageRelativePath && baseUrl) {
-    const fullStorageUrl = `${baseUrl}${SUPABASE_STORAGE_SEGMENT}${DEFAULT_STORAGE_BUCKET}/${src}`
+    const fullStorageUrl = `${baseUrl}${STORAGE_SEGMENTS[0].object}${DEFAULT_STORAGE_BUCKET}/${src}`
     return getOptimizedImageUrl(fullStorageUrl, options)
   }
 
@@ -48,7 +64,11 @@ export function getOptimizedImageUrl(
     }
   }
 
-  if (!parsed.pathname.includes(SUPABASE_STORAGE_SEGMENT)) {
+  const matchedSegment = STORAGE_SEGMENTS.find((segment) =>
+    parsed.pathname.includes(segment.object)
+  )
+
+  if (!matchedSegment) {
     return normalizedSrc
   }
 
@@ -58,11 +78,18 @@ export function getOptimizedImageUrl(
     return src
   }
 
-  const objectPath = parsed.pathname.replace(SUPABASE_STORAGE_SEGMENT, "")
+  const objectPath = parsed.pathname.replace(matchedSegment.object, "")
   const optimizedUrl = new URL(
-    `${SUPABASE_RENDER_SEGMENT}${objectPath}`,
+    `${matchedSegment.render}${objectPath}`,
     `${parsed.protocol}//${parsed.host}`
   )
+
+  // 保留已存在的查询参数（例如 signed URL token）
+  if (matchedSegment.object.includes("/object/sign/")) {
+    parsed.searchParams.forEach((value, key) => {
+      optimizedUrl.searchParams.append(key, value)
+    })
+  }
 
   const merged = { ...DEFAULT_OPTIONS, ...options }
   if (merged.width) optimizedUrl.searchParams.set("width", String(merged.width))

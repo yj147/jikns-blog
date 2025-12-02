@@ -29,6 +29,7 @@ export const notificationPreferenceDefaults: Record<NotificationType, boolean> =
   COMMENT: true,
   FOLLOW: true,
   SYSTEM: true,
+  NEW_POST: true,
 }
 
 const notificationPreferencesBaseSchema = z
@@ -37,6 +38,7 @@ const notificationPreferencesBaseSchema = z
     COMMENT: z.boolean().optional(),
     FOLLOW: z.boolean().optional(),
     SYSTEM: z.boolean().optional(),
+    NEW_POST: z.boolean().optional(),
   })
   .default({})
 
@@ -47,6 +49,7 @@ export const notificationPreferencesSchema = notificationPreferencesBaseSchema.t
 
 export type NotificationPreferencesInput = z.input<typeof notificationPreferencesBaseSchema>
 export type NotificationPreferences = z.output<typeof notificationPreferencesSchema>
+export type EmailSubscriptionPreferences = Partial<Record<NotificationType, boolean>>
 
 export const resolveNotificationPreference = (
   prefs: NotificationPreferencesInput | null | undefined,

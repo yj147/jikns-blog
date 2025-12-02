@@ -24,6 +24,7 @@ import { MarkdownRenderer } from "@/components/ui/markdown-renderer"
 import CommentList from "@/components/comments/comment-list"
 import { LikeButton } from "@/components/blog/like-button"
 import { BookmarkButton } from "@/components/blog/bookmark-button"
+import SubscribeForm from "@/components/subscribe-form"
 
 // 页面参数接口
 interface BlogPostPageProps {
@@ -43,6 +44,7 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
   }
 
   const post = result.data
+  const coverImage = post.signedCoverImage ?? post.coverImage
   const title = post.seoTitle || post.title
   const description =
     post.seoDescription ||
@@ -60,7 +62,7 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
       modifiedTime: post.updatedAt,
       authors: [post.author.name || "匿名用户"],
       tags: post.tags.map((tag) => tag.name),
-      images: post.coverImage ? [post.coverImage] : undefined,
+      images: coverImage ? [coverImage] : undefined,
     },
     alternates: {
       canonical: post.canonicalUrl || undefined,
@@ -82,6 +84,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
   }
 
   const post: PostDetail = result.data
+  const content = post.contentSigned ?? post.content
 
   // 检查文章是否已发布（防止访问草稿）
   if (!post.published) {
@@ -180,7 +183,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
               {/* 文章内容 */}
               <div className="mb-12">
                 <MarkdownRenderer
-                  content={post.content}
+                  content={content}
                   className="text-foreground leading-relaxed"
                 />
               </div>
@@ -231,6 +234,12 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                   </CardContent>
                 </Card>
               </footer>
+
+              {/* 订阅更新 */}
+              <section className="mt-10">
+                <h2 className="mb-4 text-2xl font-semibold">订阅更新</h2>
+                <SubscribeForm />
+              </section>
             </article>
 
             {/* 评论区域 */}

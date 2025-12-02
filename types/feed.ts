@@ -11,7 +11,6 @@ export type AdminFeedActionInput = z.infer<typeof adminFeedActionSchema>
 export interface FeedAuthor {
   id: string
   name: string | null
-  email: string | null
   role: Role
   status: UserStatus
 }

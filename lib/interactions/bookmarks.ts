@@ -8,6 +8,7 @@ import { Prisma } from "@/lib/generated/prisma"
 import { logger } from "@/lib/utils/logger"
 import { PERFORMANCE_THRESHOLDS } from "@/lib/config/performance"
 import { InteractionTargetNotFoundError } from "./errors"
+import { createSignedUrlIfNeeded, signAvatarUrl } from "@/lib/storage/signed-url"
 
 // 导出类型定义
 export type BookmarkStatus = {
@@ -23,6 +24,7 @@ export type BookmarkListItem = {
     slug: string
     title: string
     coverImage: string | null
+    signedCoverImage?: string | null
     author: {
       id: string
       name: string | null
@@ -36,6 +38,8 @@ export type BookmarkListResult = {
   hasMore: boolean
   nextCursor?: string
 }
+
+const POST_IMAGE_SIGN_EXPIRES_IN = 60 * 60
 
 function isKnownRequestError(
   error: unknown,
@@ -417,8 +421,21 @@ export async function getUserBookmarks(
   const hasMore = bookmarks.length > limit
   const items = hasMore ? bookmarks.slice(0, limit) : bookmarks
 
+  const [signedCovers, signedAvatars] = await Promise.all([
+    Promise.all(
+      items.map((bookmark) =>
+        createSignedUrlIfNeeded(
+          bookmark.post.coverImage,
+          POST_IMAGE_SIGN_EXPIRES_IN,
+          "post-images"
+        )
+      )
+    ),
+    Promise.all(items.map((bookmark) => signAvatarUrl(bookmark.post.author.avatarUrl))),
+  ])
+
   // 转换为返回格式
-  const formattedItems: BookmarkListItem[] = items.map((bookmark) => ({
+  const formattedItems: BookmarkListItem[] = items.map((bookmark, index) => ({
     id: bookmark.id,
     createdAt: bookmark.createdAt.toISOString(),
     post: {
@@ -426,10 +443,11 @@ export async function getUserBookmarks(
       slug: bookmark.post.slug,
       title: bookmark.post.title,
       coverImage: bookmark.post.coverImage,
+      signedCoverImage: signedCovers[index],
       author: {
         id: bookmark.post.author.id,
         name: bookmark.post.author.name,
-        avatarUrl: bookmark.post.author.avatarUrl,
+        avatarUrl: signedAvatars[index] ?? bookmark.post.author.avatarUrl,
       },
     },
   }))
