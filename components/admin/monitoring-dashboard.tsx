@@ -6,14 +6,13 @@
 "use client"
 
 import * as React from "react"
+import dynamic from "next/dynamic"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { LoadingIndicator } from "@/components/ui/loading-indicator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { fetchJson } from "@/lib/api/fetch-json"
-import type { ApiResponse } from "@/lib/api/unified-response"
 import {
   Activity,
   AlertTriangle,
@@ -29,53 +28,29 @@ import {
   Zap,
   RefreshCw,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { performanceMonitor } from "@/lib/performance-monitor"
-import { logger } from "@/lib/utils/logger"
 import { useRealtimeDashboard } from "@/hooks/use-realtime-dashboard"
-import { MetricsChart } from "@/components/admin/metrics-chart"
+// 动态导入 MetricsChart，避免 396KB 的 recharts 被打包到初始 bundle
+const MetricsChart = dynamic(
+  () => import("@/components/admin/metrics-chart").then((mod) => mod.MetricsChart),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-[300px] items-center justify-center">
+        <LoadingIndicator size="lg" />
+      </div>
+    ),
+  }
+)
 import { useMetricsTimeseries } from "@/hooks/use-metrics-timeseries"
 import { MetricType } from "@/lib/generated/prisma"
 import type { MetricsBucket } from "@/lib/dto/metrics.dto"
-import type { MonitoringResponse, PerformanceReport } from "@/types/monitoring"
-
-/**
- * 监控数据接口
- */
-interface MonitoringData {
-  healthStatus: "healthy" | "degraded" | "unhealthy"
-  uptime: number
-  summary: {
-    totalRequests: number
-    averageResponseTime: number
-    errorRate: number
-    slowRequestsRate: number
-  }
-  authMetrics: {
-    loginTime: {
-      average: number
-      p95: number
-    }
-    sessionCheckTime: {
-      average: number
-      p95: number
-    }
-    permissionCheckTime: {
-      average: number
-      p95: number
-    }
-  }
-  recentErrors: Array<{
-    type: string
-    count: number
-    percentage: number
-  }>
-  topSlowEndpoints: Array<{
-    endpoint: string
-    averageTime: number
-    requestCount: number
-  }>
-}
+import {
+  useMonitoringData,
+  METRICS_REFRESH_MS,
+} from "@/components/admin/monitoring/hooks/use-monitoring-data"
+import { StatCard } from "@/components/admin/monitoring/stat-card"
+import { HealthStatus } from "@/components/admin/monitoring/health-status"
+import { RealtimeStatus } from "@/components/admin/monitoring/realtime-status"
 
 type TimeRangeValue = "1h" | "24h" | "7d"
 
@@ -90,148 +65,6 @@ const BUCKET_OPTIONS: Array<{ label: string; value: MetricsBucket }> = [
   { label: "5 分钟", value: "5m" },
   { label: "1 小时", value: "1h" },
 ]
-
-const METRICS_REFRESH_MS = 30_000
-
-/**
- * 统计卡片组件
- */
-const StatCard: React.FC<{
-  title: string
-  value: string | number
-  description?: string
-  icon: React.ComponentType<{ className?: string }>
-  trend?: "up" | "down" | "stable"
-  status?: "good" | "warning" | "error"
-  className?: string
-}> = ({ title, value, description, icon: Icon, trend, status = "good", className }) => {
-  const statusColors = {
-    good: "text-green-600 dark:text-green-400",
-    warning: "text-yellow-600 dark:text-yellow-400",
-    error: "text-red-600 dark:text-red-400",
-  }
-
-  const TrendIcon = trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : null
-
-  return (
-    <Card className={cn("transition-all hover:shadow-md", className)}>
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</p>
-            <div className="flex items-center space-x-2">
-              <p className={cn("text-2xl font-bold", statusColors[status])}>{value}</p>
-              {TrendIcon && (
-                <TrendIcon
-                  className={cn("h-4 w-4", trend === "up" ? "text-green-600" : "text-red-600")}
-                />
-              )}
-            </div>
-            {description && (
-              <p className="text-xs text-gray-500 dark:text-gray-400">{description}</p>
-            )}
-          </div>
-          <div
-            className={cn("rounded-full bg-gray-100 p-3 dark:bg-gray-800", statusColors[status])}
-          >
-            <Icon className="h-6 w-6" />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-const RealtimeStatus: React.FC<{
-  state: "realtime" | "polling" | "idle" | "error"
-  lastUpdated?: Date | null
-}> = ({ state, lastUpdated }) => {
-  const config = {
-    realtime: { label: "实时更新", color: "bg-emerald-500", text: "text-emerald-600" },
-    polling: { label: "轮询模式", color: "bg-amber-500", text: "text-amber-600" },
-    idle: { label: "初始化", color: "bg-gray-400", text: "text-gray-600" },
-    error: { label: "已降级", color: "bg-red-500", text: "text-red-600" },
-  } as const
-
-  const current = config[state]
-
-  return (
-    <div className="flex items-center gap-2 text-sm">
-      <span className={cn("h-2.5 w-2.5 rounded-full", current.color)} />
-      <span className={cn("font-medium", current.text)}>{current.label}</span>
-      {lastUpdated && (
-        <span className="text-xs text-gray-500 dark:text-gray-400">
-          更新于 {lastUpdated.toLocaleTimeString()}
-        </span>
-      )}
-    </div>
-  )
-}
-
-/**
- * 健康状态指示器
- */
-const HealthStatus: React.FC<{
-  status: "healthy" | "degraded" | "unhealthy"
-  uptime: number
-}> = ({ status, uptime }) => {
-  const statusConfig = {
-    healthy: {
-      color: "bg-green-500",
-      textColor: "text-green-600 dark:text-green-400",
-      label: "健康",
-      description: "系统运行正常",
-    },
-    degraded: {
-      color: "bg-yellow-500",
-      textColor: "text-yellow-600 dark:text-yellow-400",
-      label: "降级",
-      description: "系统性能下降",
-    },
-    unhealthy: {
-      color: "bg-red-500",
-      textColor: "text-red-600 dark:text-red-400",
-      label: "异常",
-      description: "系统存在问题",
-    },
-  }
-
-  const config = statusConfig[status]
-  const uptimeHours = Math.floor(uptime / 3600)
-  const uptimeDays = Math.floor(uptimeHours / 24)
-
-  const formatUptime = () => {
-    if (uptimeDays > 0) {
-      return `${uptimeDays} 天 ${uptimeHours % 24} 小时`
-    } else {
-      return `${uptimeHours} 小时 ${Math.floor((uptime % 3600) / 60)} 分钟`
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <div className={cn("h-3 w-3 rounded-full", config.color)} />
-          系统健康状态
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <div>
-            <p className={cn("text-lg font-semibold", config.textColor)}>{config.label}</p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">{config.description}</p>
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">运行时间</p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">{formatUptime()}</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
 /**
  * 错误分析组件
  */
@@ -365,15 +198,18 @@ export const MonitoringDashboard: React.FC = () => {
     data: stats,
     isLoading: statsLoading,
     error: statsError,
-    connectionState,
-    lastUpdated: statsUpdatedAt,
-    refresh: refreshStats,
+  connectionState,
+  lastUpdated: statsUpdatedAt,
+  refresh: refreshStats,
   } = useRealtimeDashboard()
 
-  const [performanceData, setPerformanceData] = React.useState<MonitoringData | null>(null)
-  const [performanceLoading, setPerformanceLoading] = React.useState(true)
-  const [performanceError, setPerformanceError] = React.useState<string | null>(null)
-  const [performanceLastUpdate, setPerformanceLastUpdate] = React.useState<Date | null>(null)
+  const {
+    data: performanceData,
+    isLoading: performanceLoading,
+    error: performanceError,
+    lastUpdated: performanceLastUpdate,
+    refresh: refreshPerformance,
+  } = useMonitoringData()
   const [timeRange, setTimeRange] = React.useState<TimeRangeValue>("1h")
   const [bucket, setBucket] = React.useState<MetricsBucket>("5m")
   const [compareEnabled, setCompareEnabled] = React.useState(false)
@@ -383,97 +219,6 @@ export const MonitoringDashboard: React.FC = () => {
     const timer = setInterval(() => setNow(new Date()), METRICS_REFRESH_MS)
     return () => clearInterval(timer)
   }, [])
-
-  /**
-   * 加载监控数据
-   */
-  const loadPerformanceData = React.useCallback(async () => {
-    setPerformanceLoading(true)
-    setPerformanceError(null)
-
-    let report: PerformanceReport | null = null
-    let warning: string | null = null
-    let apiTimestamp: string | undefined
-    let uptimeSeconds: number | undefined
-
-    try {
-      const response = await fetchJson<ApiResponse<MonitoringResponse>>("/api/admin/monitoring")
-      apiTimestamp = response.meta?.timestamp
-      const payload = response.data
-      report = payload?.performanceReport ?? null
-      uptimeSeconds = payload?.uptime
-    } catch (err) {
-      warning = err instanceof Error ? err.message : "性能接口请求失败，已回退到本地数据"
-      logger.warn("获取性能报告接口失败，使用本地回退", { error: err })
-    }
-
-    if (!report) {
-      try {
-        report = await performanceMonitor.getPerformanceReport(24)
-      } catch (fallbackError) {
-        setPerformanceError(
-          fallbackError instanceof Error ? fallbackError.message : "加载监控数据失败"
-        )
-        setPerformanceLoading(false)
-        return
-      }
-    }
-
-    if (!report) {
-      setPerformanceError("性能报告为空")
-      setPerformanceLoading(false)
-      return
-    }
-
-    let healthStatus: "healthy" | "degraded" | "unhealthy" = "healthy"
-
-    if (report.summary.errorRate > 5 || report.summary.averageResponseTime > 2000) {
-      healthStatus = "degraded"
-    }
-
-    if (report.summary.errorRate > 20 || report.summary.averageResponseTime > 5000) {
-      healthStatus = "unhealthy"
-    }
-
-    const monitoringData: MonitoringData = {
-      healthStatus,
-      uptime: uptimeSeconds ?? 0,
-      summary: report.summary,
-      authMetrics: {
-        loginTime: {
-          average: report.authMetrics.loginTime.average,
-          p95: report.authMetrics.loginTime.p95,
-        },
-        sessionCheckTime: {
-          average: report.authMetrics.sessionCheckTime.average,
-          p95: report.authMetrics.sessionCheckTime.p95,
-        },
-        permissionCheckTime: {
-          average: report.authMetrics.permissionCheckTime.average,
-          p95: report.authMetrics.permissionCheckTime.p95,
-        },
-      },
-      recentErrors: report.errorBreakdown,
-      topSlowEndpoints: report.topSlowEndpoints,
-    }
-
-    setPerformanceData(monitoringData)
-    setPerformanceLastUpdate(apiTimestamp ? new Date(apiTimestamp) : new Date())
-    setPerformanceError(warning)
-    setPerformanceLoading(false)
-  }, [])
-
-  /**
-   * 初始化和定时刷新
-   */
-  React.useEffect(() => {
-    loadPerformanceData()
-
-    // 每30秒自动刷新
-    const interval = setInterval(loadPerformanceData, METRICS_REFRESH_MS)
-
-    return () => clearInterval(interval)
-  }, [loadPerformanceData])
 
   const rangeDuration = React.useMemo(
     () => TIME_RANGE_OPTIONS.find((option) => option.value === timeRange)?.ms ?? TIME_RANGE_OPTIONS[0].ms,
@@ -503,8 +248,8 @@ export const MonitoringDashboard: React.FC = () => {
   const refreshAll = React.useCallback(() => {
     const currentNow = new Date()
     setNow(currentNow)
-    void Promise.all([refreshStats(), loadPerformanceData(), mutateMetrics()])
-  }, [loadPerformanceData, mutateMetrics, refreshStats])
+    void Promise.all([refreshStats(), refreshPerformance(), mutateMetrics()])
+  }, [mutateMetrics, refreshPerformance, refreshStats])
 
   const isInitialLoading = performanceLoading && !performanceData
   const blockingError = performanceError && !performanceData

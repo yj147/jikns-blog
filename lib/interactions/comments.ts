@@ -91,7 +91,7 @@ export interface CreateCommentData {
 
 // 评论响应类型
 export interface CommentWithAuthor extends Comment {
-  author: Pick<User, "id" | "name" | "avatarUrl" | "email" | "role"> | null
+  author: Pick<User, "id" | "name" | "avatarUrl"> | null
   replies?: CommentWithAuthor[]
   isDeleted: boolean
   targetType: CommentTargetType
@@ -109,6 +109,7 @@ export interface CommentWithAuthor extends Comment {
  * 1. 父评论是否存在
  * 2. 父评论是否已被软删除
  * 3. 父评论是否属于同一目标（Post 或 Activity）
+ * 4. 返回父评论作者 ID 供通知复用
  *
  * @throws {CommentServiceError} 如果验证失败
  */
@@ -116,7 +117,7 @@ async function validateParentComment(
   parentId: string,
   targetType: CommentTargetType,
   targetId: string
-): Promise<void> {
+): Promise<string> {
   const parentComment = await prisma.comment.findUnique({
     where: { id: parentId },
     select: {
@@ -124,6 +125,7 @@ async function validateParentComment(
       postId: true,
       activityId: true,
       deletedAt: true,
+      authorId: true,
     },
   })
 
@@ -164,6 +166,8 @@ async function validateParentComment(
       }
     )
   }
+
+  return parentComment.authorId
 }
 
 export async function createComment(data: CreateCommentData): Promise<CommentWithAuthor> {
@@ -185,9 +189,11 @@ export async function createComment(data: CreateCommentData): Promise<CommentWit
       )
     }
 
+    let parentAuthorId: string | null = null
+
     // 如果是回复，验证父评论
     if (data.parentId) {
-      await validateParentComment(data.parentId, data.targetType, data.targetId)
+      parentAuthorId = await validateParentComment(data.parentId, data.targetType, data.targetId)
     }
 
     // 使用事务创建评论并更新计数
@@ -208,8 +214,6 @@ export async function createComment(data: CreateCommentData): Promise<CommentWit
               id: true,
               name: true,
               avatarUrl: true,
-              email: true,
-              role: true,
             },
           },
         },
@@ -231,7 +235,28 @@ export async function createComment(data: CreateCommentData): Promise<CommentWit
       await notify(targetOwnerId, "COMMENT", {
         actorId: data.authorId,
         commentId: comment.id,
-        // postId 不需要，通过 commentId 可关联 post
+        // 必须传递 postId 或 activityId 作为通知目标
+        postId: data.targetType === "post" ? data.targetId : null,
+        activityId: data.targetType === "activity" ? data.targetId : null,
+      })
+    }
+
+    if (
+      data.parentId &&
+      parentAuthorId &&
+      parentAuthorId !== data.authorId &&
+      parentAuthorId !== targetOwnerId
+    ) {
+      await notify(parentAuthorId, "COMMENT", {
+        actorId: data.authorId,
+        commentId: comment.id,
+        postId: data.targetType === "post" ? data.targetId : null,
+        activityId: data.targetType === "activity" ? data.targetId : null,
+      })
+
+      logger.info("父评论作者通知发送成功", {
+        commentId: comment.id,
+        parentAuthorId,
       })
     }
 
@@ -326,8 +351,6 @@ export async function listComments(
           id: true,
           name: true,
           avatarUrl: true,
-          email: true,
-          role: true,
         },
       }
     }
@@ -559,7 +582,7 @@ export async function getCommentCount(
 }
 
 export type PrismaCommentWithAuthor = Comment & {
-  author?: Pick<User, "id" | "name" | "avatarUrl" | "email" | "role"> | null
+  author?: Pick<User, "id" | "name" | "avatarUrl"> | null
   _count?: {
     replies?: number
   } | null

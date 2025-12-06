@@ -315,7 +315,7 @@ async function handlePost(request: NextRequest) {
 
     const validatedComment = CommentResponseDto.parse(comment)
 
-    await auditLogger.logEvent({
+    auditLogger.logEventAsync({
       action: "CREATE_COMMENT",
       resource: `comment:${comment.id}`,
       details: {

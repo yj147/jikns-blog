@@ -231,7 +231,6 @@ it("选择作者后应用过滤器应写入 authorId", async () => {
           name: "Linus",
           avatarUrl: null,
           bio: "Creator",
-          role: "ADMIN",
           similarity: 1,
         },
       ],

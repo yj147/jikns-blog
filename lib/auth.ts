@@ -3,34 +3,18 @@
  * 支持 Server Components 和 Server Actions 中的用户认证
  */
 
+import { cache } from "react"
 import { createServerSupabaseClient } from "./supabase"
 import { prisma } from "./prisma"
-import { cache } from "react"
-import { SessionSecurity } from "./security"
 import type { User } from "./generated/prisma"
 import { authLogger } from "./utils/logger"
-import { performanceMonitor, MetricType } from "@/lib/performance-monitor"
 import { assertPolicy, fetchSessionUserProfile } from "@/lib/auth/session"
 import type { AuthError } from "@/lib/error-handling/auth-error"
-import { signAvatarUrl } from "@/lib/storage/signed-url"
+import { signAvatarUrl, signCoverImageUrl } from "@/lib/storage/signed-url"
+
+export { syncUserFromAuth, clearUserCache, isConfiguredAdminEmail } from "@/lib/auth/session"
 
 const isTestEnv = process.env.NODE_ENV === "test"
-
-/**
- * Supabase Auth User 类型定义
- * 兼容 Supabase 的 User 类型，支持多种数据源
- */
-interface SupabaseUser {
-  id: string
-  email?: string | null
-  user_metadata?: {
-    full_name?: string
-    avatar_url?: string
-    name?: string
-    user_name?: string
-    picture?: string
-  } | null
-}
 
 async function shouldSkipAuthLookup(): Promise<boolean> {
   try {
@@ -173,40 +157,39 @@ async function fetchUserFromDatabase(userId: string): Promise<User | null> {
 }
 
 /**
- * 带缓存标签的用户查询函数
- */
-const adminEmailList = (process.env.ADMIN_EMAIL || "")
-  .split(",")
-  .map((email) => email.trim().toLowerCase())
-  .filter(Boolean)
-
-export function isConfiguredAdminEmail(email?: string | null): boolean {
-  if (!email) return false
-  return adminEmailList.includes(email.toLowerCase())
-}
-
-/**
  * 获取当前用户信息（Server Components 专用）
  * 从数据库获取完整的用户信息，包括权限等业务数据
  * 使用经过身份验证的用户数据确保安全性
+ *
+ * 注意：不要再使用 React cache 包装该函数，否则会绕过 next/cache 的标签失效机制，
+ * 导致用户资料更新后仍然返回旧值。
  */
 const getCurrentUserImpl = async (): Promise<User | null> => {
   const user = await fetchSessionUserProfile()
   if (!user) return null
 
-  const signedAvatarUrl = await signAvatarUrl(user.avatarUrl)
+  const [signedAvatarUrl, signedCoverUrl] = await Promise.all([
+    signAvatarUrl(user.avatarUrl),
+    signCoverImageUrl(user.coverImage),
+  ])
+
+  const hydrated = { ...user } as User & { avatarSignedUrl?: string; coverSignedUrl?: string }
+
   if (signedAvatarUrl) {
-    return {
-      ...user,
-      avatarUrl: signedAvatarUrl,
-      avatarSignedUrl: signedAvatarUrl,
-    } as User & { avatarSignedUrl: string }
+    hydrated.avatarUrl = signedAvatarUrl
+    hydrated.avatarSignedUrl = signedAvatarUrl
   }
 
-  return user
+  if (signedCoverUrl) {
+    hydrated.coverImage = signedCoverUrl
+    hydrated.coverSignedUrl = signedCoverUrl
+  }
+
+  return hydrated
 }
 
-export const getCurrentUser = isTestEnv ? getCurrentUserImpl : cache(getCurrentUserImpl)
+// 保持无 cache，以便 revalidateTag 能即时生效
+export const getCurrentUser = getCurrentUserImpl
 
 /**
  * 验证用户是否为管理员（Server Actions 专用）
@@ -275,117 +258,6 @@ function throwLegacyAuthError(error: AuthError | null, unauthorizedMessage: stri
 }
 
 /**
- * 增强的用户资料同步函数
- * 在 OAuth 回调或登录时调用，同步头像、昵称和 lastLoginAt
- * 支持 GitHub OAuth 和邮箱认证两种场景
- */
-export async function syncUserFromAuth(authUser: SupabaseUser): Promise<User> {
-  const timerId = `auth-login-${authUser.id}-${Date.now()}-${Math.random().toString(16).slice(2)}`
-  performanceMonitor.startTimer(timerId, { userId: authUser.id, email: authUser.email })
-
-  let syncedUser: User | null = null
-  let errorMessage: string | undefined
-
-  try {
-    // 验证邮箱不能为空
-    if (!authUser.email) {
-      throw new Error("用户邮箱不能为空")
-    }
-
-    const currentTime = new Date()
-    const grantAdmin = isConfiguredAdminEmail(authUser.email)
-
-    // 从 user_metadata 或 identities 中提取用户信息
-    const extractedName = extractUserName(authUser)
-    const extractedAvatarUrl = extractAvatarUrl(authUser)
-
-    // 检查用户是否已存在
-    const existingUser = await prisma.user.findUnique({
-      where: { id: authUser.id },
-    })
-
-    if (existingUser) {
-      // 复登：智能更新逻辑 - 仅当字段为空时才从 Auth 同步，已有数据优先
-      const shouldUpdateName = !existingUser.name && extractedName
-      const shouldUpdateAvatar = !existingUser.avatarUrl && extractedAvatarUrl
-
-      const updateData: any = {
-        lastLoginAt: currentTime,
-      }
-
-      if (shouldUpdateName) {
-        updateData.name = extractedName
-      }
-
-      if (shouldUpdateAvatar) {
-        updateData.avatarUrl = extractedAvatarUrl
-      }
-
-      if (grantAdmin && existingUser.role !== "ADMIN") {
-        updateData.role = "ADMIN"
-      }
-
-      const updatedUser = await prisma.user.update({
-        where: { id: authUser.id },
-        data: updateData,
-      })
-
-      syncedUser = updatedUser
-      return updatedUser
-    } else {
-      // 首登：创建新用户，填入所有可用信息
-      const newUser = await prisma.user.create({
-        data: {
-          id: authUser.id,
-          email: authUser.email,
-          name: extractedName,
-          avatarUrl: extractedAvatarUrl,
-          role: grantAdmin ? "ADMIN" : "USER",
-          status: "ACTIVE",
-          lastLoginAt: currentTime,
-        },
-      })
-
-      syncedUser = newUser
-      return newUser
-    }
-  } catch (error) {
-    authLogger.error("用户数据同步失败", { stage: "syncUserFromAuth", userId: authUser.id }, error)
-    errorMessage = error instanceof Error ? error.message : "未知错误"
-    throw new Error(`用户数据同步失败: ${errorMessage}`)
-  } finally {
-    performanceMonitor.endTimer(timerId, MetricType.AUTH_LOGIN_TIME, {
-      success: Boolean(syncedUser),
-      userId: authUser.id,
-      email: authUser.email,
-      error: syncedUser ? undefined : errorMessage,
-    })
-  }
-}
-
-/**
- * 从 Supabase Auth 用户数据中提取用户名
- * 优先级: user_metadata.full_name -> user_metadata.name -> user_metadata.user_name -> null
- */
-function extractUserName(authUser: SupabaseUser): string | null {
-  const metadata = authUser.user_metadata
-  if (!metadata) return null
-
-  return metadata.full_name || metadata.name || metadata.user_name || null
-}
-
-/**
- * 从 Supabase Auth 用户数据中提取头像 URL
- * 优先级: user_metadata.avatar_url -> user_metadata.picture -> null
- */
-function extractAvatarUrl(authUser: SupabaseUser): string | null {
-  const metadata = authUser.user_metadata
-  if (!metadata) return null
-
-  return metadata.avatar_url || metadata.picture || null
-}
-
-/**
  * 检查邮箱是否已被注册
  */
 export async function isEmailRegistered(email: string): Promise<boolean> {
@@ -449,3 +321,5 @@ export function validateRedirectUrl(url: string): boolean {
     return false
   }
 }
+
+export { generateOAuthState, setOAuthStateCookie, validateOAuthState } from "@/lib/auth/oauth-state"

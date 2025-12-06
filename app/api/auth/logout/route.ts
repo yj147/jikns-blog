@@ -39,23 +39,40 @@ async function handlePost(request: NextRequest) {
         { status: 500 }
       )
     }
-    // 返回成功响应
-    return NextResponse.json(
+    const response = NextResponse.json(
       {
         success: true,
         message: "登出成功",
       },
-      {
-        status: 200,
-        // 清理相关的认证 cookies
-        headers: {
-          "Set-Cookie": [
-            "supabase-auth-token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Strict",
-            "supabase.auth.token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Strict",
-          ].join(", "),
-        },
-      }
+      { status: 200 }
     )
+
+    // 统一清理 Supabase 认证相关的 sb-* cookies，避免残留会话
+    const cookieNames = new Set([
+      "sb-access-token",
+      "sb-refresh-token",
+      "sb-provider",
+      "sb-account",
+      ...request.cookies
+        .getAll()
+        .filter(({ name }) => name.startsWith("sb-"))
+        .map(({ name }) => name),
+    ])
+
+    cookieNames.forEach((name) => {
+      response.cookies.set({
+        name,
+        value: "",
+        path: "/",
+        httpOnly: true,
+        secure: true,
+        sameSite: "lax",
+        expires: new Date(0),
+        maxAge: 0,
+      })
+    })
+
+    return response
   } catch (error) {
     authLogger.error("登出 API 异常", { module: "api/auth/logout" }, error)
 

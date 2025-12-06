@@ -271,7 +271,7 @@ async function handlePost(request: NextRequest) {
       return { activity }
     })
 
-    await auditLogger.logEvent({
+    auditLogger.logEventAsync({
       action: "CREATE_ACTIVITY",
       resource: `activity:${created.id}`,
       success: true,
@@ -443,7 +443,7 @@ async function handleDelete(request: NextRequest) {
       })
     })
 
-    await auditLogger.logEvent({
+    auditLogger.logEventAsync({
       action: "DELETE_ACTIVITY",
       resource: `activity:${activity.id}`,
       userId: user.id,

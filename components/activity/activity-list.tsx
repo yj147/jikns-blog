@@ -1,10 +1,8 @@
 "use client"
 
 import { useState, useCallback, useMemo, useEffect } from "react"
-import type { RefCallback } from "react"
 import { useAuth } from "@/app/providers/auth-provider"
 import { toast } from "sonner"
-import { useInView } from "react-intersection-observer"
 import {
   Dialog,
   DialogContent,
@@ -115,23 +113,11 @@ function useActivityListController({ userId, orderBy, limit }: ActivityListContr
     }
   }, [canViewFollowing, filters.orderBy, updateOrder])
 
-  const { ref: loadMoreRef, inView } = useInView({
-    threshold: 0,
-    rootMargin: "200px",
-  })
-
-  useEffect(() => {
-    if (inView && hasMore && !isLoading) {
-      loadMore()
-    }
-  }, [inView, hasMore, isLoading, loadMore])
-
   return {
     user,
     canViewFollowing,
     filterState,
     activitiesState,
-    loadMoreRef,
   }
 }
 
@@ -145,8 +131,11 @@ export function ActivityList({
   className = "",
 }: ActivityListProps) {
   const [editingActivity, setEditingActivity] = useState<ActivityWithAuthor | null>(null)
-  const { user, canViewFollowing, filterState, activitiesState, loadMoreRef } =
-    useActivityListController({ userId, orderBy, limit })
+  const { user, canViewFollowing, filterState, activitiesState } = useActivityListController({
+    userId,
+    orderBy,
+    limit,
+  })
 
   const {
     filters,
@@ -273,7 +262,6 @@ export function ActivityList({
         error={error}
         hasMore={hasMore}
         loadMore={loadMore}
-        loadMoreRef={loadMoreRef as unknown as RefCallback<HTMLDivElement>}
         searchQuery={searchQuery}
         hasActiveFilters={hasActiveFilters}
         clearAllFilters={clearAllFilters}

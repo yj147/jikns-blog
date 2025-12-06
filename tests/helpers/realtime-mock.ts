@@ -62,14 +62,23 @@ export function createSupabaseRealtimeMock(): SupabaseRealtimeMock {
     channel: vi.fn(() => createChannel()),
     removeChannel: vi.fn(),
     from: vi.fn((table: string) => ({
-      select: vi.fn(() => ({
-        eq: vi.fn((_field: string, id: string) => ({
-          single: vi.fn(async () => ({
-            data: ensureTable(table)[id] ?? null,
+      select: vi.fn(() => {
+        const builder = {
+          eq: vi.fn((_field: string, id: string) => ({
+            single: vi.fn(async () => ({
+              data: ensureTable(table)[id] ?? null,
+              error: null,
+            })),
+          })),
+          in: vi.fn(async (_field: string, ids: string[]) => ({
+            data: ids
+              .map((id) => ensureTable(table)[id])
+              .filter(Boolean),
             error: null,
           })),
-        })),
-      })),
+        }
+        return builder
+      }),
     })),
   }
 

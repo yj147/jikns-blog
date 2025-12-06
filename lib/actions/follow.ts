@@ -14,6 +14,7 @@ import { rateLimitCheckForAction } from "@/lib/rate-limit/activity-limits"
 import { performanceMonitor, MetricType } from "@/lib/performance-monitor"
 import { logger } from "@/lib/utils/logger"
 import { mapAuthErrorCode } from "@/lib/api/auth-error-mapper"
+import { getClientIpFromHeaders } from "@/lib/api/get-client-ip"
 
 function mapFollowServiceError(error: FollowServiceError): { code: string; message: string } {
   switch (error.code) {
@@ -70,16 +71,8 @@ interface RequestContext {
 
 async function resolveClientIp(): Promise<string | undefined> {
   const headerList = await headers()
-  const forwarded = headerList.get("x-forwarded-for")
-  if (forwarded) {
-    return forwarded.split(",")[0]?.trim()
-  }
-  return (
-    headerList.get("x-real-ip") ||
-    headerList.get("cf-connecting-ip") ||
-    headerList.get("x-client-ip") ||
-    undefined
-  )
+  const ip = getClientIpFromHeaders(headerList)
+  return ip === "unknown" ? undefined : ip
 }
 
 async function resolveUserAgent(): Promise<string | undefined> {

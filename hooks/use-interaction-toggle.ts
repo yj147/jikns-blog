@@ -6,6 +6,30 @@ export interface InteractionStatus {
   count: number
 }
 
+function normalizeStatus(
+  result: InteractionStatus,
+  fallback: InteractionStatus,
+  previous: InteractionStatus
+): InteractionStatus {
+  const nextCount = Number.isFinite(result?.count)
+    ? result.count
+    : Number.isFinite(fallback?.count)
+      ? fallback.count
+      : previous.count
+
+  const nextActive =
+    typeof result?.isActive === "boolean"
+      ? result.isActive
+      : typeof fallback?.isActive === "boolean"
+        ? fallback.isActive
+        : previous.isActive
+
+  return {
+    isActive: nextActive,
+    count: Math.max(0, nextCount),
+  }
+}
+
 /**
  * 安全调用回调函数，捕获并记录异常
  * @param callback 回调函数
@@ -102,14 +126,16 @@ export function useInteractionToggle(
     setIsLoading(true)
     try {
       const result = await fetcherRef.current()
-      setStatus(result)
-      return result
+      const normalized = normalizeStatus(result, statusRef.current, statusRef.current)
+      setStatus(normalized)
+      return normalized
     } catch (error) {
       if (onFetchErrorRef.current) {
         const fallback = onFetchErrorRef.current(error)
         if (fallback) {
-          setStatus(fallback)
-          return fallback
+          const normalized = normalizeStatus(fallback, statusRef.current, statusRef.current)
+          setStatus(normalized)
+          return normalized
         }
       }
       return undefined
@@ -160,9 +186,10 @@ export function useInteractionToggle(
 
     try {
       const result = await togglerRef.current()
-      setStatus(result)
-      safeInvoke(onStatusChangeRef.current, result.isActive, result.count, "成功")
-      return result
+      const normalized = normalizeStatus(result, optimistic, previous)
+      setStatus(normalized)
+      safeInvoke(onStatusChangeRef.current, normalized.isActive, normalized.count, "成功")
+      return normalized
     } catch (error) {
       setStatus(previous)
       safeInvoke(onStatusChangeRef.current, previous.isActive, previous.count, "回滚")

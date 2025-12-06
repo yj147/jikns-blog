@@ -8,10 +8,10 @@ import { requireAdmin } from "@/lib/auth"
 import { RateLimiter } from "@/lib/security"
 import { authLogger } from "@/lib/utils/logger"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
+import { getClientIp } from "@/lib/api/get-client-ip"
 
 async function handleGet(request: NextRequest) {
-  const clientIP =
-    request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown"
+  const clientIP = getClientIp(request)
 
   try {
     // 速率限制检查 - 每个IP每分钟最多20次管理员检查

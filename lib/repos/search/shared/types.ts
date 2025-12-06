@@ -114,10 +114,8 @@ export interface ResolvedSearchUsersParams {
 export interface SearchUserResult {
   id: string
   name: string | null
-  email: string
   avatarUrl: string | null
   bio: string | null
-  role: string
   rank: number
   similarity: number
 }

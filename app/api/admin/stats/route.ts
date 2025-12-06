@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { createSuccessResponse, createErrorResponse, ErrorCode } from "@/lib/api/unified-response"
 import { logger } from "@/lib/utils/logger"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
+import { signAvatarUrl } from "@/lib/storage/signed-url"
 
 interface AdminStatsPayload {
   totals: {
@@ -155,15 +156,17 @@ async function handleGet(request: NextRequest) {
         likes: post._count.likes,
         createdAt: post.createdAt.toISOString(),
       })),
-      recentActivities: recentActivitiesRaw.map((activity) => ({
-        id: activity.id,
-        content: activity.content,
-        authorName: activity.author?.name ?? "匿名",
-        authorAvatar: activity.author?.avatarUrl ?? null,
-        createdAt: activity.createdAt.toISOString(),
-        likes: activity.likesCount,
-        comments: activity.commentsCount,
-      })),
+      recentActivities: await Promise.all(
+        recentActivitiesRaw.map(async (activity) => ({
+          id: activity.id,
+          content: activity.content,
+          authorName: activity.author?.name ?? "匿名",
+          authorAvatar: await signAvatarUrl(activity.author?.avatarUrl ?? null),
+          createdAt: activity.createdAt.toISOString(),
+          likes: activity.likesCount,
+          comments: activity.commentsCount,
+        }))
+      ),
       pending: {
         reviewPosts: draftPosts,
         bannedUsers,

@@ -13,8 +13,8 @@ import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/database"
-import type { Session } from "@supabase/supabase-js"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
+import { getClientIp } from "@/lib/api/get-client-ip"
 
 // 登录请求验证 Schema
 const LoginSchema = z.object({
@@ -24,8 +24,7 @@ const LoginSchema = z.object({
 })
 
 async function handlePost(request: NextRequest) {
-  const clientIP =
-    request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown"
+  const clientIP = getClientIp(request)
 
   try {
     // 速率限制检查 - 每个IP每15分钟最多尝试5次
@@ -145,12 +144,9 @@ async function handlePost(request: NextRequest) {
     }
     const responsePayload = await buildSuccessResponse(
       {
-        user: {
-          id: data.user.id,
-          email: data.user.email,
-          user_metadata: data.user.user_metadata,
-        },
-        session: data.session,
+        id: data.user.id,
+        email: data.user.email,
+        user_metadata: data.user.user_metadata,
       },
       redirectTo
     )
@@ -170,17 +166,18 @@ async function handlePost(request: NextRequest) {
 }
 
 async function buildSuccessResponse(
-  supabaseData: {
-    user: { id: string; email: string | null | undefined; user_metadata: Record<string, any> | null }
-    session: Session | null
+  supabaseUser: {
+    id: string
+    email: string | null | undefined
+    user_metadata: Record<string, any> | null
   },
   redirectTo?: string
 ) {
   try {
     const syncedUser = await syncUserFromAuth({
-      id: supabaseData.user.id,
-      email: supabaseData.user.email,
-      user_metadata: supabaseData.user.user_metadata,
+      id: supabaseUser.id,
+      email: supabaseUser.email,
+      user_metadata: supabaseUser.user_metadata,
     })
 
     return {
@@ -195,12 +192,11 @@ async function buildSuccessResponse(
           status: syncedUser.status,
           avatarUrl: syncedUser.avatarUrl,
         },
-        session: extractSessionTokens(supabaseData.session),
         redirectTo: redirectTo || "/",
       },
     }
   } catch (error) {
-    authLogger.error("用户数据同步失败", { userId: supabaseData.user.id }, error)
+    authLogger.error("用户数据同步失败", { userId: supabaseUser.id }, error)
 
     return {
       success: true,
@@ -208,26 +204,16 @@ async function buildSuccessResponse(
       warning: "sync_failed",
       data: {
         user: {
-          id: supabaseData.user.id,
-          email: supabaseData.user.email,
-          name: supabaseData.user.user_metadata?.full_name || supabaseData.user.user_metadata?.name,
+          id: supabaseUser.id,
+          email: supabaseUser.email,
+          name: supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name,
           role: "USER",
           status: "ACTIVE",
-          avatarUrl: supabaseData.user.user_metadata?.avatar_url,
+          avatarUrl: supabaseUser.user_metadata?.avatar_url,
         },
-        session: extractSessionTokens(supabaseData.session),
         redirectTo: redirectTo || "/",
       },
     }
-  }
-}
-
-function extractSessionTokens(session: Session | null) {
-  if (!session) return null
-  return {
-    access_token: session.access_token,
-    refresh_token: session.refresh_token,
-    expires_at: session.expires_at,
   }
 }
 

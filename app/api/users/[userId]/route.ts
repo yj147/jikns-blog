@@ -5,6 +5,7 @@ import { apiLogger } from "@/lib/utils/logger"
 import { createErrorResponse, ErrorCode } from "@/lib/api/unified-response"
 import { generateRequestId } from "@/lib/auth/session"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
+import { signAvatarUrl } from "@/lib/storage/signed-url"
 
 /**
  * 获取用户完整资料（需鉴权）
@@ -82,6 +83,9 @@ async function handleGet(
       return createErrorResponse(ErrorCode.NOT_FOUND, "用户不存在", undefined, 404, { requestId })
     }
 
+    // 签名头像 URL（activity-images bucket 是私有的）
+    const signedAvatarUrl = await signAvatarUrl(user.avatarUrl)
+
     // Linus 原则：统一响应格式
     return NextResponse.json({
       success: true,
@@ -89,7 +93,7 @@ async function handleGet(
         id: user.id,
         name: user.name,
         email: user.email,
-        avatarUrl: user.avatarUrl,
+        avatarUrl: signedAvatarUrl,
         bio: user.bio,
         role: user.role,
         status: user.status,

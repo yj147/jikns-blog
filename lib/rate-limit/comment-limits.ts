@@ -8,6 +8,7 @@
 import { RateLimiter } from "@/lib/security"
 import { getRedisClient } from "@/lib/rate-limit/redis-client"
 import { performanceMonitor, MetricType } from "@/lib/performance-monitor"
+import { getClientIpFromHeaders } from "@/lib/api/get-client-ip"
 
 // 限流配置接口
 interface RateLimitConfig {
@@ -134,19 +135,8 @@ export async function checkCommentRate(params: CheckRateParams): Promise<RateLim
  * @returns 客户端 IP 地址或 undefined
  */
 export function extractClientIP(headers: Headers): string | undefined {
-  // 优先级: x-forwarded-for > x-real-ip
-  const forwardedFor = headers.get("x-forwarded-for")
-  if (forwardedFor) {
-    // x-forwarded-for 可能包含多个 IP，取第一个
-    return forwardedFor.split(",")[0].trim()
-  }
-
-  const realIP = headers.get("x-real-ip")
-  if (realIP) {
-    return realIP.trim()
-  }
-
-  return undefined
+  const ip = getClientIpFromHeaders(headers)
+  return ip === "unknown" ? undefined : ip
 }
 
 // 导出配置加载函数，用于测试

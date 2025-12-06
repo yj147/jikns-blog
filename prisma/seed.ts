@@ -67,9 +67,10 @@ async function createUserWithAuth(
     name: string
     avatarUrl: string
     bio: string
-    socialLinks: any
+    socialLinks?: any
     role: Role
     status: UserStatus
+    privacySettings?: { profileVisibility: "public" | "followers" | "private" }
   }
 ) {
   // 1. 先在 Supabase Auth 创建认证账号
@@ -141,7 +142,15 @@ async function resetDatabase(db: PrismaClient) {
   if (supabaseServiceKey) {
     console.log("  → 清理 Supabase Auth 测试账号...")
     const { data: users } = await supabaseAdmin.auth.admin.listUsers()
-    const testEmails = ["admin@example.com", "user@example.com"]
+    const testEmails = [
+      "admin@example.com",
+      "user@example.com",
+      "feed-ops@example.com",
+      "feed-writer@example.com",
+      "feed-reader@example.com",
+      "feed-guest@example.com",
+      "feed-analyst@example.com",
+    ]
 
     for (const email of testEmails) {
       const user = users?.users.find((u) => u.email === email)
@@ -155,6 +164,7 @@ async function resetDatabase(db: PrismaClient) {
   // 清理 Prisma 数据
   await db.$transaction([
     db.systemSetting.deleteMany(),
+    db.notification.deleteMany(),
     db.follow.deleteMany(),
     db.bookmark.deleteMany(),
     db.like.deleteMany(),
@@ -196,6 +206,60 @@ async function seedBaseline(db: PrismaClient): Promise<FeedSeedContext> {
     status: UserStatus.ACTIVE,
   })
   console.log(`✅ 普通用户创建完成: ${normalUser.email}`)
+
+  console.log("👤 创建隐私/粉丝测试用户...")
+  const followersOnlyUser = await createUserWithAuth("feed-ops@example.com", "feedops123", {
+    name: "粉丝可见用户",
+    avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=feedops",
+    bio: "只对粉丝开放的用户。",
+    role: Role.USER,
+    status: UserStatus.ACTIVE,
+    privacySettings: { profileVisibility: "followers" },
+  })
+
+  const privateUser = await createUserWithAuth("feed-writer@example.com", "feedwriter123", {
+    name: "私密作者",
+    avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=writer",
+    bio: "仅自己可见的资料。",
+    role: Role.USER,
+    status: UserStatus.ACTIVE,
+    privacySettings: { profileVisibility: "private" },
+  })
+
+  const followerUser = await createUserWithAuth("feed-reader@example.com", "feedreader123", {
+    name: "忠实粉丝",
+    avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=reader",
+    bio: "关注你的人。",
+    role: Role.USER,
+    status: UserStatus.ACTIVE,
+  })
+
+  const guestUser = await createUserWithAuth("feed-guest@example.com", "feedguest123", {
+    name: "路过的访客",
+    avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=guest",
+    bio: "未关注的访客。",
+    role: Role.USER,
+    status: UserStatus.ACTIVE,
+  })
+
+  const analystUser = await createUserWithAuth("feed-analyst@example.com", "feedanalyst123", {
+    name: "数据分析师",
+    avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=analyst",
+    bio: "负责数据一致性与同步验证的基线用户。",
+    role: Role.USER,
+    status: UserStatus.ACTIVE,
+    privacySettings: { profileVisibility: "public" },
+  })
+
+  console.log(
+    `✅ 隐私/粉丝测试用户创建完成: ${[
+      followersOnlyUser.email,
+      privateUser.email,
+      followerUser.email,
+      guestUser.email,
+      analystUser.email,
+    ].join(", ")}`
+  )
 
   console.log("🏷️ 创建标签...")
   const techTag = await db.tag.create({
@@ -391,7 +455,7 @@ sayHello('World');
   ]
 
   for (const candidate of tagCandidates) {
-      await db.activityTagCandidate.create({
+    await db.activityTagCandidate.create({
       data: { id: randomUUID(), ...candidate, updatedAt: new Date() },
     })
   }

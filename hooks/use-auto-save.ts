@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useDebounce } from "@/hooks/use-debounce"
 
 export interface UseAutoSaveOptions<T> {
@@ -41,6 +41,8 @@ export function useAutoSave<T extends Record<string, any>>({
   const isSavingRef = useRef(false)
   const lastSavedAtRef = useRef<Date | null>(null)
   const lastSavedDataRef = useRef<T | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
 
   // 创建过滤后的数据（忽略指定字段）
   const filteredData = useCallback(() => {
@@ -62,14 +64,18 @@ export function useAutoSave<T extends Record<string, any>>({
 
     try {
       isSavingRef.current = true
+      setIsSaving(true)
       await onSave(data)
-      lastSavedAtRef.current = new Date()
+      const savedAt = new Date()
+      lastSavedAtRef.current = savedAt
+      setLastSavedAt(savedAt)
       lastSavedDataRef.current = { ...data }
     } catch (error) {
       console.error("自动保存失败:", error)
       throw error
     } finally {
       isSavingRef.current = false
+      setIsSaving(false)
     }
   }, [data, onSave])
 
@@ -98,8 +104,8 @@ export function useAutoSave<T extends Record<string, any>>({
   }, [debouncedData, enabled, hasDataChanged, triggerSave])
 
   return {
-    isSaving: isSavingRef.current,
+    isSaving,
     triggerSave,
-    lastSavedAt: lastSavedAtRef.current,
+    lastSavedAt,
   }
 }

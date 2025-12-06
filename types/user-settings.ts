@@ -1,11 +1,21 @@
 import { z } from "zod"
 import { NotificationType } from "@/lib/generated/prisma"
 
+const SAFE_PROTOCOLS = ["http:", "https:", "mailto:"]
+
 const socialLinkUrlSchema = z
   .string()
   .trim()
   .url("链接格式不正确")
   .max(200, "链接长度不能超过 200 个字符")
+  .refine((value) => {
+    try {
+      const protocol = new URL(value).protocol
+      return SAFE_PROTOCOLS.includes(protocol)
+    } catch {
+      return false
+    }
+  }, "仅支持 http/https/mailto 链接")
 
 const optionalSocialLinkSchema = z.preprocess((value) => {
   if (typeof value !== "string") return value

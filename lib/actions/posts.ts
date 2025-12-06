@@ -629,7 +629,7 @@ export async function getPosts(
           viewCount: true,
           publishedAt: true,
           createdAt: true,
-          content: true, // 需要完整内容来计算长度
+          // 不获取完整 content，避免大量数据传输
           author: {
             select: { id: true, name: true, avatarUrl: true },
           },
@@ -686,7 +686,8 @@ export async function getPosts(
         likesCount: post._count.likes,
         bookmarksCount: post._count.bookmarks,
       },
-      contentLength: post.content.length, // 内容长度
+      // 不再获取完整 content，列表页不需要精确长度
+      contentLength: 0,
     }))
 
     const totalPages = Math.ceil(total / limit)

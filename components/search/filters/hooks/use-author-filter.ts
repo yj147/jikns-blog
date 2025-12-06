@@ -11,7 +11,6 @@ export interface AuthorOption {
   name: string | null
   avatarUrl: string | null
   bio: string | null
-  role: string
 }
 
 interface UseAuthorFilterOptions {
@@ -68,7 +67,6 @@ export function useAuthorFilter(options: UseAuthorFilterOptions): UseAuthorFilte
             name: data.name,
             avatarUrl: data.avatarUrl,
             bio: data.bio,
-            role: data.status,
           })
           setAuthorQuery(data.name ?? "")
         }

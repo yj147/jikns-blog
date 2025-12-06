@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { validateApiPermissions } from "@/lib/permissions"
 import { prisma } from "@/lib/prisma"
 import { authLogger } from "@/lib/utils/logger"
-import { signAvatarUrl } from "@/lib/storage/signed-url"
+import { signAvatarUrl, signCoverImageUrl } from "@/lib/storage/signed-url"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 const PHONE_PATTERN = /^[0-9()+\-\.\s]*$/
@@ -33,6 +33,7 @@ async function handleGet(request: NextRequest) {
         name: true,
         bio: true,
         avatarUrl: true,
+        coverImage: true,
         socialLinks: true,
         location: true,
         phone: true,
@@ -70,6 +71,7 @@ async function handleGet(request: NextRequest) {
       data: {
         ...userProfile,
         avatarUrl: (await signAvatarUrl(userProfile.avatarUrl)) ?? userProfile.avatarUrl,
+        coverImage: (await signCoverImageUrl(userProfile.coverImage)) ?? userProfile.coverImage,
       },
       message: "用户资料获取成功",
     })
@@ -188,6 +190,21 @@ async function handlePut(request: NextRequest) {
       updateData.avatarUrl = avatarUrl || null
     }
 
+    if (body.coverImage !== undefined) {
+      const coverImage = body.coverImage?.trim()
+      if (coverImage && !isValidUrl(coverImage)) {
+        return NextResponse.json(
+          {
+            error: "封面URL格式不正确",
+            code: "INVALID_COVER_URL",
+            field: "coverImage",
+          },
+          { status: 400 }
+        )
+      }
+      updateData.coverImage = coverImage || null
+    }
+
     if (body.socialLinks !== undefined) {
       if (body.socialLinks && typeof body.socialLinks !== "object") {
         return NextResponse.json(
@@ -240,6 +257,7 @@ async function handlePut(request: NextRequest) {
         name: true,
         bio: true,
         avatarUrl: true,
+        coverImage: true,
         socialLinks: true,
         updatedAt: true,
       },

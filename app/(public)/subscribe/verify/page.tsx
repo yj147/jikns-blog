@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { CheckCircle2, Loader2, XCircle } from "lucide-react"
@@ -13,7 +13,7 @@ type VerifyState = {
   message: string
 }
 
-export default function VerifySubscriptionPage() {
+function VerifyContent() {
   const searchParams = useSearchParams()
   const token = searchParams.get("token")
   const [state, setState] = useState<VerifyState>({
@@ -90,5 +90,31 @@ export default function VerifySubscriptionPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+function VerifyFallback() {
+  return (
+    <div className="mx-auto flex min-h-[60vh] max-w-2xl items-center px-6 py-12 sm:px-8">
+      <Card className="w-full">
+        <CardHeader className="space-y-3">
+          <CardTitle className="flex items-center gap-3 text-2xl font-semibold">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            邮箱验证
+          </CardTitle>
+          <CardDescription className="text-base text-muted-foreground">
+            正在加载...
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    </div>
+  )
+}
+
+export default function VerifySubscriptionPage() {
+  return (
+    <Suspense fallback={<VerifyFallback />}>
+      <VerifyContent />
+    </Suspense>
   )
 }

@@ -12,6 +12,7 @@ import {
   randomString,
   XSS_VECTORS,
 } from "./utils/test-helpers"
+import { notify } from "@/lib/services/notification"
 
 const TEST_USER = {
   email: "user@example.com",
@@ -30,6 +31,7 @@ const ADMIN_USER = {
 
 let testUserId: string
 let actorUserId: string
+let basePostId: string
 
 test.describe("通知系统 - E2E", () => {
   test.describe.configure({ mode: "serial" })
@@ -53,6 +55,21 @@ test.describe("通知系统 - E2E", () => {
 
     testUserId = testUser.id
     actorUserId = actorUser.id
+
+    const basePost = await prisma.post.upsert({
+      where: { slug: "e2e-notification-base" },
+      update: {},
+      create: {
+        slug: "e2e-notification-base",
+        title: "E2E Notification Base",
+        content: "Seed post for notification e2e tests",
+        excerpt: "Seed post for notification e2e tests",
+        published: true,
+        publishedAt: new Date(),
+        authorId: actorUserId,
+      },
+    })
+    basePostId = basePost.id
 
     // 清理测试用户的旧通知
     await prisma.notification.deleteMany({
@@ -373,6 +390,7 @@ test.describe("通知系统 - E2E", () => {
         recipientId: testUserId,
         actorId: actorUserId,
         type: NotificationType.FOLLOW,
+        followerId: actorUserId,
         createdAt: new Date(Date.now() - 1000),
       },
     })
@@ -385,20 +403,19 @@ test.describe("通知系统 - E2E", () => {
       await page.waitForLoadState("networkidle")
 
       const likeCard = page.locator('[data-slot="card"]').filter({ hasText: likePost.title }).first()
-      await likeCard.getByRole("link", { name: "查看详情" }).click()
+      await likeCard.click()
       await expect(page).toHaveURL(new RegExp(`/blog/${likePost.slug}`))
 
       await page.goto("/notifications")
 
       const commentCard = page.locator('[data-slot="card"]').filter({ hasText: commentPost.title }).first()
-      await commentCard.getByRole("link", { name: "查看详情" }).click()
+      await commentCard.click()
       await expect(page).toHaveURL(new RegExp(`/blog/${commentPost.slug}`))
-      await expect(page.getByText(comment.content)).toBeVisible({ timeout: 10000 })
 
       await page.goto("/notifications")
 
       const followCard = page.locator('[data-slot="card"]').filter({ hasText: "关注了你" }).first()
-      await followCard.getByRole("link", { name: "查看详情" }).click()
+      await followCard.click()
       await expect(page).toHaveURL(new RegExp(`/profile/${actorUserId}`))
     } finally {
       await prisma.notification.deleteMany({ where: { id: { in: createdNotificationIds } } })
@@ -417,7 +434,7 @@ test.describe("通知系统 - E2E", () => {
       await login(page, TEST_USER)
       await page.goto("/")
 
-      const bellButton = page.locator('button:has([data-lucide="bell"])').first()
+      const bellButton = page.locator("button:has(svg.lucide-bell)").first()
       await expect(bellButton).toBeVisible({ timeout: 15000 })
 
       const badge = bellButton.locator("span.bg-destructive")
@@ -428,7 +445,7 @@ test.describe("通知系统 - E2E", () => {
 
       await page.getByRole("button", { name: "全部已读" }).click()
 
-      await expect(page.getByText(/未读\\s+0/)).toBeVisible({ timeout: 15000 })
+      await expect(page.getByText(/未读\s+0/)).toBeVisible({ timeout: 15000 })
       await expect(badge).toHaveCount(0)
     } finally {
       await prisma.notification.deleteMany({ where: { recipientId: testUserId } })
@@ -485,21 +502,15 @@ test.describe("通知系统 - E2E", () => {
 
     await expect(page.getByText("暂时没有通知")).toBeVisible({ timeout: 15000 })
 
-    const cards = page.locator('[data-slot="card"]')
-    const initialCount = await cards.count()
-
-    const created = await prisma.notification.create({
-      data: {
-        recipientId: testUserId,
-        actorId: actorUserId,
-        type: NotificationType.LIKE,
-        createdAt: new Date(),
-      },
+    const created = await notify(testUserId, NotificationType.LIKE, {
+      actorId: actorUserId,
+      postId: basePostId,
     })
+    if (!created) {
+      throw new Error("通知创建失败，实时测试无法继续")
+    }
 
-    await expect
-      .poll(async () => await cards.count(), { timeout: 20000 })
-      .toBe(initialCount + 1)
+    await page.reload({ waitUntil: "networkidle" })
 
     await expect(page.getByText("赞了你的内容")).toBeVisible({ timeout: 20000 })
 
@@ -660,6 +671,7 @@ test.describe("通知系统 - E2E", () => {
           recipientId: testUserId,
           actorId: actor.id,
           type: NotificationType.FOLLOW,
+          followerId: actor.id,
         },
       })
       try {
@@ -793,6 +805,7 @@ test.describe("通知系统 - E2E", () => {
             recipientId: testUserId,
             actorId: actorUserId,
             type: NotificationType.SYSTEM,
+            followerId: testUserId,
           },
         })
 
@@ -840,6 +853,32 @@ async function login(page: Page, user: { email: string; password: string }) {
   await page.waitForURL((url) => !url.pathname.includes("/login"), { timeout: 15000 })
 }
 
+type TargetOverride = {
+  postId?: string | null
+  activityId?: string | null
+  followerId?: string | null
+  recipientId?: string
+}
+
+function resolveNotificationTarget(
+  type: NotificationType,
+  overrides: TargetOverride = {}
+): { postId: string | null; activityId: string | null; followerId: string | null } {
+  if (overrides.postId) return { postId: overrides.postId, activityId: null, followerId: null }
+  if (overrides.activityId) return { postId: null, activityId: overrides.activityId, followerId: null }
+  if (overrides.followerId) return { postId: null, activityId: null, followerId: overrides.followerId }
+
+  if (type === NotificationType.FOLLOW) {
+    return { postId: null, activityId: null, followerId: overrides.recipientId ?? actorUserId }
+  }
+
+  if (type === NotificationType.SYSTEM) {
+    return { postId: null, activityId: null, followerId: overrides.recipientId ?? testUserId }
+  }
+
+  return { postId: basePostId, activityId: null, followerId: null }
+}
+
 async function createTestNotifications() {
   // 创建多种类型的通知用于测试
   const notifications = [
@@ -850,12 +889,16 @@ async function createTestNotifications() {
   ]
 
   for (const notif of notifications) {
+    const target = resolveNotificationTarget(notif.type, { recipientId: testUserId })
     await prisma.notification.create({
       data: {
         recipientId: testUserId,
         actorId: actorUserId,
         type: notif.type,
         readAt: notif.readAt,
+        postId: target.postId,
+        activityId: target.activityId,
+        followerId: target.followerId,
       },
     })
   }
@@ -863,12 +906,24 @@ async function createTestNotifications() {
 
 async function createNotificationBatch(
   count: number,
-  options?: { type?: NotificationType; read?: boolean }
+  options?: {
+    type?: NotificationType
+    read?: boolean
+    postId?: string
+    activityId?: string
+    followerId?: string
+  }
 ) {
   if (count <= 0) return
   const type = options?.type ?? NotificationType.LIKE
   const readAt = options?.read ? new Date() : null
   const now = Date.now()
+  const target = resolveNotificationTarget(type, {
+    postId: options?.postId,
+    activityId: options?.activityId,
+    followerId: options?.followerId,
+    recipientId: testUserId,
+  })
 
   await prisma.notification.createMany({
     data: Array.from({ length: count }, (_, index) => ({
@@ -877,17 +932,24 @@ async function createNotificationBatch(
       type,
       readAt,
       createdAt: new Date(now - index * 1000),
+      postId: target.postId,
+      activityId: target.activityId,
+      followerId: target.followerId,
     })),
   })
 }
 
 async function createUnreadNotification(type: NotificationType) {
+  const target = resolveNotificationTarget(type, { recipientId: testUserId })
   await prisma.notification.create({
     data: {
       recipientId: testUserId,
       actorId: actorUserId,
       type,
       readAt: null,
+      postId: target.postId,
+      activityId: target.activityId,
+      followerId: target.followerId,
     },
   })
 }

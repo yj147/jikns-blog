@@ -1,3 +1,6 @@
+// 强制动态渲染，确保用户资料始终最新
+export const dynamic = "force-dynamic"
+
 import { logger } from "@/lib/utils/logger"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,6 +15,7 @@ import { FollowButton } from "@/components/follow"
 import { ProfileActivitiesTab } from "@/components/profile/profile-activities-tab"
 import { ProfilePostsTab } from "@/components/profile/profile-posts-tab"
 import { ProfileLikesTab } from "@/components/profile/profile-likes-tab"
+import { FollowerCount } from "@/components/profile/follower-count"
 import { prisma } from "@/lib/prisma"
 import { signAvatarUrl } from "@/lib/storage/signed-url"
 import { privacySettingsSchema, socialLinksSchema } from "@/types/user-settings"
@@ -85,6 +89,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
 
   // 检查是否为当前用户的资料页
   const isOwnProfile = currentUser?.id === targetUser.id
+  const isAdmin = currentUser?.role === "ADMIN"
 
   // 解析隐私设置并进行访问控制检查
   const parsedPrivacy = privacySettingsSchema.safeParse(targetUser.privacySettings ?? {})
@@ -96,14 +101,14 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
   }
 
   // 访问控制：根据profileVisibility检查权限
-  if (!isOwnProfile && privacySettings.profileVisibility === "private") {
-    // private: 仅本人可见，其他人访问返回404
+  if (!isOwnProfile && !isAdmin && privacySettings.profileVisibility === "private") {
+    // private: 仅本人可见（管理员例外）
     notFound()
   }
 
   let viewerFollowsTarget = false
 
-  if (currentUser && !isOwnProfile) {
+  if (currentUser && !isOwnProfile && !isAdmin) {
     const existingFollow = await prisma.follow.findUnique({
       where: {
         followerId_followingId: {
@@ -325,7 +330,10 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                         className="hover:underline"
                       >
                         <div className="text-center">
-                          <p className="text-lg font-bold">{targetUser._count.followers}</p>
+                          <FollowerCount
+                            userId={targetUser.id}
+                            initialCount={targetUser._count.followers}
+                          />
                           <p className="text-muted-foreground text-sm">粉丝</p>
                         </div>
                       </Link>

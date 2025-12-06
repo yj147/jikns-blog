@@ -11,6 +11,8 @@ import { AuthError, isAuthError } from "@/lib/error-handling/auth-error"
 import { createErrorResponse, ErrorCode } from "./unified-response"
 import { logger } from "@/lib/utils/logger"
 
+const isTestEnv = process.env.NODE_ENV === "test"
+
 /**
  * 统一的API错误处理器
  * 自动识别错误类型并返回合适的响应
@@ -79,6 +81,10 @@ export function handleApiError(error: unknown): NextResponse {
       stack: error.stack,
     })
 
+    if (isTestEnv) {
+      console.error(error)
+    }
+
     return createErrorResponse(ErrorCode.INTERNAL_ERROR, error.message || "服务器内部错误", {
       stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
     })
@@ -86,6 +92,9 @@ export function handleApiError(error: unknown): NextResponse {
 
   // 未知错误类型
   logger.error("未知API错误:", { error })
+  if (isTestEnv) {
+    console.error(error)
+  }
   return createErrorResponse(ErrorCode.UNKNOWN_ERROR, "未知错误", { error: String(error) })
 }
 

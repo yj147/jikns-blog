@@ -315,7 +315,8 @@ function generateCSP(): string {
     "default-src": ["'self'"],
     "script-src": [
       "'self'",
-      ...(process.env.NODE_ENV === "development" ? ["'unsafe-eval'", "'unsafe-inline'"] : []),
+      "'unsafe-inline'", // Next.js hydration 和主题切换需要
+      ...(process.env.NODE_ENV === "development" ? ["'unsafe-eval'"] : []),
     ],
     "style-src": [
       "'self'",

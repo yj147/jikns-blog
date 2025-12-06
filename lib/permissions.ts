@@ -4,6 +4,7 @@
  */
 
 import { getCurrentUser, getAuthenticatedUser } from "./auth"
+import { fetchAuthenticatedUser } from "@/lib/auth/session"
 import type { User } from "./generated/prisma"
 import { AuthErrors, isAuthError } from "@/lib/error-handling/auth-error"
 import { performanceMonitor, MetricType } from "@/lib/performance-monitor"
@@ -28,6 +29,39 @@ async function simulateDbLatency() {
 }
 
 async function getFreshUser(): Promise<User | null> {
+  if (isTestEnv) {
+    try {
+      const authUser = await fetchAuthenticatedUser()
+      if (!authUser) return null
+
+      return {
+        id: authUser.id,
+        email: authUser.email ?? "",
+        name: (authUser as any).name ?? null,
+        avatarUrl: authUser.avatarUrl ?? null,
+        coverImage: (authUser as any).coverImage ?? null,
+        role: authUser.role,
+        status: authUser.status,
+        bio: (authUser as any).bio ?? null,
+        bioTokens: (authUser as any).bioTokens ?? null,
+        location: (authUser as any).location ?? null,
+        website: (authUser as any).website ?? null,
+        socialLinks: (authUser as any).socialLinks ?? null,
+        passwordHash: (authUser as any).passwordHash ?? null,
+        nameTokens: (authUser as any).nameTokens ?? null,
+        emailVerified: (authUser as any).emailVerified ?? false,
+        notificationPreferences: (authUser as any).notificationPreferences ?? {},
+        phone: (authUser as any).phone ?? null,
+        privacySettings: (authUser as any).privacySettings ?? {},
+        createdAt: (authUser as any).createdAt ?? new Date(),
+        updatedAt: (authUser as any).updatedAt ?? new Date(),
+        lastLoginAt: (authUser as any).lastLoginAt ?? new Date(),
+      } as User
+    } catch (error) {
+      return null
+    }
+  }
+
   const { user: authUser } = await getAuthenticatedUser()
   if (!authUser?.id) return null
   const now = Date.now()

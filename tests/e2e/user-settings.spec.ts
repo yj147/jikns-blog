@@ -872,8 +872,8 @@ test.describe("用户设置页 - 补充边界测试", () => {
     await expect(avatarButton).toBeEnabled()
 
     // 验证文件输入存在（隐藏）
-    const fileInput = page.locator('input[type="file"][accept*="image"]')
-    await expect(fileInput).toBeAttached()
+    const fileInput = avatarSection.locator('input[type="file"]')
+    await expect(fileInput.first()).toBeAttached()
   })
 
   test("S3: 头像格式提示显示正确", async ({ page }) => {

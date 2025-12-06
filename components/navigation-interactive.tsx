@@ -1,5 +1,6 @@
 "use client"
 
+import { Suspense } from "react"
 import dynamic from "next/dynamic"
 
 const ThemeToggle = dynamic(() => import("./theme-toggle"), {
@@ -24,11 +25,13 @@ const AuthActions = dynamic(() => import("./navigation-auth-actions"), {
 
 export default function NavigationInteractive() {
   return (
-    <div className="flex items-center gap-3">
-      <ThemeToggle />
-      <NavigationClient />
-      <MobileNavigation />
-      <AuthActions />
-    </div>
+    <Suspense fallback={<div className="bg-muted h-10 w-10 rounded-full" />}>
+      <div className="flex items-center gap-3">
+        <ThemeToggle />
+        <NavigationClient />
+        <MobileNavigation />
+        <AuthActions />
+      </div>
+    </Suspense>
   )
 }

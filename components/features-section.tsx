@@ -1,55 +1,75 @@
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { BookOpen, Users, TrendingUp } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { BookOpen, Users, TrendingUp, Zap } from "lucide-react"
+import { cn } from "@/lib/utils"
 
-const features = [
+const featurePalette = {
+  article: { color: "text-action-comment", bg: "bg-action-comment/10" },
+  community: { color: "text-primary", bg: "bg-primary/10" },
+  realtime: { color: "text-status-warning", bg: "bg-status-warning/10" },
+  trending: { color: "text-action-like", bg: "bg-action-like/10" },
+} as const
+
+type FeatureTheme = keyof typeof featurePalette
+
+const features: { icon: typeof BookOpen; title: string; subtitle: string; theme: FeatureTheme }[] = [
   {
     icon: BookOpen,
-    title: "精品博客",
-    description: "高质量的原创内容，深度思考与专业见解",
-    color: "text-blue-500",
+    title: "深度文章",
+    subtitle: "每日精选技术干货",
+    theme: "article",
   },
   {
     icon: Users,
-    title: "社交动态",
-    description: "分享生活点滴，与朋友保持实时互动",
-    color: "text-emerald-500",
+    title: "社区互动",
+    subtitle: "找到志同道合的伙伴",
+    theme: "community",
+  },
+  {
+    icon: Zap,
+    title: "即时动态",
+    subtitle: "掌握第一手资讯",
+    theme: "realtime",
   },
   {
     icon: TrendingUp,
-    title: "智能推荐",
-    description: "基于兴趣的个性化内容推荐系统",
-    color: "text-purple-500",
+    title: "热门话题",
+    subtitle: "大家都在讨论什么",
+    theme: "trending",
   },
 ]
 
 export function FeaturesSection() {
   return (
-    <section className="bg-muted/50 px-4 py-16">
-      <div className="container mx-auto">
-        <h2 className="mb-12 text-center text-3xl font-bold">平台特色</h2>
-
-        <div className="grid gap-8 md:grid-cols-3">
-          {features.map((feature) => {
-            const Icon = feature.icon
-            return (
+    <Card className="border-none shadow-none bg-muted/30">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-lg font-bold">探索更多</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {features.map((feature) => {
+          const Icon = feature.icon
+          const palette = featurePalette[feature.theme]
+          return (
+            <div
+              key={feature.title}
+              className="flex items-center gap-3 rounded-lg p-2 transition-colors hover:bg-muted/50 cursor-pointer group"
+            >
               <div
-                key={feature.title}
-                className="h-full rounded-xl border border-transparent transition-all duration-300 hover:-translate-y-2 hover:border-primary/40 hover:shadow-xl"
+                className={cn(
+                  "flex h-10 w-10 items-center justify-center rounded-full",
+                  palette.bg,
+                  palette.color
+                )}
               >
-                <Card className="bg-background/60 group h-full border-0 text-center backdrop-blur">
-                  <CardHeader className="pb-8">
-                    <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-primary/10 to-emerald-500/10 transition-transform duration-300 group-hover:scale-110 group-hover:shadow-lg">
-                      <Icon className={`h-8 w-8 ${feature.color}`} />
-                    </div>
-                    <CardTitle className="transition-colors group-hover:text-primary">{feature.title}</CardTitle>
-                    <CardDescription className="text-base leading-relaxed">{feature.description}</CardDescription>
-                  </CardHeader>
-                </Card>
+                <Icon className="h-5 w-5" />
               </div>
-            )
-          })}
-        </div>
-      </div>
-    </section>
+              <div>
+                <p className="font-medium leading-none group-hover:text-primary transition-colors">{feature.title}</p>
+                <p className="text-xs text-muted-foreground mt-1">{feature.subtitle}</p>
+              </div>
+            </div>
+          )
+        })}
+      </CardContent>
+    </Card>
   )
 }

@@ -16,7 +16,6 @@ import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { ensureCsrfToken, getCsrfHeaders } from "@/lib/security/csrf-client"
-import { createClient } from "@/lib/supabase"
 
 // 表单验证 schema
 const emailAuthSchema = z
@@ -69,7 +68,6 @@ export function EmailAuthForm({ redirect = "/", mode = "login" }: EmailAuthFormP
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
 
   const router = useRouter()
-  const supabase = createClient()
 
   const form = useForm<EmailAuthFormData>({
     resolver: zodResolver(emailAuthSchema),
@@ -116,23 +114,13 @@ export function EmailAuthForm({ redirect = "/", mode = "login" }: EmailAuthFormP
           text: result.message || "登录成功！正在跳转...",
         })
 
-        // 尝试设置 Supabase 会话（失败时静默处理，不阻止重定向）
-        if (result.data?.session?.access_token && result.data?.session?.refresh_token) {
-          try {
-            await supabase.auth.setSession({
-              access_token: result.data.session.access_token,
-              refresh_token: result.data.session.refresh_token,
-            })
-          } catch (err) {
-            console.warn("设置 Supabase 会话失败，使用 cookie 会话继续", err)
-          }
-        }
+        // 通知全局 AuthProvider 从服务端 Cookie 同步会话
+        window.dispatchEvent(new Event("auth:server-login"))
 
-        // 使用 window.location 确保完整页面导航
         const targetUrl = result.data?.redirectTo || redirect
         setTimeout(() => {
-          window.location.href = targetUrl
-        }, 1000)
+          window.location.assign(targetUrl)
+        }, 400)
       } else {
         const csrf = await ensureCsrfToken()
         const response = await fetch("/api/auth/register", {
@@ -173,10 +161,12 @@ export function EmailAuthForm({ redirect = "/", mode = "login" }: EmailAuthFormP
           text: result.message || "注册成功！正在跳转...",
         })
 
+        // 注册成功同样触发会话同步，避免导航栏状态不同步
+        window.dispatchEvent(new Event("auth:server-login"))
+
         setTimeout(() => {
-          router.push(result.data?.redirectTo || redirect)
-          router.refresh()
-        }, 1000)
+          window.location.assign(result.data?.redirectTo || redirect)
+        }, 400)
       }
     } catch (error) {
       console.error("认证错误:", error)
@@ -224,7 +214,10 @@ export function EmailAuthForm({ redirect = "/", mode = "login" }: EmailAuthFormP
           type="email"
           placeholder="your@example.com"
           disabled={loading}
-          {...form.register("email")}
+          {...form.register("email", {
+            onChange: (e) => form.setValue("email", e.target.value, { shouldValidate: true }),
+            onBlur: () => form.trigger("email"),
+          })}
         />
         {form.formState.errors.email && (
           <p className="text-sm text-red-600 dark:text-red-400">
@@ -241,7 +234,16 @@ export function EmailAuthForm({ redirect = "/", mode = "login" }: EmailAuthFormP
           type="password"
           placeholder="请输入密码"
           disabled={loading}
-          {...form.register("password")}
+          {...form.register("password", {
+            onChange: (e) => form.setValue("password", e.target.value, { shouldValidate: true }),
+            onBlur: () => form.trigger("password"),
+          })}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault()
+              form.handleSubmit(onSubmit)()
+            }
+          }}
         />
         {form.formState.errors.password && (
           <p className="text-sm text-red-600 dark:text-red-400">

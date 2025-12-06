@@ -5,6 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { NextRequest } from "next/server"
+import { generateOAuthState } from "@/lib/auth/oauth-state"
 
 // 创建Mock Supabase客户端
 const mockSignInWithOAuth = vi.fn()
@@ -65,6 +66,7 @@ vi.mock("next/headers", () => ({
 describe("GitHub OAuth 简化集成测试", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    process.env.OAUTH_STATE_SECRET = "test-oauth-state-secret"
 
     // 设置默认Mock行为
     mockSignInWithOAuth.mockResolvedValue({
@@ -203,8 +205,17 @@ describe("GitHub OAuth 简化集成测试", () => {
       // 动态导入OAuth路由处理器
       const { GET: callbackHandler } = await import("@/app/auth/callback/route")
 
+      const stateToken = generateOAuthState()
+      const headers = new Headers()
+      headers.set(
+        "cookie",
+        `oauth_state=${stateToken.state}.${stateToken.issuedAt}.${stateToken.signature}`
+      )
       const request = new NextRequest(
-        new URL("http://localhost:3000/auth/callback?code=test-code&state=test-state")
+        new URL(
+          `http://localhost:3000/auth/callback?code=test-code&state=${stateToken.state}`
+        ),
+        { headers }
       )
 
       // Mock exchangeCodeForSession 成功

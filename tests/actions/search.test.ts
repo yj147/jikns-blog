@@ -98,7 +98,6 @@ describe("搜索功能测试", () => {
           name: "Test User",
           avatarUrl: null,
           bio: "Test bio",
-          role: "USER",
           similarity: 0.7,
         },
       ]
@@ -546,7 +545,6 @@ describe("搜索功能测试", () => {
           name: "React 开发者",
           avatarUrl: null,
           bio: "专注于 React 生态系统",
-          role: "USER",
           similarity: 0.8,
         },
       ]
@@ -630,7 +628,6 @@ describe("搜索功能测试", () => {
         name: `User ${i}`,
         avatarUrl: null,
         bio: null,
-        role: "USER",
         similarity: 0.9 - i * 0.1,
       }))
 
@@ -742,7 +739,6 @@ describe("搜索功能测试", () => {
           name: null,
           avatarUrl: null,
           bio: null,
-          role: "USER",
           similarity: 0.92,
         },
       ]

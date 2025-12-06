@@ -6,6 +6,7 @@
 import { prisma } from "./prisma"
 import { getCurrentUser } from "./auth"
 import { logger } from "./utils/logger"
+import { getClientIpFromHeaders } from "@/lib/api/get-client-ip"
 
 /**
  * 审计事件类型
@@ -157,6 +158,15 @@ export class AuditLogger {
         error
       )
     }
+  }
+
+  /**
+   * Fire-and-forget 版本，不阻塞调用者
+   */
+  logEventAsync(params: Parameters<typeof this.logEvent>[0]): void {
+    this.logEvent(params).catch((err) => {
+      logger.error("审计日志异步写入失败", { action: params.action }, err)
+    })
   }
 
   /**
@@ -501,12 +511,8 @@ export function withAuditLog(
  * 获取客户端 IP 地址
  */
 export function getClientIP(request: Request): string | undefined {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0] ||
-    request.headers.get("x-real-ip") ||
-    request.headers.get("x-client-ip") ||
-    undefined
-  )
+  const ip = getClientIpFromHeaders(request.headers)
+  return ip === "unknown" ? undefined : ip
 }
 
 /**

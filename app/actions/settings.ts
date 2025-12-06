@@ -1,6 +1,6 @@
 "use server"
 
-import { revalidateTag } from "next/cache"
+import { revalidateTag, revalidatePath } from "next/cache"
 import { z, ZodError } from "zod"
 import { cookies } from "next/headers"
 import { prisma } from "@/lib/prisma"
@@ -36,6 +36,8 @@ const AVATAR_ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gi
 const AVATAR_MAX_SIZE = 5 * 1024 * 1024
 const AVATAR_BUCKET = "activity-images"
 const AVATAR_PURPOSE = "avatar"
+const COVER_ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"] as const
+const COVER_MAX_SIZE = 8 * 1024 * 1024
 
 const profileSchema = z
   .object({
@@ -96,10 +98,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function buildApiUrl(path: string): string {
+  // 内部 API 调用使用服务器端运行时变量
+  // 注意：NEXT_PUBLIC_* 在构建时嵌入，不适合用于运行时端口检测
   const base =
-    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.INTERNAL_API_URL ||
     process.env.APP_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+    `http://localhost:${process.env.PORT || "3000"}`
 
   return new URL(path, base).toString()
 }
@@ -128,6 +133,11 @@ async function buildCookieHeader(): Promise<Record<string, string>> {
     if (csrfToken) {
       headers["X-CSRF-Token"] = csrfToken
     }
+
+    // 设置 Origin 和 Referer 以满足内部 API 的来源校验
+    const baseUrl = buildApiUrl("/").replace(/\/$/, "")
+    headers.Origin = baseUrl
+    headers.Referer = `${baseUrl}/`
 
     return headers
   } catch {
@@ -178,6 +188,55 @@ function validateAvatarInput(file: File | null): ActionFailure | null {
       error: "头像大小不能超过 5MB",
       code: "VALIDATION_ERROR",
       field: "avatar",
+    }
+  }
+
+  return null
+}
+
+function validateCoverInput(file: File | null): ActionFailure | null {
+  if (!file) {
+    return {
+      success: false,
+      error: "请选择要上传的封面图",
+      code: "VALIDATION_ERROR",
+      field: "coverImage",
+    }
+  }
+
+  if (!(file instanceof File)) {
+    return {
+      success: false,
+      error: "封面文件无效",
+      code: "VALIDATION_ERROR",
+      field: "coverImage",
+    }
+  }
+
+  if (!COVER_ALLOWED_TYPES.includes(file.type as (typeof COVER_ALLOWED_TYPES)[number])) {
+    return {
+      success: false,
+      error: "仅支持 JPG/PNG/WebP 图片",
+      code: "VALIDATION_ERROR",
+      field: "coverImage",
+    }
+  }
+
+  if (file.size === 0) {
+    return {
+      success: false,
+      error: "封面文件为空",
+      code: "VALIDATION_ERROR",
+      field: "coverImage",
+    }
+  }
+
+  if (file.size > COVER_MAX_SIZE) {
+    return {
+      success: false,
+      error: "封面大小不能超过 8MB",
+      code: "VALIDATION_ERROR",
+      field: "coverImage",
     }
   }
 
@@ -272,6 +331,9 @@ async function enforceOwnershipOrAdminSettings(targetUserId: string, action: str
 async function refreshUserCache(userId: string) {
   revalidateTag("user:self")
   revalidateTag(`user:${userId}`)
+  // 刷新个人资料页路由缓存
+  revalidatePath("/profile")
+  revalidatePath(`/profile/${userId}`)
 }
 
 function normalizeSocialLinks(input: unknown): Record<string, string> | null {
@@ -331,6 +393,88 @@ export async function updateAvatar(
       { module: "app/actions/settings", action: "updateAvatar", userId },
       error
     )
+    return formatZodError(error)
+  }
+}
+
+export async function updateCoverImage(
+  userId: string,
+  formData: FormData
+): Promise<ActionSuccess<{ id: string; coverImage: string | null }> | ActionFailure> {
+  let cookieHeader: Record<string, string> = {}
+  try {
+    const currentUser = await enforceOwnershipOrAdminSettings(userId, "封面图")
+    const file = (formData.get("cover") ?? formData.get("coverImage")) as File | null
+
+    const validationError = validateCoverInput(file)
+    if (validationError) return validationError
+
+    cookieHeader = await buildCookieHeader()
+    const response = await fetch(buildApiUrl("/api/user/cover-image"), {
+      method: "POST",
+      body: formData,
+      headers: cookieHeader,
+    })
+
+    const json = await response.json().catch(() => null)
+    if (!response.ok || !json?.success) {
+      return {
+        success: false,
+        error: json?.error?.message || "封面上传失败",
+        code: json?.error?.code || "UPLOAD_FAILED",
+      }
+    }
+
+    const coverUrl = json?.data?.signedUrl ?? json?.data?.coverImage ?? null
+
+    await logAdminProfileAction("ADMIN_UPDATE_COVER", currentUser.id, userId, {
+      coverImage: coverUrl,
+    })
+    await refreshUserCache(userId)
+
+    return {
+      success: true,
+      data: { id: userId, coverImage: coverUrl },
+      message: "封面已更新",
+    }
+  } catch (error) {
+    logger.error("更新封面失败", { module: "app/actions/settings", userId }, error)
+    return formatZodError(error)
+  }
+}
+
+export async function deleteCoverImage(
+  userId: string
+): Promise<ActionSuccess<{ id: string; coverImage: string | null }> | ActionFailure> {
+  let cookieHeader: Record<string, string> = {}
+  try {
+    const currentUser = await enforceOwnershipOrAdminSettings(userId, "封面图")
+    cookieHeader = await buildCookieHeader()
+
+    const response = await fetch(buildApiUrl("/api/user/cover-image"), {
+      method: "DELETE",
+      headers: cookieHeader,
+    })
+    const json = await response.json().catch(() => null)
+
+    if (!response.ok || !json?.success) {
+      return {
+        success: false,
+        error: json?.error?.message || "删除封面失败",
+        code: json?.error?.code || "DELETE_FAILED",
+      }
+    }
+
+    await logAdminProfileAction("ADMIN_DELETE_COVER", currentUser.id, userId)
+    await refreshUserCache(userId)
+
+    return {
+      success: true,
+      data: { id: userId, coverImage: null },
+      message: "封面已移除",
+    }
+  } catch (error) {
+    logger.error("删除封面失败", { module: "app/actions/settings", userId }, error)
     return formatZodError(error)
   }
 }

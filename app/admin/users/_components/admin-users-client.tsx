@@ -188,7 +188,12 @@ export default function AdminUsersClient({ initialData, initialQuery }: AdminUse
           <Button variant="outline" onClick={() => void mutate()} disabled={isFetching}>
             <RefreshCw className="mr-2 h-4 w-4" /> 刷新
           </Button>
-          <Button variant="secondary">
+          <Button
+            variant="secondary"
+            disabled
+            title="功能开发中"
+            onClick={() => toast({ title: "功能开发中", description: "邀请用户功能即将推出" })}
+          >
             <UserPlus className="mr-2 h-4 w-4" /> 邀请用户
           </Button>
         </div>

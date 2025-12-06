@@ -86,13 +86,13 @@ const supabaseRemotePatterns = [
     protocol: "http",
     hostname: "localhost",
     port: "54321",
-    pathname: "/storage/v1/object/public/**",
+    pathname: "/storage/v1/object/**",
   },
   {
     protocol: "http",
     hostname: "127.0.0.1",
     port: "54321",
-    pathname: "/storage/v1/object/public/**",
+    pathname: "/storage/v1/object/**",
   },
   // 开发/测试环境的外部图片源
   {
@@ -105,14 +105,6 @@ const supabaseRemotePatterns = [
   },
 ]
 
-const supabaseImageDomains = Array.from(
-  new Set(
-    [
-      supabaseHostname,
-      ...(process.env.NODE_ENV !== "production" ? ["localhost", "127.0.0.1"] : []),
-    ].filter(Boolean)
-  )
-)
 
 const withBundleAnalyzer = bundleAnalyzer({
   enabled: process.env.ANALYZE === "true",
@@ -136,12 +128,6 @@ const nextConfig = {
     },
   },
 
-  // Node.js 优化配置
-  serverRuntimeConfig: {
-    // 增加 EventEmitter 最大监听器限制，防止内存泄漏警告
-    maxListeners: 50,
-  },
-
   images: {
     unoptimized: false,
     formats: ["image/avif", "image/webp"],
@@ -149,7 +135,6 @@ const nextConfig = {
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     qualities: [50, 70, 75, 80, 90, 100],
     minimumCacheTTL: 60,
-    domains: supabaseImageDomains,
     remotePatterns: supabaseRemotePatterns,
   },
   // 安全头部配置
@@ -213,88 +198,6 @@ const nextConfig = {
       transform: "lucide-react/dist/esm/icons/{{kebabCase member}}",
       preventFullImport: true,
     },
-  },
-
-  // Webpack 优化配置
-  webpack: (config, { isServer }) => {
-    // 彻底解决 108KB 缓存警告 - 禁用问题缓存策略
-    if (config.cache && typeof config.cache === "object") {
-      config.cache.maxMemoryGenerations = 0 // 避免内存中的大字符串缓存
-      config.cache.memoryCacheUnaffected = false // 禁用未受影响的内存缓存
-
-      // 对于大字符串使用更激进的缓存策略
-      if (config.cache.buildDependencies) {
-        config.cache.buildDependencies.config = [__filename]
-      }
-    }
-
-    // 对于开发环境，完全禁用持久化缓存以避免序列化大字符串
-    if (process.env.NODE_ENV === "development") {
-      config.cache = false
-    }
-
-    // 优化 Prisma 生成文件的处理
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      "@prisma/client": isServer ? "@prisma/client" : "@prisma/client",
-    }
-
-    // 减少包大小的分析输出
-    if (!isServer) {
-      const existingSplitChunks = config.optimization.splitChunks || {}
-      const existingCacheGroups = existingSplitChunks.cacheGroups || {}
-
-      config.optimization.splitChunks = {
-        ...existingSplitChunks,
-        cacheGroups: {
-          ...existingCacheGroups,
-          react: {
-            name: "react-vendor",
-            test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/,
-            priority: 40,
-            chunks: "all",
-            reuseExistingChunk: true,
-          },
-          radix: {
-            name: "radix-vendor",
-            test: /[\\/]node_modules[\\/]@radix-ui[\\/]/,
-            priority: 35,
-            chunks: "all",
-            reuseExistingChunk: true,
-          },
-          prisma: {
-            name: "prisma",
-            test: /[\\/]node_modules[\\/]@prisma[\\/]/,
-            priority: 30,
-            chunks: "all",
-            reuseExistingChunk: true,
-          },
-          lucide: {
-            name: "lucide",
-            test: /[\\/]node_modules[\\/]lucide-react[\\/]/,
-            priority: 25,
-            chunks: "all",
-            reuseExistingChunk: true,
-          },
-          utils: {
-            name: "utils-vendor",
-            test: /[\\/]node_modules[\\/](date-fns|clsx|class-variance-authority|tailwind-merge)[\\/]/,
-            priority: 20,
-            chunks: "all",
-            reuseExistingChunk: true,
-          },
-          editor: {
-            name: "editor-vendor",
-            test: /[\\/]node_modules[\\/](@tiptap|react-markdown|remark|rehype)[\\/]/,
-            priority: 15,
-            chunks: "all",
-            reuseExistingChunk: true,
-          },
-        },
-      }
-    }
-
-    return config
   },
 }
 

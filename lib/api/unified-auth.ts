@@ -18,6 +18,7 @@ import {
 import { createAuthAuditEvent, type AuthAuditEvent } from "@/lib/error-handling/auth-error"
 import { createErrorResponse, ErrorCode } from "@/lib/api/unified-response"
 import { authLogger } from "@/lib/utils/logger"
+import { getClientIp } from "@/lib/api/get-client-ip"
 
 // 兼容性导出
 export type { AuthPolicy, AuthenticatedUser, AuthContext }
@@ -64,7 +65,8 @@ export async function withApiAuth<T = NextResponse, P extends AuthPolicy = AuthP
 ): Promise<T | NextResponse> {
   const requestId = generateRequestId()
   const path = request.nextUrl.pathname
-  const ip = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || null
+  const ipValue = getClientIp(request)
+  const ip = ipValue === "unknown" ? null : ipValue
   const ua = request.headers.get("user-agent") || null
 
   // 使用新的 assertPolicy 函数，传递 requestId

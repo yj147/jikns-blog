@@ -1,10 +1,10 @@
 "use client"
 
 import { memo, useCallback, useEffect, useState } from "react"
-import { Button } from "@/components/ui/button"
-import { MessageCircle, Share, Eye } from "lucide-react"
 import { LikeButton } from "@/components/blog/like-button"
 import { useRealtimeLikes } from "@/hooks/use-realtime-likes"
+import { MessageCircle, Repeat2, BarChart2 } from "lucide-react"
+import { bumpActivityCounts } from "@/lib/activities/cache-update"
 
 export interface ActivityCardActionsProps {
   activityId: string
@@ -15,6 +15,12 @@ export interface ActivityCardActionsProps {
   onLike?: (activityId: string, nextState?: { isLiked: boolean; count: number }) => void
   onComment?: (activityId: string) => void
   onShare?: (activityId: string) => void
+}
+
+function formatCount(count: number): string {
+  if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`
+  if (count >= 1000) return `${(count / 1000).toFixed(count >= 10000 ? 0 : 1)}K`
+  return String(count)
 }
 
 function ActivityCardActionsComponent({
@@ -41,10 +47,7 @@ function ActivityCardActionsComponent({
     setLikesCount((prev) => Math.max(0, prev - 1))
   }, [])
 
-  const {
-    isSubscribed: isLikesSubscribed,
-    error: likesSubscriptionError,
-  } = useRealtimeLikes({
+  useRealtimeLikes({
     targetType: "activity",
     targetId: activityId,
     onLike: handleRealtimeLike,
@@ -61,15 +64,42 @@ function ActivityCardActionsComponent({
 
   const handleLikeChange = useCallback(
     (isLiked: boolean, count: number) => {
+      setLikesCount(count)
+      // 同步全局缓存，避免 revalidate 后回退到旧计数
+      bumpActivityCounts(activityId, { likes: count - likesCount, isLiked, comments: 0 })
       onLike?.(activityId, { isLiked, count })
     },
-    [activityId, onLike]
+    [activityId, likesCount, onLike]
   )
 
   return (
-    <div className="mt-4 space-y-1 border-t pt-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
+    <div className="-mx-2 mt-3">
+      <div className="flex items-center justify-between max-w-md">
+        {/* 评论 */}
+        <button
+          onClick={handleComment}
+          className="group flex flex-1 items-center justify-center gap-1 py-2 text-muted-foreground transition-colors hover:text-sky-500"
+        >
+          <div className="rounded-full p-2 transition-colors group-hover:bg-sky-500/10">
+            <MessageCircle className="h-[18px] w-[18px]" />
+          </div>
+          {commentsCount > 0 && (
+            <span className="text-[13px] tabular-nums">{formatCount(commentsCount)}</span>
+          )}
+        </button>
+
+        {/* 转发 */}
+        <button
+          onClick={handleShare}
+          className="group flex flex-1 items-center justify-center gap-1 py-2 text-muted-foreground transition-colors hover:text-green-500"
+        >
+          <div className="rounded-full p-2 transition-colors group-hover:bg-green-500/10">
+            <Repeat2 className="h-[18px] w-[18px]" />
+          </div>
+        </button>
+
+        {/* 点赞 */}
+        <div className="flex flex-1 items-center justify-center">
           <LikeButton
             targetId={activityId}
             targetType="activity"
@@ -77,40 +107,21 @@ function ActivityCardActionsComponent({
             initialCount={likesCount}
             variant="ghost"
             size="sm"
+            showCount={likesCount > 0}
             onLikeChange={handleLikeChange}
+            className="hover:bg-pink-500/10 hover:text-pink-500"
           />
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleComment}
-            className="hover:text-blue-500"
-          >
-            <MessageCircle className="mr-2 h-4 w-4" />
-            <span className="tabular-nums">{commentsCount}</span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleShare}
-            className="hover:text-blue-500"
-          >
-            <Share className="mr-2 h-4 w-4" />
-            分享
-          </Button>
         </div>
-        <div className="text-muted-foreground flex items-center gap-2 text-sm">
-          <Eye className="h-4 w-4" />
-          <span className="tabular-nums">{viewsCount}</span>
-        </div>
-      </div>
-      <div className="text-muted-foreground flex items-center justify-between text-[11px]">
-        <span>
-          实时点赞：
-          <span className={isLikesSubscribed ? "text-emerald-600" : "text-amber-600"}>
-            {isLikesSubscribed ? "已连接" : "连接中..."}
-          </span>
-        </span>
-        {likesSubscriptionError && <span className="text-red-500">订阅失败</span>}
+
+        {/* 浏览 */}
+        <button className="group flex flex-1 items-center justify-center gap-1 py-2 text-muted-foreground transition-colors hover:text-sky-500">
+          <div className="rounded-full p-2 transition-colors group-hover:bg-sky-500/10">
+            <BarChart2 className="h-[18px] w-[18px]" />
+          </div>
+          {viewsCount > 0 && (
+            <span className="text-[13px] tabular-nums">{formatCount(viewsCount)}</span>
+          )}
+        </button>
       </div>
     </div>
   )

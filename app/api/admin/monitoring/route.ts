@@ -6,7 +6,11 @@ import { logger } from "@/lib/utils/logger"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 import { generateRequestId } from "@/lib/utils/request-id"
 import { performanceMonitor } from "@/lib/performance-monitor"
+import { getCached, setCached } from "@/lib/cache/simple-cache"
 import type { MonitoringResponse } from "@/types/monitoring"
+
+const MONITORING_CACHE_KEY = "admin:monitoring"
+const MONITORING_CACHE_TTL = 30000
 
 async function handleGet(request: NextRequest) {
   const requestId = request.headers.get("x-request-id") ?? generateRequestId()
@@ -26,6 +30,19 @@ async function handleGet(request: NextRequest) {
   }
 
   try {
+    const cached = getCached<MonitoringResponse>(MONITORING_CACHE_KEY)
+    if (cached) {
+      return createSuccessResponse(cached, {
+        requestId,
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          status: user.status,
+        },
+      })
+    }
+
     const now = new Date()
     const countsPromise = prisma.$transaction([
       prisma.user.count(),
@@ -55,6 +72,8 @@ async function handleGet(request: NextRequest) {
       uptime: process.uptime(),
       ...(performanceReport ? { performanceReport } : {}),
     }
+
+    setCached(MONITORING_CACHE_KEY, payload, MONITORING_CACHE_TTL)
 
     return createSuccessResponse(payload, {
       requestId,

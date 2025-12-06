@@ -64,6 +64,7 @@ export function parseStorageTarget(
 
     if (
       normalized.startsWith("avatars/") ||
+      normalized.startsWith("covers/") ||
       normalized.startsWith("activities/") ||
       normalized.startsWith("users/")
     ) {
@@ -192,6 +193,13 @@ export async function createSignedUrls(
  */
 export async function signAvatarUrl(avatarUrl?: string | null): Promise<string | null> {
   return createSignedUrlIfNeeded(avatarUrl)
+}
+
+/**
+ * 为用户封面图生成签名 URL
+ */
+export async function signCoverImageUrl(coverImage?: string | null): Promise<string | null> {
+  return createSignedUrlIfNeeded(coverImage)
 }
 
 /**

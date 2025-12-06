@@ -163,20 +163,20 @@ export function InteractiveTerminal() {
       transition={{ duration: 0.6 }}
       className="mx-auto w-full max-w-4xl"
     >
-      <div className="overflow-hidden rounded-lg border border-gray-700 bg-gray-900 shadow-2xl">
+      <div className="overflow-hidden rounded-lg border border-border bg-muted/80 shadow-2xl">
         {/* Terminal Header */}
-        <div className="flex items-center justify-between border-b border-gray-700 bg-gray-800 px-4 py-3">
+        <div className="flex items-center justify-between border-b border-border/60 bg-background/60 px-4 py-3">
           <div className="flex items-center space-x-2">
-            <div className="h-3 w-3 rounded-full bg-red-500"></div>
-            <div className="h-3 w-3 rounded-full bg-yellow-500"></div>
-            <div className="h-3 w-3 rounded-full bg-green-500"></div>
+            <div className="h-3 w-3 rounded-full bg-status-error"></div>
+            <div className="h-3 w-3 rounded-full bg-status-warning"></div>
+            <div className="h-3 w-3 rounded-full bg-status-success"></div>
           </div>
-          <div className="font-mono text-sm text-gray-400">Terminal</div>
+          <div className="font-mono text-sm text-muted-foreground">Terminal</div>
           <Button
             variant="ghost"
             size="sm"
             onClick={handleInteractiveMode}
-            className="text-xs text-gray-400 hover:text-white"
+            className="text-xs text-muted-foreground hover:text-foreground"
           >
             Interactive Mode
           </Button>
@@ -193,16 +193,16 @@ export function InteractiveTerminal() {
                 exit={{ opacity: 0 }}
               >
                 {/* Current Command */}
-                <div className="mb-2 flex items-center text-green-400">
-                  <span className="mr-2 text-blue-400">$</span>
+                <div className="mb-2 flex items-center text-status-success">
+                  <span className="mr-2 text-status-info">$</span>
                   <span>{displayedCommand}</span>
                   {isTyping && showCursor && (
-                    <span className="ml-1 inline-block h-5 w-2 bg-green-400"></span>
+                    <span className="ml-1 inline-block h-5 w-2 bg-status-success"></span>
                   )}
                 </div>
 
                 {/* Command Output */}
-                <div className="mb-4 text-gray-300">
+                <div className="mb-4 text-muted-foreground">
                   {displayedOutput.map((line, index) => (
                     <motion.div
                       key={index}
@@ -224,7 +224,7 @@ export function InteractiveTerminal() {
                 exit={{ opacity: 0 }}
               >
                 {/* Interactive Output */}
-                <div className="mb-4 text-gray-300">
+                <div className="mb-4 text-muted-foreground">
                   {displayedOutput.map((line, index) => (
                     <div key={index} className="mb-1">
                       {line}
@@ -233,18 +233,18 @@ export function InteractiveTerminal() {
                 </div>
 
                 {/* Interactive Input */}
-                <div className="flex items-center text-green-400">
-                  <span className="mr-2 text-blue-400">$</span>
+                <div className="flex items-center text-status-success">
+                  <span className="mr-2 text-status-info">$</span>
                   <input
                     type="text"
                     value={userInput}
                     onChange={(e) => setUserInput(e.target.value)}
                     onKeyDown={handleUserCommand}
-                    className="flex-1 bg-transparent text-green-400 outline-none"
+                    className="flex-1 bg-transparent text-status-success outline-none"
                     placeholder="Type a command..."
                     autoFocus
                   />
-                  {showCursor && <span className="ml-1 inline-block h-5 w-2 bg-green-400"></span>}
+                  {showCursor && <span className="ml-1 inline-block h-5 w-2 bg-status-success"></span>}
                 </div>
               </motion.div>
             )}

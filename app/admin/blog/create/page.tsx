@@ -9,9 +9,9 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ArrowLeft } from "lucide-react"
 import { toast } from "sonner"
-import { createPost } from "@/lib/actions/posts"
+import { createPost, updatePost } from "@/lib/actions/posts"
 import { logger } from "@/lib/utils/logger"
-import type { CreatePostRequest } from "@/types/api"
+import type { CreatePostRequest, UpdatePostRequest } from "@/types/api"
 
 const PostForm = dynamic<PostFormProps>(
   () => import("@/components/admin/post-form").then((mod) => mod.PostForm),
@@ -29,44 +29,61 @@ const PostForm = dynamic<PostFormProps>(
 export default function CreatePostPage() {
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  // 追踪已创建的草稿 ID，避免重复创建
+  const [draftId, setDraftId] = useState<string | null>(null)
 
-  // 处理表单提交（创建并发布）
+  // 处理表单提交（创建或更新并发布）
   const handleSubmit = async (data: PostFormData) => {
     setIsSubmitting(true)
     try {
-      // 转换数据格式
-      const createData: CreatePostRequest = {
-        title: data.title,
-        content: data.content,
-        excerpt: data.summary || undefined,
-        published: data.isPublished,
-        slug: data.slug || undefined,
-        canonicalUrl: undefined,
-        seoTitle: data.metaTitle || undefined,
-        seoDescription: data.metaDescription || undefined,
-        coverImage: data.coverImage || undefined,
-        tagNames: data.tags,
-        seriesId: undefined,
+      let result
+
+      if (draftId) {
+        // 已有草稿，更新它
+        const updateData: UpdatePostRequest = {
+          id: draftId,
+          title: data.title,
+          content: data.content,
+          excerpt: data.summary || undefined,
+          published: data.isPublished,
+          slug: data.slug || undefined,
+          seoTitle: data.metaTitle || undefined,
+          seoDescription: data.metaDescription || undefined,
+          coverImage: data.coverImage || undefined,
+          tagNames: data.tags,
+        }
+        result = await updatePost(updateData)
+      } else {
+        // 没有草稿，创建新文章
+        const createData: CreatePostRequest = {
+          title: data.title,
+          content: data.content,
+          excerpt: data.summary || undefined,
+          published: data.isPublished,
+          slug: data.slug || undefined,
+          canonicalUrl: undefined,
+          seoTitle: data.metaTitle || undefined,
+          seoDescription: data.metaDescription || undefined,
+          coverImage: data.coverImage || undefined,
+          tagNames: data.tags,
+          seriesId: undefined,
+        }
+        result = await createPost(createData)
       }
 
-      const result = await createPost(createData)
-
       if (result.success) {
-        // 显示成功提示
         if (data.isPublished) {
-          toast.success("文章创建并发布成功！")
+          toast.success("文章发布成功！")
         } else {
           toast.success("文章已保存为草稿！")
         }
-
-        // 重定向到文章列表页面
         router.push("/admin/blog")
       } else {
-        toast.error("创建文章失败: " + result.error?.message)
+        toast.error("操作失败: " + result.error?.message)
       }
     } catch (error) {
-      logger.error("创建文章失败", { module: "app/admin/blog/create", operation: "submit" }, error)
-      toast.error("创建文章失败，请重试")
+      logger.error("提交文章失败", { module: "app/admin/blog/create", operation: "submit" }, error)
+      toast.error("操作失败，请重试")
     } finally {
       setIsSubmitting(false)
     }
@@ -75,22 +92,45 @@ export default function CreatePostPage() {
   // 处理保存草稿
   const handleSave = async (data: PostFormData) => {
     try {
-      // 转换数据格式（保存草稿时强制设为未发布）
-      const saveData: CreatePostRequest = {
-        title: data.title,
-        content: data.content,
-        excerpt: data.summary || undefined,
-        published: false, // 草稿强制为未发布
-        slug: data.slug || undefined,
-        canonicalUrl: undefined,
-        seoTitle: data.metaTitle || undefined,
-        seoDescription: data.metaDescription || undefined,
-        coverImage: data.coverImage || undefined,
-        tagNames: data.tags,
-        seriesId: undefined,
-      }
+      let result
 
-      const result = await createPost(saveData)
+      if (draftId) {
+        // 已有草稿，更新它
+        const updateData: UpdatePostRequest = {
+          id: draftId,
+          title: data.title,
+          content: data.content,
+          excerpt: data.summary || undefined,
+          published: false,
+          slug: data.slug || undefined,
+          seoTitle: data.metaTitle || undefined,
+          seoDescription: data.metaDescription || undefined,
+          coverImage: data.coverImage || undefined,
+          tagNames: data.tags,
+        }
+        result = await updatePost(updateData)
+      } else {
+        // 首次保存，创建新草稿
+        const createData: CreatePostRequest = {
+          title: data.title,
+          content: data.content,
+          excerpt: data.summary || undefined,
+          published: false,
+          slug: data.slug || undefined,
+          canonicalUrl: undefined,
+          seoTitle: data.metaTitle || undefined,
+          seoDescription: data.metaDescription || undefined,
+          coverImage: data.coverImage || undefined,
+          tagNames: data.tags,
+          seriesId: undefined,
+        }
+        result = await createPost(createData)
+
+        // 记住草稿 ID，后续保存将更新而非创建
+        if (result.success && result.data?.id) {
+          setDraftId(result.data.id)
+        }
+      }
 
       if (result.success) {
         toast.success("草稿保存成功！")

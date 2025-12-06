@@ -1,3 +1,6 @@
+// 强制动态渲染，确保用户资料始终最新
+export const dynamic = "force-dynamic"
+
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -12,6 +15,7 @@ import { getQuickStats, EMPTY_QUICK_STATS, type QuickStats } from "@/lib/profile
 import { logger } from "@/lib/utils/logger"
 import { calculateReadingMinutes } from "@/lib/utils/reading-time"
 import { redirect } from "next/navigation"
+import Image from "next/image"
 import Link from "next/link"
 import {
   Calendar,
@@ -250,19 +254,34 @@ export default async function ProfilePage() {
   return (
     <div className="bg-background min-h-screen">
 
-      <div className="container mx-auto px-4 py-8">
-        <div className="grid gap-8 lg:grid-cols-4">
+      <div className="container mx-auto px-4 py-12 lg:py-16">
+        <div className="grid gap-8 lg:gap-12 lg:grid-cols-4">
           {/* Profile Header */}
           <div className="lg:col-span-4">
-            <Card>
-              <CardContent className="pt-8">
+            <Card className="overflow-hidden">
+              <div className="relative h-40 w-full bg-muted md:h-52">
+                {user.coverImage ? (
+                  <Image
+                    src={user.coverImage}
+                    alt={`${displayName} 的封面图`}
+                    fill
+                    priority
+                    className="object-cover"
+                  />
+                ) : (
+                  <div className="h-full w-full bg-gradient-to-r from-sky-500/60 via-indigo-500/60 to-purple-500/60" />
+                )}
+              </div>
+              <CardContent className="pt-6 md:pt-8">
                 <div className="flex flex-col items-start space-y-4 md:flex-row md:items-center md:space-x-6 md:space-y-0">
-                  <Avatar className="h-24 w-24 md:h-32 md:w-32">
-                    <AvatarImage src={user.avatarUrl || "/placeholder.svg"} alt={displayName} />
-                    <AvatarFallback className="text-2xl">
-                      {displayName[0].toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
+                  <div className="relative -mt-16 h-24 w-24 shrink-0 md:-mt-20 md:h-32 md:w-32">
+                    <Avatar className="h-full w-full border-4 border-background ring-4 ring-background shadow-lg">
+                      <AvatarImage src={user.avatarUrl || "/placeholder.svg"} alt={displayName} />
+                      <AvatarFallback className="text-2xl">
+                        {displayName.charAt(0).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                  </div>
 
                   <div className="flex-1 space-y-4">
                     <div>

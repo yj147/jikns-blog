@@ -3,7 +3,7 @@
  * 实现安全的JWT令牌管理、刷新机制和会话存储
  */
 
-import { createHash, randomBytes } from "crypto"
+import { createHmac, randomBytes } from "crypto"
 import type {
   TokenPayload,
   SessionData,
@@ -19,13 +19,21 @@ import { logger } from "../utils/logger"
  */
 export class JWTSecurity {
   private static readonly DEFAULT_CONFIG: JWTConfig = {
-    accessTokenSecret: process.env.JWT_ACCESS_SECRET || "access-secret-key",
-    refreshTokenSecret: process.env.JWT_REFRESH_SECRET || "refresh-secret-key",
+    accessTokenSecret: JWTSecurity.requireEnv("JWT_ACCESS_SECRET"),
+    refreshTokenSecret: JWTSecurity.requireEnv("JWT_REFRESH_SECRET"),
     accessTokenExpiresIn: 15 * 60, // 15 分钟
     refreshTokenExpiresIn: 7 * 24 * 60 * 60, // 7 天
-    issuer: process.env.JWT_ISSUER || "jikns-blog",
-    audience: process.env.JWT_AUDIENCE || "jikns-blog-users",
+    issuer: "jikns-blog",
+    audience: "jikns-blog",
     algorithm: "HS256",
+  }
+
+  private static requireEnv(key: string): string {
+    const value = process.env[key]
+    if (!value) {
+      throw new Error(`Missing required environment variable: ${key}`)
+    }
+    return value
   }
 
   /**
@@ -33,7 +41,7 @@ export class JWTSecurity {
    */
   static encodeJWT(payload: any, secret: string, expiresIn: number): string {
     const header = {
-      alg: "HS256",
+      alg: this.DEFAULT_CONFIG.algorithm,
       typ: "JWT",
     }
 
@@ -68,6 +76,13 @@ export class JWTSecurity {
 
       const [encodedHeader, encodedPayload, signature] = parts
 
+      const header = JSON.parse(this.base64UrlDecode(encodedHeader))
+
+      if (header.alg !== this.DEFAULT_CONFIG.algorithm) {
+        logger.warn("JWT 算法不匹配", { alg: header.alg })
+        return null
+      }
+
       // 验证签名
       const expectedSignature = this.createSignature(`${encodedHeader}.${encodedPayload}`, secret)
 
@@ -78,6 +93,14 @@ export class JWTSecurity {
 
       // 解码负载
       const payload = JSON.parse(this.base64UrlDecode(encodedPayload))
+
+      if (
+        payload.iss !== this.DEFAULT_CONFIG.issuer ||
+        payload.aud !== this.DEFAULT_CONFIG.audience
+      ) {
+        logger.warn("JWT iss/aud 校验失败", { iss: payload.iss, aud: payload.aud })
+        return null
+      }
 
       // 检查过期时间
       const now = Math.floor(Date.now() / 1000)
@@ -213,7 +236,7 @@ export class JWTSecurity {
    * 创建HMAC签名
    */
   private static createSignature(data: string, secret: string): string {
-    const hash = createHash("sha256").update(secret).update(data).digest("base64")
+    const hash = createHmac("sha256", secret).update(data).digest("base64")
 
     return hash.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "")
   }

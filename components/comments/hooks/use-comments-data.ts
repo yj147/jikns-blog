@@ -1,0 +1,119 @@
+"use client"
+
+import { useCallback, useMemo } from "react"
+import useSWRInfinite from "swr/infinite"
+
+import { fetchGet } from "@/lib/api/fetch-json"
+import type { Comment, CommentTargetType } from "@/types/comments"
+
+const PAGE_SIZE = 10
+
+export type CommentsApiResponse = {
+  success: boolean
+  data: Comment[]
+  meta?: {
+    pagination?: {
+      total?: number
+      hasMore?: boolean
+      nextCursor?: string | null
+    }
+  }
+}
+
+interface UseCommentsDataOptions {
+  targetType: CommentTargetType
+  targetId: string
+  initialCount?: number
+}
+
+export function useCommentsData({ targetType, targetId, initialCount = 0 }: UseCommentsDataOptions) {
+  const fetcher = useCallback(async (url: string) => fetchGet(url), [])
+
+  const getKey = useCallback(
+    (pageIndex: number, previousPageData: CommentsApiResponse | null) => {
+      if (previousPageData && !previousPageData.meta?.pagination?.hasMore) {
+        return null
+      }
+
+      const params = new URLSearchParams({
+        targetType,
+        targetId,
+        limit: PAGE_SIZE.toString(),
+      })
+
+      const cursor = previousPageData?.meta?.pagination?.nextCursor
+      if (cursor) {
+        params.set("cursor", cursor)
+      }
+
+      return `/api/comments?${params.toString()}`
+    },
+    [targetType, targetId]
+  )
+
+  const { data, error, isLoading, isValidating, size, setSize, mutate } = useSWRInfinite<CommentsApiResponse>(
+    getKey,
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateAll: false,
+    }
+  )
+
+  const pages = data ?? []
+  const comments = useMemo(() => pages.flatMap((page) => page?.data ?? []), [pages])
+
+  const totalComments = useMemo(() => {
+    const total = pages[0]?.meta?.pagination?.total
+
+    if (typeof total === "number") {
+      return total
+    }
+
+    if (comments.length > 0) {
+      return comments.length
+    }
+
+    return initialCount
+  }, [comments.length, pages, initialCount])
+
+  const hasMore = useMemo(() => {
+    if (pages.length === 0) return false
+    return pages[pages.length - 1]?.meta?.pagination?.hasMore ?? false
+  }, [pages])
+
+  const isInitialLoading = !data && !error
+  const isLoadingMore = isValidating && size > (data?.length ?? 0)
+  const isEmpty = !isInitialLoading && comments.length === 0
+
+  const resetList = useCallback(
+    async (preserveSize = false) => {
+      if (!preserveSize) {
+        await setSize(1)
+      }
+      await mutate()
+    },
+    [mutate, setSize]
+  )
+
+  const loadMore = useCallback(() => {
+    if (hasMore && !isLoadingMore) {
+      setSize((current) => current + 1)
+    }
+  }, [hasMore, isLoadingMore, setSize])
+
+  return {
+    comments,
+    totalComments,
+    hasMore,
+    isInitialLoading,
+    isLoadingMore,
+    isEmpty,
+    error: error ?? null,
+    mutate,
+    isLoading,
+    loadMore,
+    resetList,
+  }
+}
+

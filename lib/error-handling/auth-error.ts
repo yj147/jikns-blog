@@ -10,6 +10,14 @@
 
 import { authLogger } from "@/lib/utils/logger"
 
+export interface AuthErrorContext {
+  requestId?: string
+  userId?: string
+  path?: string
+  ip?: string
+  ua?: string
+}
+
 /**
  * 认证错误代码枚举
  * 标准化认证相关的错误类型
@@ -33,22 +41,29 @@ export class AuthError extends Error {
   public readonly name = "AuthError"
   public readonly timestamp: Date
   public readonly requestId?: string
+  public readonly context?: AuthErrorContext
+  public readonly code: AuthErrorCode
+  public readonly statusCode: number
 
   constructor(
     message: string,
-    public readonly code: AuthErrorCode,
-    public readonly statusCode: number = 401,
-    public readonly context?: {
-      requestId?: string
-      userId?: string
-      path?: string
-      ip?: string
-      ua?: string
-    }
+    code: AuthErrorCode,
+    statusCode: number = 401,
+    contextOrRequestId?: AuthErrorContext | string,
+    timestamp?: Date
   ) {
     super(message)
-    this.timestamp = new Date()
-    this.requestId = context?.requestId
+    this.code = code
+    this.statusCode = statusCode
+
+    const normalizedContext: AuthErrorContext | undefined =
+      typeof contextOrRequestId === "string"
+        ? { requestId: contextOrRequestId }
+        : contextOrRequestId
+
+    this.context = normalizedContext
+    this.timestamp = timestamp ?? new Date()
+    this.requestId = normalizedContext?.requestId
 
     // 确保错误栈追踪正确
     if (Error.captureStackTrace) {

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server"
 import { getCurrentUser } from "@/lib/auth"
 import { getRedisClient } from "@/lib/rate-limit/redis-client"
 import { performanceMonitor, MetricType } from "@/lib/performance-monitor"
+import { getClientIP } from "@/lib/utils/client-ip"
 
 /**
  * Activity 模块速率限制配置和实现
@@ -102,18 +103,6 @@ if (!redisClient) {
 function generateRateLimitKey(userId: string | null, ip: string, type: RateLimitType): string {
   const identifier = userId || ip
   return `activity:${type}:${identifier}`
-}
-
-function getClientIP(request: NextRequest): string {
-  const forwarded = request.headers.get("x-forwarded-for")
-  const realIp = request.headers.get("x-real-ip")
-  const clientIp = request.headers.get("cf-connecting-ip")
-
-  if (forwarded) {
-    return forwarded.split(",")[0].trim()
-  }
-
-  return realIp || clientIp || "127.0.0.1"
 }
 
 async function applyRateLimit(

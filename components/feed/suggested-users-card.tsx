@@ -1,9 +1,9 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { FollowButton } from "@/components/follow"
 import { useSuggestedUsers } from "@/hooks/use-suggested-users"
+import Link from "next/link"
 
 interface SuggestedUsersCardProps {
   limit?: number
@@ -18,77 +18,82 @@ export default function SuggestedUsersCard({ limit = 3, onFollowChange }: Sugges
     refresh()
   }
 
-  return (
-    <Card className="transition-shadow hover:shadow-lg">
-      <CardHeader>
-        <CardTitle className="text-lg">推荐关注</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <div className="space-y-4">
-            {[...Array(limit)].map((_, index) => (
-              <div key={index} className="flex animate-pulse items-start space-x-3">
+  if (isLoading) {
+      return (
+          <div className="space-y-4 p-4">
+             {[...Array(limit)].map((_, index) => (
+              <div key={index} className="flex animate-pulse items-center space-x-3">
                 <div className="bg-muted h-10 w-10 rounded-full" />
                 <div className="flex-1 space-y-2">
-                  <div className="bg-muted h-4 w-3/4 rounded" />
+                  <div className="bg-muted h-3 w-3/4 rounded" />
                   <div className="bg-muted h-3 w-1/2 rounded" />
-                  <div className="bg-muted h-3 w-full rounded" />
                 </div>
-                <div className="bg-muted h-8 w-16 rounded" />
               </div>
             ))}
           </div>
-        ) : isError ? (
-          <div className="py-4 text-center text-sm text-muted-foreground">暂时无法加载推荐用户</div>
-        ) : suggestedUsers.length === 0 ? (
-          <div className="py-4 text-center text-sm text-muted-foreground">暂无推荐用户</div>
-        ) : (
-          <div className="space-y-4">
-            {suggestedUsers.map((suggestedUser) => (
-              <div
-                key={suggestedUser.id}
-                className="flex items-start space-x-3"
-                data-hover-scale=""
-                data-hover-shift=""
+      )
+  }
+
+  if (isError || suggestedUsers.length === 0) {
+      return null
+  }
+
+  return (
+    <div className="py-2">
+      <div className="space-y-4">
+        {suggestedUsers.map((suggestedUser) => {
+          const normalizedUsername = suggestedUser.username?.replace(/^@/, "").trim()
+          const normalizedName = suggestedUser.name?.trim()
+          const usernameLabel =
+            normalizedUsername && normalizedUsername !== normalizedName
+              ? suggestedUser.username.startsWith("@")
+                ? suggestedUser.username
+                : `@${suggestedUser.username}`
+              : null
+
+          return (
+            <div key={suggestedUser.id} className="group flex items-center justify-between gap-2">
+              <Link
+                href={`/profile/${suggestedUser.id}`}
+                className="hover:bg-muted/50 -ml-1.5 flex min-w-0 flex-1 items-center gap-3 rounded-lg p-1.5 transition-colors"
               >
-                <div data-hover-scale="">
-                  <Avatar className="h-10 w-10">
-                    <AvatarImage
-                      src={suggestedUser.avatarUrl || "/placeholder.svg"}
-                      alt={suggestedUser.name}
-                    />
-                    <AvatarFallback>{suggestedUser.name?.[0] || "匿"}</AvatarFallback>
-                  </Avatar>
-                </div>
+                <Avatar className="h-10 w-10 ring-2 ring-background group-hover:ring-muted">
+                  <AvatarImage
+                    src={suggestedUser.avatarUrl || "/placeholder.svg"}
+                    alt={suggestedUser.name}
+                  />
+                  <AvatarFallback>{suggestedUser.name?.[0] || "匿"}</AvatarFallback>
+                </Avatar>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center space-x-1">
-                    <p className="text-sm font-medium">{suggestedUser.name}</p>
+                    <p className="truncate text-sm font-bold text-foreground">{suggestedUser.name}</p>
                     {suggestedUser.isVerified && (
-                      <div className="bg-primary flex h-3 w-3 items-center justify-center rounded-full">
+                      <div
+                        className="flex h-3 w-3 items-center justify-center rounded-full bg-blue-500"
+                        title="Verified"
+                      >
                         <div className="h-1.5 w-1.5 rounded-full bg-white" />
                       </div>
                     )}
                   </div>
-                  <p className="text-muted-foreground text-xs">{suggestedUser.username}</p>
-                  {suggestedUser.bio && (
-                    <p className="text-muted-foreground mt-1 line-clamp-2 text-xs">{suggestedUser.bio}</p>
+                  {usernameLabel && (
+                    <p className="truncate text-xs text-muted-foreground">{usernameLabel}</p>
                   )}
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    {suggestedUser.followers.toLocaleString()} 关注者
-                  </p>
                 </div>
+              </Link>
+              <div className="shrink-0">
                 <FollowButton
                   targetUserId={suggestedUser.id}
                   size="sm"
                   onFollowSuccess={handleFollowChange}
                   onUnfollowSuccess={handleFollowChange}
+                  className="h-8 px-3 rounded-full font-bold"
                 />
               </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
-

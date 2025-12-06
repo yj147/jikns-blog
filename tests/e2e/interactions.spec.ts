@@ -7,8 +7,8 @@ import { test, expect, Page } from "@playwright/test"
 
 // 测试账号配置
 const TEST_USER = {
-  email: "test@example.com",
-  password: "TestPassword123!",
+  email: "user@example.com",
+  password: "user123456",
 }
 
 // 辅助函数：登录

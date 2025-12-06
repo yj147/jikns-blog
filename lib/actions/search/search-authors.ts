@@ -24,7 +24,6 @@ export interface AuthorCandidate {
   name: string | null
   avatarUrl: string | null
   bio: string | null
-  role: string
   similarity: number
 }
 
@@ -98,7 +97,6 @@ export async function searchAuthorCandidates(
       name: user.name ?? ANONYMOUS_AUTHOR_NAME,
       avatarUrl: user.avatarUrl,
       bio: user.bio,
-      role: user.role,
       similarity: user.similarity ?? 0,
     }))
 

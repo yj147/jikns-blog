@@ -26,25 +26,30 @@ const TYPE_META: Record<
   NotificationType,
   { label: string; icon: typeof Bell; tone: string; background: string }
 > = {
-  LIKE: { label: "点赞", icon: Heart, tone: "text-rose-500", background: "bg-rose-500/10" },
+  LIKE: { label: "点赞", icon: Heart, tone: "text-action-like", background: "bg-action-like/10" },
   COMMENT: {
     label: "评论",
     icon: MessageCircle,
-    tone: "text-blue-500",
-    background: "bg-blue-500/10",
+    tone: "text-action-comment",
+    background: "bg-action-comment/10",
   },
   FOLLOW: {
     label: "关注",
     icon: UserPlus,
-    tone: "text-emerald-500",
-    background: "bg-emerald-500/10",
+    tone: "text-action-share",
+    background: "bg-action-share/10",
   },
-  SYSTEM: { label: "系统", icon: Bell, tone: "text-amber-500", background: "bg-amber-500/10" },
+  SYSTEM: {
+    label: "系统",
+    icon: Bell,
+    tone: "text-status-warning",
+    background: "bg-status-warning/10",
+  },
   NEW_POST: {
     label: "新文章",
     icon: Newspaper,
-    tone: "text-indigo-500",
-    background: "bg-indigo-500/10",
+    tone: "text-primary",
+    background: "bg-primary/10",
   },
 }
 

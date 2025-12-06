@@ -1,5 +1,5 @@
 /**
- * 博客文章详情页面 - Phase 5.2
+ * 博客文章详情页面 - Social Style
  * 连接真实数据的文章详情展示页面
  */
 
@@ -8,11 +8,14 @@ import { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { getPost } from "@/lib/actions/posts"
+import { getCurrentUser } from "@/lib/actions/auth"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { ArrowLeft, Calendar, Clock, Eye, Share2, ThumbsUp } from "lucide-react"
+import { FollowButton } from "@/components/follow"
+import { prisma } from "@/lib/prisma"
+import { ArrowLeft, Calendar, Clock, Eye, Share2, ThumbsUp, MessageSquare, UserPlus } from "lucide-react"
 import { PostDetail } from "@/types/blog"
 import {
   formatDate,
@@ -20,15 +23,66 @@ import {
   calculateReadTime,
   formatNumber,
 } from "@/lib/utils/blog-helpers"
+import { interactionStyles } from "@/lib/styles/interaction-styles"
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer"
 import CommentList from "@/components/comments/comment-list"
 import { LikeButton } from "@/components/blog/like-button"
 import { BookmarkButton } from "@/components/blog/bookmark-button"
 import SubscribeForm from "@/components/subscribe-form"
+import CommentCount from "@/components/comments/comment-count"
+import { TableOfContents, TocItem } from "@/components/blog/table-of-contents"
+import { cn } from "@/lib/utils"
+
+// 强制动态渲染，避免缓存新文章的 404 响应
+export const dynamic = "force-dynamic"
 
 // 页面参数接口
 interface BlogPostPageProps {
   params: Promise<{ slug: string }>
+}
+
+// 简单的 ID 生成器，需要与 rehype-slug 的逻辑尽量保持一致
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[\s\W-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+}
+
+function extractHeadings(content: string): TocItem[] {
+  const regex = /^(#{2,3})\s+(.+)$/gm
+  const headings: TocItem[] = []
+  const seenIds = new Map<string, number>()
+  let match
+
+  while ((match = regex.exec(content)) !== null) {
+    const level = match[1].length
+    const text = match[2].trim()
+    let id = slugify(text)
+
+    // Fallback for empty slugs (e.g. only special chars)
+    if (!id) {
+      id = `heading`
+    }
+
+    // Ensure uniqueness
+    if (seenIds.has(id)) {
+      const count = seenIds.get(id)!
+      seenIds.set(id, count + 1)
+      id = `${id}-${count}`
+    } else {
+      seenIds.set(id, 1)
+    }
+
+    headings.push({
+      id,
+      text,
+      level,
+    })
+  }
+
+  return headings
 }
 
 // 生成页面元数据
@@ -75,8 +129,8 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
 export default async function BlogPostPage({ params }: BlogPostPageProps) {
   const { slug } = await params
 
-  // 获取文章数据并增加浏览量
-  const result = await getPost(slug, { incrementView: true })
+  // 先获取文章数据（不增加浏览量），检查发布状态
+  const result = await getPost(slug)
 
   // 处理文章不存在的情况
   if (!result.success || !result.data) {
@@ -84,133 +138,128 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
   }
 
   const post: PostDetail = result.data
-  const content = post.contentSigned ?? post.content
 
-  // 检查文章是否已发布（防止访问草稿）
+  // 检查文章是否已发布（防止访问草稿）- 必须在 incrementView 之前
   if (!post.published) {
     notFound()
   }
 
+  // 文章已发布，增加浏览量
+  await getPost(slug, { incrementView: true })
+
+  const currentUser = await getCurrentUser()
+  const isOwnPost = currentUser?.id === post.author.id
+
+  let viewerFollowsAuthor = false
+
+  if (currentUser && !isOwnPost) {
+    const existingFollow = await prisma.follow.findUnique({
+      where: {
+        followerId_followingId: {
+          followerId: currentUser.id,
+          followingId: post.author.id,
+        },
+      },
+      select: { followerId: true },
+    })
+    viewerFollowsAuthor = !!existingFollow
+  }
+
+  const content = post.contentSigned ?? post.content
+  const toc = extractHeadings(content)
+
   return (
     <div className="bg-background min-h-screen">
-
-      <div className="container mx-auto px-4 py-8">
-        {/* 返回按钮 */}
-        <Button variant="ghost" asChild className="mb-6">
-          <Link href="/blog">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            返回博客列表
-          </Link>
-        </Button>
-
-        <div className="grid gap-8 lg:grid-cols-4">
-          {/* 主要内容 */}
-          <div className="lg:col-span-3">
+      <div className="container mx-auto grid grid-cols-1 gap-8 px-4 py-8 lg:grid-cols-12">
+        {/* Back Button Area - Optional, maybe top left? */}
+        
+        {/* Main Content */}
+        <main className="col-span-1 lg:col-span-8 lg:border-r border-border lg:pr-8">
             <article>
+              {/* Navigation Breadcrumb */}
+              <div className="mb-6">
+                 <Link href="/blog" className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors">
+                    <ArrowLeft className="h-3 w-3" />
+                    返回动态
+                 </Link>
+              </div>
+
               {/* 文章头部 */}
               <header className="mb-8">
-                {/* 文章标签 */}
-                {post.tags.length > 0 && (
-                  <div className="mb-4 flex flex-wrap gap-2">
-                    {post.tags.map((tag) => (
-                      <Link key={tag.id} href={`/blog?tag=${tag.slug}`}>
-                        <Badge
-                          variant="secondary"
-                          className="hover:bg-primary hover:text-primary-foreground cursor-pointer transition-colors"
-                        >
-                          {tag.name}
-                        </Badge>
-                      </Link>
-                    ))}
-                  </div>
-                )}
+                <h1 className="mb-4 text-3xl font-bold leading-tight lg:text-4xl tracking-tight">{post.title}</h1>
 
-                {/* 文章标题 */}
-                <h1 className="mb-4 text-4xl font-bold leading-tight">{post.title}</h1>
-
-                {/* 作者信息和文章元数据 */}
-                <div className="mb-6 flex items-center space-x-4">
-                  <Avatar className="h-12 w-12">
-                    <AvatarImage
-                      src={post.author.avatarUrl || "/placeholder.svg"}
-                      alt={post.author.name || "匿名用户"}
-                    />
-                    <AvatarFallback>
-                      {(post.author.name || "匿名用户")[0]?.toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
-                    <p className="font-medium">{post.author.name || "匿名用户"}</p>
-                    <div className="text-muted-foreground flex items-center space-x-4 text-sm">
-                      <span className="flex items-center" title={formatDate(post.publishedAt)}>
-                        <Calendar className="mr-1 h-3 w-3" />
-                        {formatRelativeTime(post.publishedAt)}
-                      </span>
-                      <span className="flex items-center">
-                        <Clock className="mr-1 h-3 w-3" />
-                        {calculateReadTime(post.content)}
-                      </span>
-                      <span className="flex items-center">
-                        <Eye className="mr-1 h-3 w-3" />
-                        {formatNumber(post.viewCount)} 阅读
-                      </span>
+                <div className="flex items-center gap-3 mb-6">
+                    <Link href={`/profile/${post.author.id ?? '#'}`}>
+                        <Avatar className="h-10 w-10 ring-2 ring-background">
+                            <AvatarImage
+                                src={post.author.avatarUrl || "/placeholder.svg"}
+                                alt={post.author.name || "匿名用户"}
+                            />
+                            <AvatarFallback>
+                                {(post.author.name || "匿名用户")[0]?.toUpperCase()}
+                            </AvatarFallback>
+                        </Avatar>
+                    </Link>
+                    <div>
+                         <p className="font-bold text-sm">
+                             {post.author.name || "匿名用户"}
+                             <span className="font-normal text-muted-foreground ml-2 text-xs">
+                                 · {formatRelativeTime(post.publishedAt)}
+                             </span>
+                         </p>
+                         <p className="text-xs text-muted-foreground">
+                             {calculateReadTime(post.content)} · {formatNumber(post.viewCount)} 阅读
+                         </p>
                     </div>
-                  </div>
                 </div>
-
-                {/* 互动按钮 */}
-                <div className="flex items-center space-x-4">
+                
+                {/* Action Bar */}
+                <div className="flex items-center gap-4 border-y border-border py-3">
                   <LikeButton
                     targetId={post.id}
                     targetType="post"
                     initialCount={post.stats.likesCount}
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
+                    className={cn("text-muted-foreground", interactionStyles.like)}
                   />
+                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                    <MessageSquare className="h-4 w-4" />
+                    <CommentCount
+                      targetType="post"
+                      targetId={post.id}
+                      initialCount={post.stats.commentsCount}
+                    />
+                  </div>
                   <BookmarkButton
                     postId={post.id}
                     initialCount={post.stats.bookmarksCount}
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
+                     className={cn("text-muted-foreground ml-auto", interactionStyles.bookmark)}
                   />
-                  <Button variant="outline" size="sm">
-                    <Share2 className="mr-2 h-4 w-4" />
-                    分享
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={cn("text-muted-foreground", interactionStyles.share)}
+                  >
+                      <Share2 className="h-4 w-4" />
                   </Button>
                 </div>
               </header>
 
               {/* 文章内容 */}
-              <div className="mb-12">
+              <div className="mb-16">
                 <MarkdownRenderer
                   content={content}
                   className="text-foreground leading-relaxed"
                 />
               </div>
 
-              {/* 文章底部 */}
-              <footer className="border-t pt-8">
-                <div className="mb-6 flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <Button variant="outline" size="sm">
-                      <ThumbsUp className="mr-2 h-4 w-4" />
-                      有帮助 ({formatNumber(post.stats.likesCount)})
-                    </Button>
-                    <Button variant="outline" size="sm">
-                      <Share2 className="mr-2 h-4 w-4" />
-                      分享文章
-                    </Button>
-                  </div>
-                  <p className="text-muted-foreground text-sm">
-                    最后更新：{formatDate(post.updatedAt)}
-                  </p>
-                </div>
-
-                {/* 作者简介 */}
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="flex items-start space-x-4">
-                      <Avatar className="h-16 w-16">
+              {/* 文章底部作者卡片 */}
+              <div className="mb-12 rounded-xl border border-border p-6">
+                    <div className="flex items-start gap-4">
+                      <Avatar className="h-14 w-14">
                         <AvatarImage
                           src={post.author.avatarUrl || "/placeholder.svg"}
                           alt={post.author.name || "匿名用户"}
@@ -219,137 +268,126 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                           {(post.author.name || "匿名用户")[0]?.toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="flex-1">
-                        <h3 className="mb-2 text-lg font-semibold">
-                          {post.author.name || "匿名用户"}
-                        </h3>
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-lg font-bold">
+                            {post.author.name || "匿名用户"}
+                          </h3>
+                          {!isOwnPost &&
+                            (currentUser ? (
+                              <FollowButton
+                                targetUserId={post.author.id}
+                                size="sm"
+                                initialFollowing={viewerFollowsAuthor}
+                                className="rounded-full"
+                              />
+                            ) : (
+                              <Button variant="outline" size="sm" className="rounded-full" asChild>
+                                <Link href="/login">
+                                  <UserPlus className="mr-1 h-3 w-3" />
+                                  登录后关注
+                                </Link>
+                              </Button>
+                            ))}
+                        </div>
                         {post.author.bio && (
-                          <p className="text-muted-foreground mb-3">{post.author.bio}</p>
+                          <p className="text-muted-foreground text-sm">{post.author.bio}</p>
                         )}
-                        <Button variant="outline" size="sm">
-                          关注作者
-                        </Button>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              </footer>
-
-              {/* 订阅更新 */}
-              <section className="mt-10">
-                <h2 className="mb-4 text-2xl font-semibold">订阅更新</h2>
-                <SubscribeForm />
-              </section>
+              </div>
             </article>
 
             {/* 评论区域 */}
-            <section className="mt-12">
+            <section className="mt-12 border-t border-border pt-8">
+              <h3 className="mb-6 text-xl font-bold">
+                评论 (
+                <CommentCount
+                  targetType="post"
+                  targetId={post.id}
+                  initialCount={post.stats.commentsCount}
+                />
+                )
+              </h3>
               <CommentList
                 targetType="post"
                 targetId={post.id}
                 showComposer
-                showTitle
+                showTitle={false}
                 initialCount={post.stats.commentsCount}
-                className="mt-6"
               />
             </section>
-          </div>
+        </main>
 
-          {/* 侧边栏 */}
-          <Suspense
+        {/* 侧边栏 */}
+        <Suspense
             fallback={
-              <div className="lg:col-span-1">
-                <div className="sticky top-24 space-y-6">
-                  <div className="bg-muted/50 h-32 animate-pulse rounded" />
-                  <div className="bg-muted/50 h-48 animate-pulse rounded" />
-                </div>
+              <div className="hidden lg:col-span-4 lg:block">
+                 <div className="bg-muted/30 h-64 animate-pulse rounded-xl" />
               </div>
             }
           >
-            <BlogSidebar post={post} />
-          </Suspense>
-        </div>
+            <BlogSidebar post={post} toc={toc} />
+        </Suspense>
       </div>
     </div>
   )
 }
 
 // 博客侧边栏组件
-function BlogSidebar({ post }: { post: PostDetail }) {
+function BlogSidebar({ post, toc }: { post: PostDetail; toc: TocItem[] }) {
   return (
-    <div className="lg:col-span-1">
-      <div className="sticky top-24 space-y-6">
-        {/* 文章信息卡片 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">文章信息</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">发布时间</span>
-                <span>{formatDate(post.publishedAt)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">阅读量</span>
-                <span>{formatNumber(post.viewCount)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">点赞数</span>
-                <span>{formatNumber(post.stats.likesCount)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">预计阅读</span>
-                <span>{calculateReadTime(post.content)}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
+    <aside className="hidden lg:col-span-4 lg:block pl-4">
+      <div className="sticky top-24 space-y-8">
+        
+        {/* 目录 - 如果有标题则显示 */}
+        {toc.length > 0 && (
+          <div className="space-y-4">
+             <h3 className="font-bold text-sm uppercase text-muted-foreground tracking-wider">目录</h3>
+             <TableOfContents items={toc} />
+          </div>
+        )}
+        
         {/* 系列信息 */}
         {post.series && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">文章系列</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div>
-                <Link href={`/blog?series=${post.series.slug}`}>
-                  <h3 className="hover:text-primary cursor-pointer font-medium transition-colors">
-                    {post.series.title}
-                  </h3>
-                </Link>
-                {post.series.description && (
-                  <p className="text-muted-foreground mt-1 text-sm">{post.series.description}</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          <div className="rounded-xl bg-muted/30 p-4 border-none">
+            <h3 className="mb-2 font-bold text-sm">所属系列</h3>
+            <div>
+              <Link href={`/blog?series=${post.series.slug}`}>
+                <h4 className="text-primary hover:underline cursor-pointer font-medium">
+                  {post.series.title}
+                </h4>
+              </Link>
+            </div>
+          </div>
         )}
 
         {/* 相关标签 */}
         {post.tags.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">相关标签</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
-                {post.tags.map((tag) => (
-                  <Link key={tag.id} href={`/blog?tag=${tag.slug}`}>
-                    <Badge
-                      variant="outline"
-                      className="hover:bg-primary hover:text-primary-foreground cursor-pointer transition-colors"
-                    >
-                      {tag.name}
-                    </Badge>
-                  </Link>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+           <div className="space-y-3">
+            <h3 className="font-bold text-sm uppercase text-muted-foreground tracking-wider">标签</h3>
+            <div className="flex flex-wrap gap-2">
+              {post.tags.map((tag) => (
+                <Link key={tag.id} href={`/blog?tag=${tag.slug}`}>
+                  <Badge
+                    variant="secondary"
+                    className="hover:bg-primary hover:text-primary-foreground cursor-pointer transition-colors"
+                  >
+                    {tag.name}
+                  </Badge>
+                </Link>
+              ))}
+            </div>
+          </div>
         )}
+
+        {/* 订阅小部件 */}
+        <div className="rounded-xl bg-muted/30 p-4">
+             <h3 className="font-bold text-sm mb-2">订阅更新</h3>
+             <SubscribeForm />
+        </div>
+
       </div>
-    </div>
+    </aside>
   )
 }

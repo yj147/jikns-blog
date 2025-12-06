@@ -1,4 +1,5 @@
 import { headers } from "next/headers"
+import { getClientIpFromHeaders } from "@/lib/api/get-client-ip"
 
 export interface ServerContext {
   requestId?: string
@@ -17,12 +18,8 @@ export async function getServerContext(): Promise<ServerContext> {
         (value) => value && value.length > 0
       ) || crypto.randomUUID()
 
-    const forwardedFor = headerStore.get("x-forwarded-for")
-    const ipAddress =
-      forwardedFor?.split(",")[0]?.trim() ||
-      headerStore.get("x-real-ip") ||
-      headerStore.get("x-client-ip") ||
-      undefined
+    const ipValue = getClientIpFromHeaders(headerStore)
+    const ipAddress = ipValue === "unknown" ? undefined : ipValue
 
     return {
       requestId,

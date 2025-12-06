@@ -63,9 +63,6 @@ export default defineConfig({
     poolOptions: {
       threads: {
         singleThread: true,
-        resourceLimits: {
-          maxOldGenerationSizeMb: 8192,
-        },
       },
     },
 

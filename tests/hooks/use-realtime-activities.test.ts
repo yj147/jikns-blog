@@ -77,6 +77,8 @@ describe("useRealtimeActivities", () => {
         new: { id: "a1", authorId: "u1", deletedAt: null },
         old: null,
       })
+      vi.runAllTimers()
+      await Promise.resolve()
     })
     expect(firstInsert).toHaveBeenCalledTimes(1)
 
@@ -89,6 +91,8 @@ describe("useRealtimeActivities", () => {
         new: { id: "a1", authorId: "u1", deletedAt: null },
         old: null,
       })
+      vi.runAllTimers()
+      await Promise.resolve()
     })
     expect(nextInsert).toHaveBeenCalledTimes(1)
   })
@@ -118,8 +122,16 @@ describe("useRealtimeActivities", () => {
         new: { id: "a2", authorId: "u2", deletedAt: null },
         old: null,
       })
+      vi.runAllTimers()
+      await Promise.resolve()
     })
-    expect(onUpdate).toHaveBeenCalledWith(supabaseCtx.tables.activities.a2)
+    expect(onUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "a2",
+        authorId: "u2",
+        author: expect.objectContaining({ id: "u2" }),
+      })
+    )
 
     await act(async () => {
       await channel.emitChange({
@@ -170,6 +182,7 @@ describe("useRealtimeActivities", () => {
 
     expect(result.current.isPollingFallback).toBe(true)
     expect(result.current.connectionState).toBe("polling")
+    expect(result.current.error).toBeInstanceOf(Error)
     expect(pollFetcher).toHaveBeenCalled()
   })
 
@@ -253,12 +266,14 @@ describe("useRealtimeActivities", () => {
         new: { id: "err", authorId: "u2", deletedAt: null },
         old: null,
       })
+      vi.runAllTimers()
+      await Promise.resolve()
     })
 
     expect(result.current.error).toBeInstanceOf(Error)
   })
 
-  it("没有 pollFetcher 也会进入轮询降级状态", async () => {
+  it("没有 pollFetcher 时标记错误并不进入轮询", async () => {
     const { result } = renderHook(() =>
       useRealtimeActivities({
         pollInterval: 3000,
@@ -282,8 +297,9 @@ describe("useRealtimeActivities", () => {
     await emitFailure(4000)
     await emitFailure(0)
 
-    expect(result.current.isPollingFallback).toBe(true)
-    expect(result.current.connectionState).toBe("polling")
+    expect(result.current.isPollingFallback).toBe(false)
+    expect(result.current.error).toBeInstanceOf(Error)
+    expect(result.current.connectionState).toBe("error")
   })
 
   it("禁用时不会建立订阅", async () => {
@@ -310,7 +326,8 @@ describe("useRealtimeActivities", () => {
     await flushEffects()
 
     expect(result.current.error).toBeInstanceOf(Error)
-    expect(result.current.isPollingFallback).toBe(true)
+    expect(result.current.isPollingFallback).toBe(false)
+    expect(result.current.connectionState).toBe("error")
   })
 
   it("缺少 channel 方法时直接降级轮询", async () => {
@@ -318,7 +335,8 @@ describe("useRealtimeActivities", () => {
     supabaseCtx.supabase.channel = undefined
     const { result } = renderHook(() => useRealtimeActivities())
     await flushEffects()
-    expect(result.current.isPollingFallback).toBe(true)
+    expect(result.current.isPollingFallback).toBe(false)
+    expect(result.current.error).toBeInstanceOf(Error)
   })
 
   it("会话未就绪时触发重试", async () => {
@@ -360,6 +378,8 @@ describe("useRealtimeActivities", () => {
         new: { id: "x1", authorId: "u1", deletedAt: null },
         old: null,
       })
+      vi.runAllTimers()
+      await Promise.resolve()
     })
 
     expect(onInsert).toHaveBeenCalled()

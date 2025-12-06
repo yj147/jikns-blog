@@ -16,6 +16,12 @@ export const TEST_ENV = {
   EMAIL_FROM: "noreply@example.com",
   NODE_ENV: "test",
 
+  // JWT 配置
+  JWT_ACCESS_SECRET: "test-access-secret",
+  JWT_REFRESH_SECRET: "test-refresh-secret",
+  JWT_ISSUER: "jikns-blog-test",
+  JWT_AUDIENCE: "jikns-blog-test",
+
   // 数据库配置 - 连接到 Supabase 本地实例
   DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
 

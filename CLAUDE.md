@@ -259,13 +259,7 @@ code in this repository.
 - 流程：resolve-library-id → get-library-docs。
 - 参数：tokens ≤ 5000，topic 明确聚焦。
 
-### 2. Sequential Thinking（复杂规划）
-
-- 适用：多步骤任务分解、架构设计、诊断流程。
-- 输出：6-10 步可执行计划（不暴露推理过程）。
-- 参数：total_thoughts ≤ 10。
-
-### 3. Playwright（浏览器自动化）
+### 2. Playwright或者chrome devtools（浏览器自动化）
 
 - 适用：网页截图、表单测试、SPA 交互验证。
 - 限制：仅开发测试用途。

@@ -1,12 +1,12 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useCallback } from "react"
 import { ActivityCard } from "@/components/activity-card"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { AlertCircle } from "lucide-react"
-import type { RefCallback } from "react"
+import { Virtuoso } from "@/components/common/virtual-list"
 import type { ActivityWithAuthor } from "@/types/activity"
 
 interface ActivityErrorStateProps {
@@ -105,40 +105,23 @@ interface ActivityLoadMoreSectionProps {
   hasMore: boolean
   isLoading: boolean
   loadMore: () => void
-  loadMoreRef: RefCallback<HTMLDivElement>
 }
 
-function ActivityLoadMoreSection({
-  hasMore,
-  isLoading,
-  loadMore,
-  loadMoreRef,
-}: ActivityLoadMoreSectionProps) {
+function ActivityLoadMoreSection({ hasMore, isLoading, loadMore }: ActivityLoadMoreSectionProps) {
   if (!hasMore) return null
 
   return (
-    <>
-      {!isLoading && (
-        <div
-          ref={loadMoreRef}
-          data-testid="activity-load-more"
-          className="flex h-10 items-center justify-center"
-        >
-          <div className="text-muted-foreground text-sm">滚动加载更多...</div>
-        </div>
-      )}
-      <div className="py-2 text-center">
-        <Button
-          data-testid="activity-load-more-button"
-          onClick={loadMore}
-          disabled={isLoading}
-          variant="outline"
-          size="sm"
-        >
-          {isLoading ? "加载中..." : "加载更多"}
-        </Button>
-      </div>
-    </>
+    <div className="py-2 text-center">
+      <Button
+        data-testid="activity-load-more-button"
+        onClick={loadMore}
+        disabled={isLoading}
+        variant="outline"
+        size="sm"
+      >
+        {isLoading ? "加载中..." : "加载更多"}
+      </Button>
+    </div>
   )
 }
 
@@ -159,12 +142,12 @@ export interface ActivityFeedViewProps {
   error: Error | null
   hasMore: boolean
   loadMore: () => void
-  loadMoreRef: RefCallback<HTMLDivElement>
   searchQuery: string
   hasActiveFilters: boolean
   clearAllFilters: () => void
   onRetry: () => void
-  onEdit: (activity: ActivityWithAuthor) => void
+  onEdit?: (activity: ActivityWithAuthor) => void
+  onDelete?: (activity: ActivityWithAuthor) => void
 }
 
 export function ActivityFeedView({
@@ -174,12 +157,12 @@ export function ActivityFeedView({
   error,
   hasMore,
   loadMore,
-  loadMoreRef,
   searchQuery,
   hasActiveFilters,
   clearAllFilters,
   onRetry,
   onEdit,
+  onDelete,
 }: ActivityFeedViewProps) {
   const shouldShowEmpty = useMemo(
     () => !isLoading && !isError && activities.length === 0,
@@ -190,13 +173,31 @@ export function ActivityFeedView({
     [activities.length, hasMore, isLoading]
   )
 
+  const handleEndReached = useCallback(() => {
+    if (hasMore && !isLoading) {
+      loadMore()
+    }
+  }, [hasMore, isLoading, loadMore])
+
+  const renderActivity = useCallback(
+    (index: number, activity: ActivityWithAuthor) => (
+      <div style={{ paddingBottom: index === activities.length - 1 ? 0 : 16 }}>
+        <ActivityCard activity={activity} onEdit={onEdit} onDelete={onDelete} />
+      </div>
+    ),
+    [activities.length, onDelete, onEdit]
+  )
+
   return (
     <div className="space-y-4">
       <ActivityErrorState isError={isError} message={error?.message} onRetry={onRetry} />
 
-      {activities.map((activity) => (
-        <ActivityCard key={activity.id} activity={activity} onEdit={onEdit} />
-      ))}
+      <Virtuoso
+        data={activities}
+        useWindowScroll
+        itemContent={renderActivity}
+        endReached={handleEndReached}
+      />
 
       {isLoading && <ActivitySkeletonList />}
 
@@ -204,7 +205,6 @@ export function ActivityFeedView({
         hasMore={hasMore}
         isLoading={isLoading}
         loadMore={loadMore}
-        loadMoreRef={loadMoreRef}
       />
 
       <ActivityEmptyState

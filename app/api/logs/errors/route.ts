@@ -54,12 +54,45 @@ const requestSchema = z.object({
   })
 })
 
+function validateLogIngestSecret(req: NextRequest) {
+  const expectedSecret = process.env.LOG_INGEST_SECRET
+
+  if (!expectedSecret) {
+    logger.error("环境变量 LOG_INGEST_SECRET 未配置", { module: "api/logs/errors" })
+    return NextResponse.json({
+      error: true,
+      code: "CONFIG_ERROR",
+      message: "日志密钥未配置",
+      timestamp: Date.now()
+    }, { status: 500 })
+  }
+
+  const headerSecret = req.headers.get("x-log-secret")
+  const bearer = req.headers.get("authorization")
+  const bearerToken = bearer?.startsWith("Bearer ") ? bearer.slice(7).trim() : null
+  const providedSecret = headerSecret || bearerToken
+
+  if (!providedSecret || providedSecret !== expectedSecret) {
+    return NextResponse.json({
+      error: true,
+      code: "UNAUTHORIZED",
+      message: "缺少或无效的日志密钥",
+      timestamp: Date.now()
+    }, { status: 401 })
+  }
+
+  return null
+}
+
 /**
  * POST /api/logs/errors - 接收前端错误日志
  */
 async function handlePost(request: NextRequest) {
   return withApiSecurity(
     async (req: NextRequest) => {
+      const secretValidation = validateLogIngestSecret(req)
+      if (secretValidation) return secretValidation
+
       try {
         const body = await req.json()
         

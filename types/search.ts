@@ -58,7 +58,6 @@ export interface SearchActivityHit {
 export interface SearchUserHit {
   id: string
   name: string | null
-  email: string
   avatarUrl: string | null
   bio?: string | null
   rank: number

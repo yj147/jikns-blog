@@ -31,6 +31,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null)
   const router = useRouter()
 
+  const debug = (message: string, payload?: Record<string, any>) => {
+    if (typeof window === "undefined" || !(window as any).__AUTH_DEBUG__) return
+    console.log(`[AuthProvider] ${message}`, payload)
+  }
+
   useEffect(() => {
     let isMounted = true
 
@@ -85,10 +90,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   // 从数据库获取用户完整信息
-  const fetchUserProfile = async (supabaseUser: SupabaseUser): Promise<DatabaseUser | null> => {
+  const fetchUserProfile = async (_supabaseUser?: SupabaseUser): Promise<DatabaseUser | null> => {
     try {
       const response = await fetch("/api/user", {
         method: "GET",
+        credentials: "include",
+        cache: "no-store",
         headers: {
           "Content-Type": "application/json",
         },
@@ -98,6 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { user: data } = await response.json()
         if (data) {
           data.avatarUrl = data.avatarSignedUrl || data.avatarUrl || null
+          data.coverImage = data.coverImageSignedUrl || data.coverImage || null
         }
         return data
       } else {
@@ -109,6 +117,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       logger.error("获取用户资料失败", { module: "AuthProvider.fetchUserProfile" }, error)
+      return null
+    }
+  }
+
+  // 从服务端 Cookie 同步 Supabase 会话到客户端
+  const syncSessionFromServer = async (): Promise<Session | null> => {
+    if (!supabase) return null
+    try {
+      const response = await fetch("/api/auth/session", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      })
+
+      if (!response.ok) {
+        debug("syncSessionFromServer: response not ok", { status: response.status })
+        return null
+      }
+
+      const data = await response.json()
+      const serverSession = data?.session as Session | undefined
+      if (!serverSession?.access_token || !serverSession?.refresh_token) {
+        debug("syncSessionFromServer: missing tokens")
+        return null
+      }
+
+      const { data: setResult, error: setError } = await supabase.auth.setSession({
+        access_token: serverSession.access_token,
+        refresh_token: serverSession.refresh_token,
+      })
+
+      if (setError) {
+        logger.error("同步 Supabase 客户端会话失败", { module: "AuthProvider.syncSession" }, setError)
+        return null
+      }
+
+      const finalSession = setResult.session ?? serverSession
+      debug("syncSessionFromServer: setSession success", {
+        hasUser: Boolean(finalSession?.user),
+        expires_at: finalSession?.expires_at,
+      })
+
+      if (typeof window !== "undefined") {
+        ;(window as any).__AUTH_SESSION__ = finalSession
+      }
+
+      return finalSession
+    } catch (error) {
+      logger.error("同步客户端会话异常", { module: "AuthProvider.syncSession" }, error)
+      debug("syncSessionFromServer: exception", { error })
       return null
     }
   }
@@ -130,17 +188,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (error) {
           logger.error("获取初始会话失败", { module: "AuthProvider.getInitialSession" }, error)
-        } else {
-          setSession(session)
-          if (session?.user) {
-            const dbUser = await fetchUserProfile(session.user)
-            setUser(dbUser)
-          } else {
-            setUser(null)
-          }
         }
+
+        let activeSession = session
+
+        // 当 Supabase 客户端缺少本地会话（登录通过后端完成）时，尝试从服务端同步
+        if (!activeSession) {
+          debug("getInitialSession: local session empty, syncing from server")
+          activeSession = await syncSessionFromServer()
+        }
+
+        setSession(activeSession)
+
+        const dbUser = await fetchUserProfile(activeSession?.user ?? undefined)
+        if (dbUser) {
+          debug("getInitialSession: fetched user profile")
+        } else {
+          debug("getInitialSession: user profile null")
+        }
+        setUser(dbUser)
       } catch (error) {
         logger.error("初始会话查询异常", { module: "AuthProvider.getInitialSession" }, error)
+        debug("getInitialSession: exception", { error })
       } finally {
         if (isMounted) {
           setLoading(false)
@@ -156,6 +225,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setSession(nextSession)
       if (nextSession?.user) {
+        debug("onAuthStateChange", { event })
         const dbUser = await fetchUserProfile(nextSession.user)
         setUser(dbUser)
       } else {
@@ -175,15 +245,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [router, supabase])
 
+  useEffect(() => {
+    const handleServerLogin = async () => {
+      setLoading(true)
+      try {
+        let nextSession: Session | null = session
+
+        if (supabase) {
+          nextSession = (await syncSessionFromServer()) ?? nextSession
+          if (nextSession) {
+            setSession(nextSession)
+          }
+        }
+
+        const dbUser = await fetchUserProfile(nextSession?.user ?? undefined)
+        setUser(dbUser)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    window.addEventListener("auth:server-login", handleServerLogin)
+    return () => window.removeEventListener("auth:server-login", handleServerLogin)
+  }, [session, supabase])
+
   const signOut = async () => {
-    if (!supabase) return
     try {
       setLoading(true)
-      const { error } = await supabase.auth.signOut()
-
-      if (error) {
-        logger.error("登出错误", { module: "AuthProvider.signOut" }, error)
-        throw error
+      // 先清理后端会话与 Cookie，再同步客户端状态
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" })
+      if (supabase) {
+        await supabase.auth.signOut()
       }
 
       // 登出成功后重定向到首页

@@ -6,6 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { NextRequest, NextResponse } from "next/server"
+import { generateOAuthState } from "@/lib/auth/oauth-state"
 import { createTestRequest, TEST_USERS, PERMISSION_TEST_SCENARIOS } from "../helpers/test-data"
 import { setCurrentTestUser, resetMocks } from "../__mocks__/supabase"
 import type { Provider } from "@supabase/supabase-js"
@@ -59,8 +60,15 @@ vi.mock("@/app/auth/callback/route", () => ({
 /**
  * 创建 NextRequest 测试实例
  */
-function createNextRequest(url: string): NextRequest {
-  const request = new Request(url)
+function createNextRequest(url: string, cookies?: Record<string, string>): NextRequest {
+  const headers = new Headers()
+  if (cookies) {
+    const cookieString = Object.entries(cookies)
+      .map(([key, value]) => `${key}=${value}`)
+      .join("; ")
+    headers.set("cookie", cookieString)
+  }
+  const request = new Request(url, { headers })
   const nextRequest = new NextRequest(request, {})
   return nextRequest
 }
@@ -74,6 +82,7 @@ describe("GitHub OAuth 完整流程集成测试", () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = "http://localhost:54321"
     process.env.NEXT_PUBLIC_SITE_URL = "http://localhost:3000"
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "test-anon-key"
+    process.env.OAUTH_STATE_SECRET = "test-oauth-state-secret"
   })
 
   afterEach(() => {
@@ -240,9 +249,11 @@ describe("GitHub OAuth 完整流程集成测试", () => {
     })
 
     it("应该处理复杂的重定向路径", async () => {
+      const stateToken = generateOAuthState()
       const complexRedirectUrl =
-        "http://localhost:3000/auth/callback?code=auth_code&state=state123&redirect_to=%2Fadmin%2Fposts%3Fpage%3D2%26filter%3Ddraft"
-      const callbackRequest = createNextRequest(complexRedirectUrl)
+        `http://localhost:3000/auth/callback?code=auth_code&state=${stateToken.state}&redirect_to=%2Fadmin%2Fposts%3Fpage%3D2%26filter%3Ddraft`
+      const cookieValue = `${stateToken.state}.${stateToken.issuedAt}.${stateToken.signature}`
+      const callbackRequest = createNextRequest(complexRedirectUrl, { oauth_state: cookieValue })
 
       const { GET } = await import("@/app/auth/callback/route")
       const callbackResponse = await GET(callbackRequest)

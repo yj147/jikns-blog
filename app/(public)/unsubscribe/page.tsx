@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { CheckCircle2, Loader2, XCircle } from "lucide-react"
@@ -13,7 +13,7 @@ type UnsubscribeState = {
   message: string
 }
 
-export default function UnsubscribePage() {
+function UnsubscribePageContent() {
   const searchParams = useSearchParams()
   const token = searchParams.get("token")
   const [state, setState] = useState<UnsubscribeState>({ status: "idle", message: "" })
@@ -87,5 +87,38 @@ export default function UnsubscribePage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+function UnsubscribePageFallback() {
+  return (
+    <div className="mx-auto flex min-h-[60vh] max-w-2xl items-center px-6 py-12 sm:px-8">
+      <Card className="w-full">
+        <CardHeader className="space-y-3">
+          <CardTitle className="flex items-center gap-3 text-2xl font-semibold">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            退订邮件
+          </CardTitle>
+          <CardDescription className="text-base text-muted-foreground">正在加载页面...</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">正在准备退订信息，请稍候。</p>
+          <div className="flex flex-wrap gap-3">
+            <Button variant="secondary" disabled>
+              返回首页
+            </Button>
+            <Button disabled>重新订阅</Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+export default function UnsubscribePage() {
+  return (
+    <Suspense fallback={<UnsubscribePageFallback />}>
+      <UnsubscribePageContent />
+    </Suspense>
   )
 }

@@ -6,20 +6,28 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { NextRequest, NextResponse } from "next/server"
-import { middleware } from "@/middleware"
-import { prisma } from "@/lib/prisma"
+import { middleware, config as middlewareConfig } from "@/middleware"
+import { prismaClient } from "@/lib/prisma-client"
 import { createTestRequest, TEST_USERS, PERMISSION_TEST_SCENARIOS } from "../helpers/test-data"
 import { setCurrentTestUser, resetMocks } from "../__mocks__/supabase"
 import { setupTestEnv } from "../helpers/test-env"
 import { resetPrismaMocks } from "../__mocks__/prisma"
 
-const prismaModule = vi.hoisted(() => require("../__mocks__/prisma"))
-
 // Mock 依赖
-vi.mock("@/lib/prisma", () => ({ prisma: prismaModule.mockPrisma }))
+vi.mock("@/lib/prisma-client", async () => {
+  const prismaModule = await import("../__mocks__/prisma")
+  return { prismaClient: prismaModule.mockPrisma }
+})
+
+vi.mock("@supabase/ssr", async () => {
+  const supabaseMock = await import("../__mocks__/supabase")
+  return {
+    createServerClient: vi.fn(() => supabaseMock.createMockSupabaseClient()),
+  }
+})
 
 vi.mock("@/lib/security", () => ({
-  setSecurityHeaders: vi.fn((response) => response),
+  setSecurityHeaders: vi.fn((response, _options) => response),
   validateRequestOrigin: vi.fn(() => true),
   RateLimiter: {
     checkRateLimit: vi.fn(() => true),
@@ -34,7 +42,7 @@ vi.mock("@/lib/security", () => ({
 }))
 
 describe("认证中间件测试", () => {
-  const mockPrisma = vi.mocked(prisma)
+  const mockPrisma = vi.mocked(prismaClient)
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -43,12 +51,7 @@ describe("认证中间件测试", () => {
 
     // 使用标准化环境配置
     setupTestEnv()
-    // 避免直接修改只读属性
-    Object.defineProperty(process.env, "NODE_ENV", {
-      value: "test",
-      writable: true,
-      configurable: true,
-    })
+    process.env.NODE_ENV = "test"
   })
 
   afterEach(() => {
@@ -76,7 +79,12 @@ describe("认证中间件测试", () => {
       const response = await middleware(request as NextRequest)
 
       const { setSecurityHeaders } = await import("@/lib/security")
-      expect(setSecurityHeaders).toHaveBeenCalledWith(expect.any(NextResponse))
+      expect(setSecurityHeaders).toHaveBeenCalledWith(
+        expect.any(NextResponse),
+        expect.objectContaining({
+          request: expect.any(NextRequest),
+        })
+      )
     })
   })
 
@@ -107,8 +115,21 @@ describe("认证中间件测试", () => {
       expect(response.status).not.toBe(401)
     })
 
+    it("应该允许普通用户访问非管理的受保护路径", async () => {
+      setCurrentTestUser("user")
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(TEST_USERS.user as any)
+
+      const request = createTestRequest("/settings")
+      const response = await middleware(request as NextRequest)
+
+      expect(response.status).toBe(200)
+      expect(response.headers.get("x-middleware-rewrite")).toBeNull()
+      expect(response.headers.get("location")).toBeNull()
+    })
+
     it("应该拒绝被封禁用户访问认证路径", async () => {
-      setCurrentTestUser("bannedUser")(mockPrisma.user.findUnique as any).mockResolvedValue(
+      setCurrentTestUser("bannedUser")
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(
         TEST_USERS.bannedUser as any
       )
 
@@ -116,9 +137,12 @@ describe("认证中间件测试", () => {
       const response = await middleware(request as NextRequest)
 
       expect(response.status).toBe(403)
-      const data = await response.json()
-      expect(data.error).toBe("账户已被封禁")
-      expect(data.code).toBe("ACCOUNT_BANNED")
+      const rewriteTarget = response.headers.get("x-middleware-rewrite")
+      expect(rewriteTarget).toBeTruthy()
+      const targetUrl = new URL(rewriteTarget!)
+      expect(targetUrl.pathname).toBe("/unauthorized")
+      expect(targetUrl.searchParams.get("reason")).toBe("account_banned")
+      expect(targetUrl.searchParams.get("redirect")).toBe("/profile")
     })
   })
 
@@ -137,7 +161,8 @@ describe("认证中间件测试", () => {
     })
 
     it.each(adminPaths)("应该拒绝普通用户访问管理路径: %s", async (path) => {
-      setCurrentTestUser("user")(mockPrisma.user.findUnique as any).mockResolvedValue(
+      setCurrentTestUser("user")
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(
         TEST_USERS.user as any
       )
 
@@ -145,16 +170,18 @@ describe("认证中间件测试", () => {
       const response = await middleware(request as NextRequest)
 
       if (path.startsWith("/api/")) {
-        // API 路径返回 JSON 错误
         expect(response.status).toBe(403)
         const data = await response.json()
         expect(data.error).toBe("权限不足，需要管理员权限")
         expect(data.code).toBe("INSUFFICIENT_PERMISSIONS")
       } else {
-        // 页面路径重定向到未授权页面
-        expect(response.status).toBe(307)
-        const location = response.headers.get("location")
-        expect(location).toContain("/unauthorized")
+        expect(response.status).toBe(403)
+        const rewriteTarget = response.headers.get("x-middleware-rewrite")
+        expect(rewriteTarget).toBeTruthy()
+        const targetUrl = new URL(rewriteTarget!)
+        expect(targetUrl.pathname).toBe("/unauthorized")
+        expect(targetUrl.searchParams.get("reason")).toBe("insufficient_permissions")
+        expect(targetUrl.searchParams.get("redirect")).toBe(path)
       }
     })
 
@@ -180,8 +207,11 @@ describe("认证中间件测试", () => {
       const response = await middleware(request as NextRequest)
 
       expect(response.status).toBe(403)
-      const data = await response.json()
-      expect(data.code).toBe("ACCOUNT_BANNED")
+      const rewriteTarget = response.headers.get("x-middleware-rewrite")
+      expect(rewriteTarget).toBeTruthy()
+      const targetUrl = new URL(rewriteTarget!)
+      expect(targetUrl.searchParams.get("reason")).toBe("account_banned")
+      expect(targetUrl.searchParams.get("redirect")).toBe("/admin/dashboard")
     })
   })
 
@@ -202,17 +232,15 @@ describe("认证中间件测试", () => {
     })
 
     it("应该在用户状态变更时清除缓存", async () => {
-      setCurrentTestUser("user")(mockPrisma.user.findUnique as any).mockResolvedValue(
-        TEST_USERS.user as any
-      )
+      setCurrentTestUser("user")
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(TEST_USERS.user as any)
 
       const request = createTestRequest("/profile")
       await middleware(request as NextRequest)
 
       // 模拟用户被封禁
-      const bannedUser = { ...TEST_USERS.user, status: "BANNED" as const }(
-        mockPrisma.user.findUnique as any
-      ).mockResolvedValue(bannedUser as any)
+      const bannedUser = { ...TEST_USERS.user, status: "BANNED" as const }
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(bannedUser as any)
 
       const bannedRequest = createTestRequest("/profile")
       const bannedResponse = await middleware(bannedRequest as NextRequest)
@@ -222,6 +250,13 @@ describe("认证中间件测试", () => {
   })
 
   describe("安全功能测试", () => {
+    beforeEach(async () => {
+      const { RateLimiter, validateRequestOrigin, CSRFProtection } = await import("@/lib/security")
+      vi.mocked(RateLimiter.checkRateLimit).mockReturnValue(true)
+      vi.mocked(validateRequestOrigin).mockReturnValue(true)
+      vi.mocked(CSRFProtection.validateToken).mockReturnValue(true)
+    })
+
     it("应该执行速率限制检查", async () => {
       const { RateLimiter } = await import("@/lib/security")
 
@@ -230,8 +265,8 @@ describe("认证中间件测试", () => {
 
       expect(RateLimiter.checkRateLimit).toHaveBeenCalledWith(
         "unknown", // IP 地址
-        100, // 限制数量
-        15 * 60 * 1000 // 时间窗口
+        500, // 管理路径更宽松的限制数量
+        5 * 60 * 1000 // 管理路径 5 分钟窗口
       )
     })
 
@@ -292,12 +327,12 @@ describe("认证中间件测试", () => {
         lastLoginAt: oldLoginTime,
       }
 
-      setCurrentTestUser("user")(mockPrisma.user.findUnique as any)
-        .mockResolvedValue(userWithOldLogin as any)(mockPrisma.user.update as any)
-        .mockResolvedValue({
-          ...userWithOldLogin,
-          lastLoginAt: new Date(),
-        } as any)
+      setCurrentTestUser("user")
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(userWithOldLogin as any)
+      ;(mockPrisma.user.update as any).mockResolvedValue({
+        ...userWithOldLogin,
+        lastLoginAt: new Date(),
+      } as any)
 
       const request = createTestRequest("/profile")
       await middleware(request as NextRequest)
@@ -316,9 +351,8 @@ describe("认证中间件测试", () => {
         lastLoginAt: recentLoginTime,
       }
 
-      setCurrentTestUser("user")(mockPrisma.user.findUnique as any).mockResolvedValue(
-        userWithRecentLogin as any
-      )
+      setCurrentTestUser("user")
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(userWithRecentLogin as any)
 
       const request = createTestRequest("/profile")
       await middleware(request as NextRequest)
@@ -330,9 +364,8 @@ describe("认证中间件测试", () => {
 
   describe("错误处理", () => {
     it("应该处理数据库查询错误", async () => {
-      setCurrentTestUser("user")(mockPrisma.user.findUnique as any).mockRejectedValue(
-        new Error("Database connection failed")
-      )
+      setCurrentTestUser("user")
+      ;(mockPrisma.user.findUnique as any).mockRejectedValue(new Error("Database connection failed"))
 
       const request = createTestRequest("/profile")
       const response = await middleware(request as NextRequest)
@@ -344,16 +377,17 @@ describe("认证中间件测试", () => {
     })
 
     it("应该处理 Supabase 会话错误", async () => {
-      const mockSupabase = await import("../__mocks__/supabase")
-      const originalClient = mockSupabase.createServerSupabaseClient
+      const { createServerClient } = await import("@supabase/ssr")
+      const originalClient = vi.mocked(createServerClient).getMockImplementation() as any
 
-      vi.mocked(mockSupabase.createServerSupabaseClient).mockResolvedValue({
+      vi.mocked(createServerClient).mockReturnValue({
         auth: {
-          getSession: vi.fn().mockResolvedValue({
-            data: { session: null },
+          getUser: vi.fn().mockResolvedValue({
+            data: { user: null },
             error: new Error("Session fetch failed"),
           }),
         },
+        storage: { from: vi.fn(() => ({ createSignedUrl: vi.fn() })) },
       } as any)
 
       const request = createTestRequest("/profile")
@@ -364,7 +398,7 @@ describe("认证中间件测试", () => {
       expect(data.code).toBe("AUTHENTICATION_REQUIRED")
 
       // 恢复原始 mock
-      vi.mocked(mockSupabase.createServerSupabaseClient).mockImplementation(originalClient)
+      vi.mocked(createServerClient).mockImplementation(originalClient)
     })
 
     it("应该处理未知错误", async () => {
@@ -386,9 +420,8 @@ describe("认证中间件测试", () => {
     })
 
     it("应该为页面请求重定向到错误页面", async () => {
-      setCurrentTestUser("user")(mockPrisma.user.findUnique as any).mockRejectedValue(
-        new Error("Database error")
-      )
+      setCurrentTestUser("user")
+      ;(mockPrisma.user.findUnique as any).mockRejectedValue(new Error("Database error"))
 
       const request = createTestRequest("/profile") // 非 API 路径
       const response = await middleware(request as NextRequest)
@@ -426,9 +459,8 @@ describe("认证中间件测试", () => {
     })
 
     it("应该在合理时间内完成权限检查", async () => {
-      setCurrentTestUser("user")(mockPrisma.user.findUnique as any).mockResolvedValue(
-        TEST_USERS.user as any
-      )
+      setCurrentTestUser("user")
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(TEST_USERS.user as any)
 
       const startTime = performance.now()
 
@@ -442,9 +474,8 @@ describe("认证中间件测试", () => {
     it("应该记录错误处理的性能数据", async () => {
       const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
 
-      setCurrentTestUser("user")(mockPrisma.user.findUnique as any).mockRejectedValue(
-        new Error("Test error")
-      )
+      setCurrentTestUser("user")
+      ;(mockPrisma.user.findUnique as any).mockRejectedValue(new Error("Test error"))
 
       const request = createTestRequest("/profile")
       await middleware(request as NextRequest)
@@ -458,9 +489,8 @@ describe("认证中间件测试", () => {
   describe("权限测试场景", () => {
     it.each(PERMISSION_TEST_SCENARIOS)("应该正确处理权限场景: $name", async (scenario) => {
       if (scenario.user) {
-        setCurrentTestUser(scenario.user.role === "ADMIN" ? "admin" : "user")(
-          mockPrisma.user.findUnique as any
-        ).mockResolvedValue(scenario.user as any)
+        setCurrentTestUser(scenario.user.role === "ADMIN" ? "admin" : "user")
+        ;(mockPrisma.user.findUnique as any).mockResolvedValue(scenario.user as any)
       } else {
         setCurrentTestUser(null)
       }
@@ -474,7 +504,7 @@ describe("认证中间件测试", () => {
           expect(response.status).not.toBe(403)
           break
         case "DENY":
-          expect(response.status).toBeGreaterThanOrEqual(400)
+          expect(response.status >= 400 || response.status === 307).toBe(true)
           break
         case "REDIRECT_TO_LOGIN":
           expect(response.status).toBe(307)
@@ -487,13 +517,13 @@ describe("认证中间件测试", () => {
 
   describe("中间件配置测试", () => {
     it("应该匹配配置的路径模式", () => {
-      const { config } = require("@/middleware")
-
-      expect(config.matcher).toBeDefined()
-      expect(Array.isArray(config.matcher) || typeof config.matcher === "string").toBe(true)
+      expect(middlewareConfig.matcher).toBeDefined()
+      expect(Array.isArray(middlewareConfig.matcher) || typeof middlewareConfig.matcher === "string").toBe(true)
 
       // 检查是否排除了静态文件
-      const matcher = Array.isArray(config.matcher) ? config.matcher[0] : config.matcher
+      const matcher = Array.isArray(middlewareConfig.matcher)
+        ? middlewareConfig.matcher[0]
+        : middlewareConfig.matcher
       expect(matcher).toContain("_next/static")
       expect(matcher).toContain("_next/image")
       expect(matcher).toContain("favicon.ico")

@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server"
+import { getClientIp } from "@/lib/api/get-client-ip"
 import { logger } from "./utils/logger"
 
 // 动态导入 DOMPurify，仅在客户端或支持的环境中使用
@@ -15,68 +16,125 @@ if (typeof window !== "undefined") {
   })
 }
 
+function getSecureCrypto(): Crypto {
+  const cryptoObj = globalThis.crypto
+
+  if (cryptoObj && typeof cryptoObj.getRandomValues === "function") {
+    return cryptoObj
+  }
+
+  throw new Error("安全随机数不可用：当前环境缺少 Web Crypto 支持")
+}
+
+function generateRandomBytes(length: number): Uint8Array {
+  const cryptoObj = getSecureCrypto()
+  const array = new Uint8Array(length)
+  cryptoObj.getRandomValues(array)
+  return array
+}
+
 /**
  * CSP (Content Security Policy) 配置
  * 防止 XSS 攻击的核心配置
  */
-export const CSP_DIRECTIVES: Record<string, string[]> = {
+type CspDirectives = Record<string, string[]>
+
+// 生产基线：Next.js hydration 和主题切换需要 'unsafe-inline'
+export const CSP_DIRECTIVES: Readonly<CspDirectives> = {
   "default-src": ["'self'"],
-  "script-src": [
-    "'self'",
-    "'unsafe-eval'", // Next.js 开发模式需要
-    "'unsafe-inline'", // 某些内联脚本需要，生产环境应该移除
-    "https://unpkg.com", // 如果使用 CDN 组件库
-  ],
-  "style-src": [
-    "'self'",
-    "'unsafe-inline'", // Tailwind CSS 需要
-    "https://fonts.googleapis.com",
-  ],
+  "script-src": ["'self'", "'unsafe-inline'", "https://unpkg.com"],
+  "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
   "img-src": [
     "'self'",
     "data:",
     "blob:",
-    "https://*.supabase.co", // Supabase 存储
-    "https://avatars.githubusercontent.com", // GitHub 头像
-    "https://github.com", // GitHub 相关图片
-    "https://images.unsplash.com", // Unsplash 图片
-    "https://picsum.photos", // Lorem Picsum 图片
+    "https:",
+    "http://localhost:*",
+    "http://127.0.0.1:*",
+    "https://*.supabase.co",
+    "https://avatars.githubusercontent.com",
+    "https://github.com",
+    "https://images.unsplash.com",
+    "https://picsum.photos",
   ],
   "font-src": ["'self'", "https://fonts.gstatic.com"],
   "connect-src": [
     "'self'",
-    "https://*.supabase.co", // Supabase API
-    "http://localhost:*", // 本地开发服务器
-    "http://127.0.0.1:*", // 本地 Supabase API
-    "ws://localhost:*", // 开发模式 WebSocket
-    "ws://127.0.0.1:*", // 本地 WebSocket
-    "wss://*.supabase.co", // Supabase 实时连接
+    "https://*.supabase.co",
+    "http://localhost:*",
+    "http://127.0.0.1:*",
+    "ws://localhost:*",
+    "ws://127.0.0.1:*",
+    "wss://*.supabase.co",
   ],
   "frame-ancestors": ["'none'"],
   "base-uri": ["'self'"],
   "form-action": ["'self'"],
-} as const
+}
+
+const DEV_SCRIPT_EXCEPTIONS = ["'unsafe-eval'", "'unsafe-inline'"]
+const DEV_STYLE_EXCEPTIONS = ["'unsafe-inline'"]
+const DEV_IMAGE_WILDCARD = ["*"]
+// 生产环境只移除 unsafe-eval，保留 unsafe-inline（Next.js 需要）
+const UNSAFE_TOKENS = new Set(["'unsafe-eval'"])
+
+function cloneDirectives(base: Readonly<CspDirectives>): CspDirectives {
+  return Object.fromEntries(
+    Object.entries(base).map(([directive, sources]) => [directive, [...sources]])
+  )
+}
+
+function applyNonce(directives: CspDirectives, nonce?: string): void {
+  if (!nonce) return
+
+  directives["script-src"] = [
+    ...directives["script-src"],
+    `'nonce-${nonce}'`,
+    "'strict-dynamic'",
+  ]
+  directives["style-src"] = [...directives["style-src"], `'nonce-${nonce}'`]
+}
+
+function applyDevelopmentRelaxations(directives: CspDirectives): void {
+  directives["script-src"].push(...DEV_SCRIPT_EXCEPTIONS)
+  directives["style-src"].push(...DEV_STYLE_EXCEPTIONS)
+  directives["img-src"] = [...directives["img-src"], ...DEV_IMAGE_WILDCARD]
+}
+
+function stripUnsafeTokens(directives: CspDirectives): void {
+  // 只移除 unsafe-eval，保留 unsafe-inline（Next.js/Tailwind 需要）
+  directives["script-src"] = directives["script-src"].filter(
+    (source) => !UNSAFE_TOKENS.has(source)
+  )
+}
+
+function dedupeSources(sources: string[]): string[] {
+  return [...new Set(sources)]
+}
 
 /**
  * 生成 CSP 头部字符串
  */
-export function generateCSPHeader(): string {
-  // 开发环境对图片源更宽松
-  const isDevelopment = process.env.NODE_ENV === "development"
+export function generateCSPHeader(options: { nonce?: string; environment?: string } = {}): string {
+  const environment = options.environment ?? process.env.NODE_ENV
+  const isDevelopment = environment === "development"
 
-  const directives = { ...CSP_DIRECTIVES }
+  const directives = cloneDirectives(CSP_DIRECTIVES)
+
+  applyNonce(directives, options.nonce)
 
   if (isDevelopment) {
-    // 开发环境允许更多图片源
-    directives["img-src"] = [
-      ...CSP_DIRECTIVES["img-src"],
-      "*", // 允许所有图片源
-    ]
+    applyDevelopmentRelaxations(directives)
+  } else {
+    stripUnsafeTokens(directives)
   }
 
-  return Object.entries(directives)
-    .map(([directive, sources]) => `${directive} ${sources.join(" ")}`)
-    .join("; ")
+  const normalized = Object.entries(directives).map(([directive, sources]) => ({
+    directive,
+    sources: dedupeSources(sources),
+  }))
+
+  return normalized.map(({ directive, sources }) => `${directive} ${sources.join(" ")}`).join("; ")
 }
 
 /**
@@ -90,17 +148,8 @@ export class CSRFProtection {
    * 生成简单的 CSRF 令牌 (客户端兼容)
    */
   static generateToken(): string {
-    // 使用浏览器兼容的方式生成令牌
-    const array = new Uint8Array(32)
-    if (typeof window !== "undefined" && window.crypto) {
-      window.crypto.getRandomValues(array)
-    } else {
-      // 服务端环境的回退方案
-      for (let i = 0; i < array.length; i++) {
-        array[i] = Math.floor(Math.random() * 256)
-      }
-    }
-    return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join("")
+    const bytes = generateRandomBytes(32)
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")
   }
 
   /**
@@ -301,7 +350,7 @@ export class SessionSecurity {
       request.headers.get("user-agent") || "",
       request.headers.get("accept-language") || "",
       request.headers.get("accept-encoding") || "",
-      request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "",
+      getClientIp(request) || "",
     ]
 
     // 使用简单的哈希算法代替 crypto
@@ -331,17 +380,9 @@ export class SessionSecurity {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
     let result = ""
 
-    if (typeof window !== "undefined" && window.crypto) {
-      const array = new Uint8Array(length)
-      window.crypto.getRandomValues(array)
-      for (let i = 0; i < length; i++) {
-        result += chars[array[i] % chars.length]
-      }
-    } else {
-      // 服务端环境的回退方案
-      for (let i = 0; i < length; i++) {
-        result += chars[Math.floor(Math.random() * chars.length)]
-      }
+    const randomBytes = generateRandomBytes(length)
+    for (let i = 0; i < length; i++) {
+      result += chars[randomBytes[i] % chars.length]
     }
 
     return result
@@ -351,9 +392,15 @@ export class SessionSecurity {
 /**
  * 安全头部配置
  */
-export function setSecurityHeaders(response: NextResponse): NextResponse {
+export function setSecurityHeaders(
+  response: NextResponse,
+  options?: { request?: NextRequest; nonce?: string; environment?: string }
+): NextResponse {
+  const nonce = options?.nonce ?? options?.request?.headers.get("x-nonce") ?? undefined
+  const environment = options?.environment ?? process.env.NODE_ENV
+
   // CSP 头部
-  response.headers.set("Content-Security-Policy", generateCSPHeader())
+  response.headers.set("Content-Security-Policy", generateCSPHeader({ nonce, environment }))
 
   // XSS 保护
   response.headers.set("X-XSS-Protection", "1; mode=block")
@@ -383,44 +430,62 @@ export function setSecurityHeaders(response: NextResponse): NextResponse {
 export function validateRequestOrigin(request: NextRequest): boolean {
   const origin = request.headers.get("origin")
   const referer = request.headers.get("referer")
+  const isDevelopment = process.env.NODE_ENV === "development"
+
+  const normalizeOrigin = (value: string | null): string | null => {
+    if (!value) return null
+    try {
+      return new URL(value).origin
+    } catch {
+      const trimmed = value.trim().replace(/\/+$/, "")
+      return trimmed || null
+    }
+  }
+
+  const isLocalhost = (value: string | null): boolean => {
+    if (!value) return false
+    return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(value)
+  }
 
   // 开发环境更宽松的验证
-  if (process.env.NODE_ENV === "development") {
-    if (origin) {
-      // 开发环境允许 localhost 和 127.0.0.1 的任意端口
-      return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+  if (isDevelopment) {
+    const normalizedOrigin = normalizeOrigin(origin)
+    if (isLocalhost(normalizedOrigin)) {
+      return true
     }
 
-    if (referer) {
-      try {
-        const refererUrl = new URL(referer)
-        return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(refererUrl.origin)
-      } catch {
-        return false
-      }
+    const normalizedReferer = normalizeOrigin(referer)
+    if (isLocalhost(normalizedReferer)) {
+      return true
     }
 
     return false
   }
 
-  // 生产环境严格验证
-  const allowedOrigins = [
-    process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
-    "https://yourdomain.com", // 替换为实际域名
-  ]
-
-  if (origin) {
-    return allowedOrigins.includes(origin)
+  // 生产/其他环境严格验证
+  const siteUrl = normalizeOrigin(process.env.NEXT_PUBLIC_SITE_URL ?? "")
+  if (!siteUrl) {
+    logger.warn("Origin validation failed: NEXT_PUBLIC_SITE_URL is not configured")
+    return false
   }
 
-  if (referer) {
-    try {
-      const refererUrl = new URL(referer)
-      return allowedOrigins.includes(refererUrl.origin)
-    } catch {
-      return false
-    }
+  const extraOrigins = (process.env.ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((value) => normalizeOrigin(value))
+    .filter((value): value is string => Boolean(value))
+
+  const allowedOrigins = Array.from(new Set([siteUrl, ...extraOrigins]))
+
+  const validateOrigin = (testOrigin: string | null): boolean => {
+    const normalized = normalizeOrigin(testOrigin)
+    if (!normalized) return false
+    // 允许 localhost 进行本地生产测试
+    if (isLocalhost(normalized)) return true
+    return allowedOrigins.includes(normalized)
   }
+
+  if (validateOrigin(origin)) return true
+  if (validateOrigin(referer)) return true
 
   return false
 }
@@ -430,6 +495,24 @@ export function validateRequestOrigin(request: NextRequest): boolean {
  */
 export class RateLimiter {
   private static requests = new Map<string, { count: number; resetTime: number }>()
+  private static readonly MAX_CAPACITY = (() => {
+    if (typeof process === "undefined") return 5000
+
+    const configured = Number(process.env.RATE_LIMIT_MAX_ENTRIES ?? 5000)
+    if (!Number.isFinite(configured) || configured <= 0) {
+      return 5000
+    }
+
+    return configured
+  })()
+  private static readonly CLEANUP_THRESHOLD = Math.max(
+    100,
+    Math.floor(RateLimiter.MAX_CAPACITY * 0.8)
+  )
+  private static readonly CLEANUP_INTERVAL_MS = 60 * 1000
+  private static readonly OPERATION_SWEEP_INTERVAL = 500
+  private static operationsSinceCleanup = 0
+  private static cleanupTimerStarted = false
 
   /**
    * 检查速率限制
@@ -440,27 +523,46 @@ export class RateLimiter {
     limit: number = 100,
     windowMs: number = 15 * 60 * 1000 // 15 分钟
   ): boolean {
-    // E2E 测试环境跳过速率限制
-    if (process.env.DISABLE_RATE_LIMIT === "1") {
+    // E2E/开发环境跳过速率限制
+    if (process.env.DISABLE_RATE_LIMIT === "1" || process.env.NODE_ENV !== "production") {
       return true
     }
+
+    this.schedulePeriodicCleanup()
 
     const now = Date.now()
     const record = this.requests.get(identifier)
 
-    if (!record || now > record.resetTime) {
-      this.requests.set(identifier, {
-        count: 1,
-        resetTime: now + windowMs,
-      })
-      return true
+    if (record) {
+      if (now > record.resetTime) {
+        this.requests.delete(identifier)
+      } else {
+        if (record.count >= limit) {
+          this.sweepIfNeeded(now)
+          return false
+        }
+
+        record.count++
+        this.sweepIfNeeded(now)
+        return true
+      }
     }
 
-    if (record.count >= limit) {
-      return false
+    if (this.requests.size >= this.MAX_CAPACITY) {
+      this.cleanup(now)
+      this.enforceCapacity()
     }
 
-    record.count++
+    this.requests.set(identifier, {
+      count: 1,
+      resetTime: now + windowMs,
+    })
+
+    if (this.requests.size > this.MAX_CAPACITY) {
+      this.enforceCapacity()
+    }
+
+    this.sweepIfNeeded(now)
     return true
   }
 
@@ -491,11 +593,65 @@ export class RateLimiter {
   /**
    * 清理过期记录
    */
-  static cleanup(): void {
-    const now = Date.now()
+  static cleanup(currentTime: number = Date.now()): void {
+    const now = currentTime
     for (const [key, record] of this.requests.entries()) {
       if (now > record.resetTime) {
         this.requests.delete(key)
+      }
+    }
+  }
+
+  private static isNodeRuntime(): boolean {
+    return typeof process !== "undefined" && Boolean(process.versions?.node)
+  }
+
+  private static schedulePeriodicCleanup(): void {
+    if (this.cleanupTimerStarted || !this.isNodeRuntime()) {
+      return
+    }
+
+    this.cleanupTimerStarted = true
+    const timer = setInterval(() => {
+      try {
+        this.cleanup()
+        this.enforceCapacity()
+      } catch (error) {
+        logger.warn("RateLimiter cleanup failed", { error })
+      }
+    }, this.CLEANUP_INTERVAL_MS)
+
+    if (typeof (timer as any).unref === "function") {
+      ;(timer as any).unref()
+    }
+  }
+
+  private static sweepIfNeeded(now: number): void {
+    this.operationsSinceCleanup++
+
+    if (
+      this.requests.size >= this.CLEANUP_THRESHOLD ||
+      this.operationsSinceCleanup >= this.OPERATION_SWEEP_INTERVAL
+    ) {
+      this.operationsSinceCleanup = 0
+      this.cleanup(now)
+      this.enforceCapacity()
+    }
+  }
+
+  private static enforceCapacity(): void {
+    if (this.requests.size <= this.MAX_CAPACITY) {
+      return
+    }
+
+    const overflow = this.requests.size - this.MAX_CAPACITY
+    let removed = 0
+
+    for (const key of this.requests.keys()) {
+      this.requests.delete(key)
+      removed++
+      if (removed >= overflow) {
+        break
       }
     }
   }

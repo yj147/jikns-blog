@@ -81,6 +81,74 @@ export function SecurityProvider({
   }, [])
 
   /**
+   * 验证会话有效性
+   */
+  const validateSession = useCallback(async (): Promise<boolean> => {
+    if (!user) {
+      setSecurityState((prev) => ({
+        ...prev,
+        authenticated: false,
+        sessionValid: false,
+        csrfTokenValid: false,
+        requiresReauth: true,
+      }))
+      return false
+    }
+
+    try {
+      const response = await fetch("/api/auth/validate", {
+        method: "GET",
+        credentials: "include",
+      })
+
+      const isValid = response.ok
+
+      setSecurityState((prev) => ({
+        ...prev,
+        sessionValid: isValid,
+        csrfTokenValid: isValid,
+        lastActivity: isValid ? Date.now() : prev.lastActivity,
+        requiresReauth: !isValid,
+      }))
+
+      if (!isValid) {
+        addSecurityEvent({
+          id: `session_invalid_${Date.now()}`,
+          type: SecurityErrorType.SESSION_EXPIRED,
+          severity: "medium",
+          message: "会话已过期，需要重新登录",
+          timestamp: Date.now(),
+          userId: user.id,
+          resolved: false,
+        })
+      }
+
+      return isValid
+    } catch (error) {
+      console.error("会话验证失败:", error)
+
+      setSecurityState((prev) => ({
+        ...prev,
+        sessionValid: false,
+        csrfTokenValid: false,
+        requiresReauth: true,
+      }))
+
+      addSecurityEvent({
+        id: `session_validation_error_${Date.now()}`,
+        type: SecurityErrorType.SESSION_EXPIRED,
+        severity: "medium",
+        message: "会话验证失败，请重新登录",
+        timestamp: Date.now(),
+        userId: user.id,
+        resolved: false,
+      })
+
+      return false
+    }
+  }, [user, addSecurityEvent])
+
+  /**
    * 刷新安全状态
    */
   const refreshSecurityState = useCallback(async () => {
@@ -89,32 +157,33 @@ export function SecurityProvider({
         ...prev,
         authenticated: false,
         sessionValid: false,
+        csrfTokenValid: false,
         permissions: [],
         role: "USER",
         accountStatus: "PENDING",
+        requiresReauth: false,
       }))
       return
     }
 
     try {
-      // 更新安全状态
-      const newSecurityState: SecurityState = {
+      setSecurityState((prev) => ({
+        ...prev,
         authenticated: true,
-        sessionValid: true, // TODO: 实际项目中需要检查 session 有效性
-        csrfTokenValid: true, // TODO: 实际项目中需要检查 CSRF token
+        sessionValid: false,
+        csrfTokenValid: false,
         permissions: user.role === "ADMIN" ? ["admin", "read", "write"] : ["read"],
         role: user.role || "USER",
         accountStatus: user.status || "ACTIVE",
         lastActivity: Date.now(),
-        sessionExpiry: Date.now() + 24 * 60 * 60 * 1000, // 24小时
+        sessionExpiry: Date.now() + 24 * 60 * 60 * 1000,
         requiresReauth: false,
-      }
+      }))
 
-      setSecurityState(newSecurityState)
+      await validateSession()
     } catch (error) {
       console.error("安全状态刷新失败:", error)
 
-      // 添加安全事件
       addSecurityEvent({
         id: `security_${Date.now()}`,
         type: SecurityErrorType.SESSION_EXPIRED,
@@ -125,56 +194,7 @@ export function SecurityProvider({
         resolved: false,
       })
     }
-  }, [user, isLoading, addSecurityEvent])
-
-  /**
-   * 验证会话有效性
-   */
-  const validateSession = useCallback(async (): Promise<boolean> => {
-    if (!securityState.authenticated) {
-      return false
-    }
-
-    try {
-      // TODO: 实际项目中调用 API 验证 session
-      const response = await fetch("/api/auth/validate", {
-        method: "GET",
-        credentials: "include",
-      })
-
-      const isValid = response.ok
-
-      if (!isValid) {
-        setSecurityState((prev) => ({
-          ...prev,
-          sessionValid: false,
-          requiresReauth: true,
-        }))
-
-        addSecurityEvent({
-          id: `session_invalid_${Date.now()}`,
-          type: SecurityErrorType.SESSION_EXPIRED,
-          severity: "medium",
-          message: "会话已过期，需要重新登录",
-          timestamp: Date.now(),
-          userId: user?.id,
-          resolved: false,
-        })
-      } else {
-        setSecurityState((prev) => ({
-          ...prev,
-          sessionValid: true,
-          lastActivity: Date.now(),
-          requiresReauth: false,
-        }))
-      }
-
-      return isValid
-    } catch (error) {
-      console.error("会话验证失败:", error)
-      return false
-    }
-  }, [securityState.authenticated, user?.id, addSecurityEvent])
+  }, [user, isLoading, addSecurityEvent, validateSession])
 
   /**
    * 检查权限

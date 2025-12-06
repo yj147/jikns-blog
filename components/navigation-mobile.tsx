@@ -11,7 +11,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/providers/auth-provider"
-import { LogIn, LogOut, Menu, Settings, Shield, User, UserPlus } from "lucide-react"
+import { Bell, LogIn, LogOut, Menu, Settings, Shield, User, UserPlus } from "lucide-react"
 
 import { navigationItems } from "./navigation-links"
 
@@ -124,6 +124,11 @@ function MobileUserSection({ closeSheet }: { closeSheet: () => void }) {
       </div>
 
       <div className="grid gap-2">
+        <Button asChild variant="ghost" className="justify-start gap-2" onClick={closeSheet}>
+          <Link href="/notifications">
+            <Bell className="h-4 w-4" /> 通知
+          </Link>
+        </Button>
         <Button asChild variant="ghost" className="justify-start gap-2" onClick={closeSheet}>
           <Link href="/profile">
             <User className="h-4 w-4" /> 个人资料

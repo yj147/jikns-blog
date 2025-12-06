@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server"
+import { getClientIp } from "@/lib/api/get-client-ip"
 import type {
   SecurityContext,
   SecurityConfig,
@@ -161,6 +162,10 @@ export class SecurityMiddleware {
     if (process.env.NODE_ENV === "development") {
       // 开发环境：更高的请求限制，更短的窗口期
       maxRequests = 1000 // 开发环境允许大量请求
+      windowMs = 5 * 60 * 1000 // 5分钟窗口期
+    } else if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
+      // 管理员后台需要频繁操作，使用更宽松的限制
+      maxRequests = 500 // 管理员允许更多请求
       windowMs = 5 * 60 * 1000 // 5分钟窗口期
     } else if (
       pathname.includes("/api/user") ||
@@ -409,7 +414,7 @@ export class SecurityMiddleware {
         method: request.method,
         url: request.url,
         headers: Object.fromEntries(request.headers.entries()),
-        ip: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown",
+        ip: getClientIp(request),
         userAgent: request.headers.get("user-agent") || "unknown",
       },
       timestamp: new Date(),
@@ -448,8 +453,7 @@ export class SecurityMiddleware {
  * 创建安全上下文
  */
 export function createSecurityContext(request: NextRequest): SecurityContext {
-  const clientIP =
-    request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown"
+  const clientIP = getClientIp(request)
 
   const userAgent = request.headers.get("user-agent") || "unknown"
 

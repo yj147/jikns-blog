@@ -10,6 +10,39 @@ import type { TestUser } from "../setup"
 // 当前模拟的用户状态
 let currentUser: TestUser | null = null
 
+// 补充一组用于管理端测试的用户，避免 Supabase metadata 同步失败
+const FALLBACK_USERS: Record<string, Partial<TestUser>> = {
+  "admin-123": {
+    id: "admin-123",
+    email: "admin@example.com",
+    name: "Admin User",
+    role: "ADMIN",
+    status: "ACTIVE",
+  },
+  "user-456": {
+    id: "user-456",
+    email: "user@example.com",
+    name: "Regular User",
+    role: "USER",
+    status: "ACTIVE",
+  },
+  "user-789": {
+    id: "user-789",
+    email: "banned@example.com",
+    name: "Banned User",
+    role: "USER",
+    status: "BANNED",
+  },
+}
+
+function resolveSupabaseUser(userId: string) {
+  return (
+    Object.values(TEST_USERS).find((u) => u.id === userId) ||
+    FALLBACK_USERS[userId] ||
+    (currentUser ? { ...currentUser } : null)
+  )
+}
+
 /**
  * Mock Supabase Auth 对象
  */
@@ -156,9 +189,7 @@ export function resetMocks() {
 function buildServiceRoleClient() {
   const admin = {
     getUserById: vi.fn(async (userId: string) => {
-      const user =
-        Object.values(TEST_USERS).find((u) => u.id === userId) ||
-        (currentUser ? { ...currentUser } : null)
+      const user = resolveSupabaseUser(userId)
 
       if (!user) {
         return { data: { user: null }, error: null }

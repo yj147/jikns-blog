@@ -111,16 +111,16 @@ function TestOAuthPageContent() {
   const StatusIcon = ({ status }: { status: "pending" | "success" | "error" }) => {
     switch (status) {
       case "success":
-        return <CheckCircle className="h-5 w-5 text-green-500" />
+        return <CheckCircle className="h-5 w-5 text-status-success" />
       case "error":
-        return <XCircle className="h-5 w-5 text-red-500" />
+        return <XCircle className="h-5 w-5 text-status-error" />
       default:
-        return <AlertCircle className="h-5 w-5 text-yellow-500" />
+        return <AlertCircle className="h-5 w-5 text-status-warning" />
     }
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 dark:bg-gray-900">
+    <div className="min-h-screen bg-background p-4">
       <div className="mx-auto max-w-2xl space-y-6">
         {/* 页面标题 */}
         <div className="text-center">
@@ -154,7 +154,7 @@ function TestOAuthPageContent() {
           <CardContent className="space-y-4">
             {/* 错误信息 */}
             {error && (
-              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-600 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+              <div className="rounded-md border border-status-error/30 bg-status-error/10 p-3 text-sm text-status-error">
                 <strong>错误：</strong> {error}
               </div>
             )}
@@ -162,9 +162,9 @@ function TestOAuthPageContent() {
             {/* 用户信息 */}
             {session ? (
               <div className="space-y-3">
-                <div className="rounded-md border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
-                  <h3 className="font-medium text-green-800 dark:text-green-200">登录成功！</h3>
-                  <div className="mt-2 text-sm text-green-700 dark:text-green-300">
+                <div className="rounded-md border border-status-success/30 bg-status-success/10 p-4">
+                  <h3 className="font-medium text-status-success">登录成功！</h3>
+                  <div className="mt-2 text-sm text-status-success/80">
                     <p>
                       <strong>用户 ID:</strong> {session.user.id}
                     </p>

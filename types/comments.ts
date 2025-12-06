@@ -3,10 +3,7 @@ export type CommentTargetType = "post" | "activity"
 export interface CommentAuthor {
   id: string
   name: string | null
-  email: string
   avatarUrl: string | null
-  role: "USER" | "ADMIN"
-  status?: "ACTIVE" | "BANNED" | string
 }
 
 export interface CommentCounts {

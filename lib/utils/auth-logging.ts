@@ -4,6 +4,7 @@
  */
 
 import { NextRequest } from "next/server"
+import { getClientIp } from "@/lib/api/get-client-ip"
 import { authLogger } from "./logger"
 
 /**
@@ -89,7 +90,7 @@ export function extractAuthContext(
   return {
     requestId: requestId || "unknown",
     path: request.nextUrl.pathname,
-    ip: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown",
+    ip: getClientIp(request),
     userId,
   }
 }

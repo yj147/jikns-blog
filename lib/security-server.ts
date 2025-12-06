@@ -5,6 +5,7 @@
 
 import { createHash, randomBytes } from "crypto"
 import { NextRequest } from "next/server"
+import { getClientIp } from "@/lib/api/get-client-ip"
 
 /**
  * 安全令牌生成器 (服务端专用)
@@ -45,7 +46,7 @@ export class ServerSessionSecurity {
       request.headers.get("user-agent") || "",
       request.headers.get("accept-language") || "",
       request.headers.get("accept-encoding") || "",
-      request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "",
+      getClientIp(request) || "",
     ]
 
     return createHash("sha256").update(components.join("|")).digest("hex")

@@ -1,6 +1,6 @@
 /**
- * 博客文章卡片组件 - Phase 5.2
- * 用于博客列表页面的文章展示卡片
+ * 博客文章卡片组件 - Immersive Style
+ * 宽敞、沉浸式的卡片设计，解决拥挤感
  */
 
 "use client"
@@ -8,20 +8,18 @@
 import Link from "next/link"
 import Image from "next/image"
 import { motion } from "framer-motion"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Calendar, Clock, Eye, Heart, MessageCircle, Pin } from "lucide-react"
+import { MessageCircle, Heart, BarChart2, Share2, MoreHorizontal } from "lucide-react"
 import { PostListItem } from "@/types/blog"
 import {
-  formatDate,
   formatRelativeTime,
-  calculateReadTime,
   formatNumber,
-  generateTagColor,
+  calculateReadTime,
 } from "@/lib/utils/blog-helpers"
 import { getOptimizedImageUrl } from "@/lib/images/optimizer"
+import { interactionStyles } from "@/lib/styles/interaction-styles"
+import { cn } from "@/lib/utils"
 
 interface BlogPostCardProps {
   post: PostListItem
@@ -32,158 +30,127 @@ export function BlogPostCard({ post, index = 0 }: BlogPostCardProps) {
   const coverSource = post.signedCoverImage ?? post.coverImage ?? undefined
   const coverImageUrl =
     coverSource &&
-    (getOptimizedImageUrl(coverSource, { width: 1280, height: 720, quality: 80 }) ?? coverSource)
+    (getOptimizedImageUrl(coverSource, { width: 800, height: 400, quality: 80 }) ?? coverSource)
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 50 }}
+    <motion.article
+      initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: index * 0.1 }}
-      whileHover={{ y: -5, scale: 1.01 }}
-      layout
+      transition={{ duration: 0.4, delay: index * 0.05 }}
+      className="border-b border-border bg-background px-4 py-6 transition-colors hover:bg-muted/5 sm:px-6 sm:py-8"
     >
-      <Card className="from-background to-muted/10 group relative overflow-hidden border-0 bg-gradient-to-br transition-all duration-300 hover:shadow-xl">
-        {coverImageUrl && (
-          <div className="relative h-56 w-full overflow-hidden">
-            <Image
-              src={coverImageUrl}
-              alt={post.title}
-              fill
-              className="object-cover"
-              sizes="(max-width: 768px) 100vw, (max-width: 1280px) 75vw, 50vw"
-              priority={index === 0}
-              loading={index === 0 ? "eager" : "lazy"}
-            />
-          </div>
-        )}
-        {/* 置顶标识 */}
-        {post.isPinned && (
-          <div className="absolute right-4 top-4 z-10">
-            <motion.div
-              className="bg-primary text-primary-foreground flex items-center gap-1 rounded-full px-2 py-1 text-xs"
-              whileHover={{ scale: 1.1 }}
-            >
-              <Pin className="h-3 w-3" />
-              置顶
-            </motion.div>
-          </div>
-        )}
-
-        <CardHeader>
-          {/* 作者信息 */}
-          <div className="mb-3 flex items-center space-x-3">
-            <motion.div whileHover={{ scale: 1.1, rotate: 5 }}>
-              <Avatar className="h-10 w-10">
-                <AvatarImage
-                  src={post.author.avatarUrl || ""}
-                  alt={post.author.name || "匿名用户"}
-                />
-                <AvatarFallback>{post.author.name?.[0]?.toUpperCase() || "U"}</AvatarFallback>
-              </Avatar>
-            </motion.div>
-            <div className="flex-1">
-              <p className="text-sm font-medium">{post.author.name || "匿名用户"}</p>
-              <div className="text-muted-foreground flex items-center space-x-2 text-xs">
-                <Calendar className="h-3 w-3" />
-                <span title={formatDate(post.publishedAt)}>
-                  {formatRelativeTime(post.publishedAt)}
-                </span>
-                <Clock className="ml-2 h-3 w-3" />
-                <span>{calculateReadTime(post.contentLength)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* 文章标题 */}
-          <Link href={`/blog/${post.slug}`}>
-            <CardTitle className="group-hover:text-primary line-clamp-2 cursor-pointer text-xl leading-snug transition-colors">
-              {post.title}
-            </CardTitle>
+      {/* 1. 头部：作者信息 */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <Link href={`/profile/${post.author.id ?? "#"}`}>
+            <Avatar className="h-10 w-10 cursor-pointer ring-2 ring-background transition-opacity hover:opacity-90">
+              <AvatarImage
+                src={post.author.avatarUrl || ""}
+                alt={post.author.name || "用户"}
+              />
+              <AvatarFallback className="bg-primary/10 text-primary">
+                {post.author.name?.[0]?.toUpperCase() || "U"}
+              </AvatarFallback>
+            </Avatar>
           </Link>
-
-          {/* 文章摘要 */}
-          {post.excerpt && (
-            <CardDescription className="mt-2 line-clamp-3 text-base leading-relaxed">
-              {post.excerpt}
-            </CardDescription>
-          )}
-        </CardHeader>
-
-        <CardContent>
-          {/* 标签 */}
-          {post.tags.length > 0 && (
-            <div className="mb-4 flex flex-wrap gap-2">
-              {post.tags.map((tag, tagIndex) => (
-                <motion.div
-                  key={`${post.id}-tag-${tag.slug || tagIndex}`}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: tagIndex * 0.1 }}
-                  whileHover={{ scale: 1.1 }}
-                >
-                  <Link href={`/blog?tag=${tag.slug}`}>
-                    <Badge
-                      variant="secondary"
-                      className={`hover:bg-primary hover:text-primary-foreground cursor-pointer text-xs transition-colors ${
-                        !tag.color ? generateTagColor(tag.name) : ""
-                      }`}
-                      style={tag.color ? { backgroundColor: tag.color, color: "#ffffff" } : undefined}
-                    >
-                      {tag.name}
-                    </Badge>
-                  </Link>
-                </motion.div>
-              ))}
+          <div className="flex flex-col leading-none">
+            <Link href={`/profile/${post.author.id ?? "#"}`} className="font-bold text-base text-foreground hover:underline">
+              {post.author.name || "匿名用户"}
+            </Link>
+            <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
+              <span>{formatRelativeTime(post.publishedAt)}</span>
+              <span>·</span>
+              <span>{calculateReadTime(post.contentLength)}</span>
             </div>
-          )}
-
-          {/* 统计数据和操作 */}
-          <div className="text-muted-foreground flex items-center justify-between text-sm">
-            <div className="flex items-center space-x-4">
-              <motion.span
-                className="flex cursor-pointer items-center"
-                whileHover={{ scale: 1.1, color: "#10b981" }}
-                title={`${post.viewCount} 次浏览`}
-              >
-                <Eye className="mr-1 h-4 w-4" />
-                {formatNumber(post.viewCount)}
-              </motion.span>
-
-              <motion.span
-                className="flex cursor-pointer items-center"
-                whileHover={{ scale: 1.1, color: "#ef4444" }}
-                title={`${post.stats.likesCount} 个赞`}
-              >
-                <Heart className="mr-1 h-4 w-4" />
-                {formatNumber(post.stats.likesCount)}
-              </motion.span>
-
-              <motion.span
-                className="flex cursor-pointer items-center"
-                whileHover={{ scale: 1.1, color: "#3b82f6" }}
-                title={`${post.stats.commentsCount} 条评论`}
-              >
-                <MessageCircle className="mr-1 h-4 w-4" />
-                {formatNumber(post.stats.commentsCount)}
-              </motion.span>
-            </div>
-
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button
-                variant="ghost"
-                size="sm"
-                asChild
-                className="group-hover:bg-primary group-hover:text-primary-foreground transition-colors"
-              >
-                <Link href={`/blog/${post.slug}`}>阅读全文</Link>
-              </Button>
-            </motion.div>
           </div>
-        </CardContent>
+        </div>
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground rounded-full">
+          <MoreHorizontal className="h-4 w-4" />
+          <span className="sr-only">更多操作</span>
+        </Button>
+      </div>
 
-        {/* 悬停效果渐变 */}
-        <div className="from-primary to-primary/80 pointer-events-none absolute inset-0 bg-gradient-to-r opacity-0 transition-opacity duration-300 group-hover:opacity-5" />
-      </Card>
-    </motion.div>
+      {/* 2. 内容区：标题 + 摘要 */}
+      <div className="mb-4">
+        <Link href={`/blog/${post.slug}`} className="group block space-y-2">
+          <h3 className="text-lg font-bold leading-snug text-foreground group-hover:text-primary transition-colors sm:text-xl">
+            {post.title}
+          </h3>
+          {post.excerpt && (
+            <p className="text-base text-muted-foreground leading-relaxed line-clamp-3">
+              {post.excerpt}
+            </p>
+          )}
+        </Link>
+      </div>
+
+      {/* 3. 媒体区：大图 */}
+      {coverImageUrl && (
+        <div className="mb-4 overflow-hidden rounded-xl border border-border/50 bg-muted/30">
+          <Link href={`/blog/${post.slug}`}>
+            <div className="relative w-full aspect-[2/1]">
+              <Image
+                src={coverImageUrl}
+                alt={post.title}
+                fill
+                className="object-cover transition-transform duration-700 hover:scale-105"
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 800px"
+              />
+            </div>
+          </Link>
+        </div>
+      )}
+
+      {/* 4. 标签行 */}
+      {post.tags.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {post.tags.map((tag) => (
+            <Link key={tag.slug} href={`/blog?tag=${tag.slug}`} onClick={(e) => e.stopPropagation()}>
+              <span className="text-sm text-primary hover:underline hover:text-primary/80">#{tag.name}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {/* 5. 底部：操作栏 */}
+      <div className="flex items-center justify-between pt-2">
+        <div className="flex gap-6 text-muted-foreground">
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn("group h-9 px-2 -ml-2 gap-2 rounded-full", interactionStyles.comment)}
+          >
+            <MessageCircle className="h-5 w-5" />
+            <span className="text-sm">{post.stats.commentsCount > 0 ? formatNumber(post.stats.commentsCount) : "评论"}</span>
+          </Button>
+          
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn("group h-9 px-2 gap-2 rounded-full", interactionStyles.like)}
+          >
+            <Heart className="h-5 w-5" />
+            <span className="text-sm">{post.stats.likesCount > 0 ? formatNumber(post.stats.likesCount) : "点赞"}</span>
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            className="group h-9 px-2 gap-2 rounded-full hover:bg-primary/10 hover:text-primary transition-colors"
+          >
+            <BarChart2 className="h-5 w-5" />
+            <span className="text-sm">{post.viewCount > 0 ? formatNumber(post.viewCount) : "浏览"}</span>
+          </Button>
+        </div>
+
+        <Button
+            variant="ghost"
+            size="icon"
+            className={cn("h-9 w-9 rounded-full text-muted-foreground", interactionStyles.share)}
+        >
+            <Share2 className="h-5 w-5" />
+        </Button>
+      </div>
+    </motion.article>
   )
 }

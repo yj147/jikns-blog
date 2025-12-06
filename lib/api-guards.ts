@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { validateApiPermissions, createPermissionError } from "@/lib/permissions"
 import type { User } from "@/lib/generated/prisma"
 import { logger } from "@/lib/utils/logger"
+import { getClientIp } from "@/lib/api/get-client-ip"
 
 /**
  * API 响应类型
@@ -314,8 +315,7 @@ export function withRateLimit(
 
     try {
       // 获取客户端标识符
-      const clientId =
-        request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown"
+      const clientId = getClientIp(request)
 
       // 检查限流
       const now = Date.now()

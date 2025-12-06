@@ -1,29 +1,40 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { NextRequest } from "next/server"
 import { POST as cronHandler } from "@/app/api/cron/email-queue/route"
+import { GET as syncCronHandler } from "@/app/api/cron/sync-view-counts/route"
 import { processEmailQueue } from "@/lib/cron/email-queue"
+import { runViewCountSync } from "@/lib/cron/sync-view-counts"
+import { securityLogger } from "@/lib/utils/logger"
 
 vi.mock("@/lib/cron/email-queue", () => ({
   processEmailQueue: vi.fn(),
 }))
 
-const mockedProcessEmailQueue = vi.mocked(processEmailQueue)
-const originalCronSecret = process.env.CRON_SECRET
+vi.mock("@/lib/cron/sync-view-counts", () => ({
+  runViewCountSync: vi.fn(),
+}))
 
-const buildRequest = (headers?: Record<string, string>) =>
+const mockedProcessEmailQueue = vi.mocked(processEmailQueue)
+const mockedRunViewCountSync = vi.mocked(runViewCountSync)
+const securityLogSpy = () => securityLogger.security as unknown as ReturnType<typeof vi.fn>
+const originalCronSecret = process.env.CRON_SECRET
+const defaultCronSecret = "test-cron-secret"
+
+const buildEmailRequest = (headers?: Record<string, string>) =>
   new NextRequest("http://localhost:3000/api/cron/email-queue", {
     method: "POST",
     headers,
   })
 
-describe("/api/cron/email-queue auth", () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    process.env.CRON_SECRET = "test-cron-secret"
+const buildSyncRequest = (headers?: Record<string, string>) =>
+  new NextRequest("http://localhost:3000/api/cron/sync-view-counts", {
+    method: "GET",
+    headers,
   })
 
-  afterAll(() => {
-    process.env.CRON_SECRET = originalCronSecret
+describe("/api/cron/email-queue auth", () => {
+  beforeEach(() => {
+    process.env.CRON_SECRET = defaultCronSecret
   })
 
   it("returns 405 for non-POST requests", async () => {
@@ -37,19 +48,31 @@ describe("/api/cron/email-queue auth", () => {
     expect(mockedProcessEmailQueue).not.toHaveBeenCalled()
   })
 
-  it("returns 401 when x-cron-secret is missing", async () => {
-    const res = await cronHandler(buildRequest())
+  it("returns 401 when Authorization header is missing", async () => {
+    const res = await cronHandler(buildEmailRequest())
     const data = await res.json()
 
     expect(res.status).toBe(401)
     expect(data.error).toBe("Unauthorized")
     expect(mockedProcessEmailQueue).not.toHaveBeenCalled()
+
+    const securitySpy = securityLogSpy()
+    expect(securitySpy).toHaveBeenCalledTimes(1)
+    expect(securitySpy).toHaveBeenCalledWith(
+      "CRON_SECRET_INVALID",
+      "high",
+      expect.objectContaining({
+        path: "/api/cron/email-queue",
+        method: "POST",
+        hasAuthHeader: false,
+      })
+    )
   })
 
-  it("returns 401 when x-cron-secret is incorrect", async () => {
+  it("returns 401 when Authorization header is incorrect", async () => {
     const res = await cronHandler(
-      buildRequest({
-        "x-cron-secret": "wrong-secret",
+      buildEmailRequest({
+        authorization: "Bearer wrong-secret",
       })
     )
     const data = await res.json()
@@ -57,41 +80,45 @@ describe("/api/cron/email-queue auth", () => {
     expect(res.status).toBe(401)
     expect(data.error).toBe("Unauthorized")
     expect(mockedProcessEmailQueue).not.toHaveBeenCalled()
-  })
 
-  it("allows access when x-vercel-cron header is present", async () => {
-    mockedProcessEmailQueue.mockResolvedValue({
-      processed: 1,
-      sent: 1,
-      failed: 0,
-    })
-
-    const res = await cronHandler(
-      buildRequest({
-        "x-vercel-cron": "1",
+    const securitySpy = securityLogSpy()
+    expect(securitySpy).toHaveBeenCalledTimes(1)
+    expect(securitySpy).toHaveBeenCalledWith(
+      "CRON_SECRET_INVALID",
+      "high",
+      expect.objectContaining({
+        path: "/api/cron/email-queue",
+        method: "POST",
+        hasAuthHeader: true,
       })
     )
-    const data = await res.json()
-
-    expect(res.status).toBe(200)
-    expect(data.success).toBe(true)
-    expect(mockedProcessEmailQueue).toHaveBeenCalledTimes(1)
   })
 
-  it("allows access when cron secret is not configured", async () => {
-    mockedProcessEmailQueue.mockResolvedValue({
-      processed: 0,
-      sent: 0,
-      failed: 0,
-    })
+  it("returns 500 when cron secret is not configured", async () => {
     delete process.env.CRON_SECRET
 
-    const res = await cronHandler(buildRequest())
+    const res = await cronHandler(
+      buildEmailRequest({
+        authorization: `Bearer ${defaultCronSecret}`,
+      })
+    )
     const data = await res.json()
 
-    expect(res.status).toBe(200)
-    expect(data.success).toBe(true)
-    expect(mockedProcessEmailQueue).toHaveBeenCalledTimes(1)
+    expect(res.status).toBe(500)
+    expect(data.error).toBe("Cron secret is not configured")
+    expect(mockedProcessEmailQueue).not.toHaveBeenCalled()
+
+    const securitySpy = securityLogSpy()
+    expect(securitySpy).toHaveBeenCalledTimes(1)
+    expect(securitySpy).toHaveBeenCalledWith(
+      "CRON_SECRET_MISSING",
+      "critical",
+      expect.objectContaining({
+        path: "/api/cron/email-queue",
+        method: "POST",
+        hasAuthHeader: true,
+      })
+    )
   })
 
   it("allows access with correct secret", async () => {
@@ -102,8 +129,8 @@ describe("/api/cron/email-queue auth", () => {
     })
 
     const res = await cronHandler(
-      buildRequest({
-        "x-cron-secret": "test-cron-secret",
+      buildEmailRequest({
+        authorization: `Bearer ${defaultCronSecret}`,
       })
     )
     const data = await res.json()
@@ -112,14 +139,16 @@ describe("/api/cron/email-queue auth", () => {
     expect(data.success).toBe(true)
     expect(data.processed).toBe(2)
     expect(mockedProcessEmailQueue).toHaveBeenCalledTimes(1)
+
+    expect(securityLogSpy()).not.toHaveBeenCalled()
   })
 
   it("returns 500 when queue processing throws", async () => {
     mockedProcessEmailQueue.mockRejectedValue(new Error("queue failure"))
 
     const res = await cronHandler(
-      buildRequest({
-        "x-cron-secret": "test-cron-secret",
+      buildEmailRequest({
+        authorization: `Bearer ${defaultCronSecret}`,
       })
     )
     const data = await res.json()
@@ -129,4 +158,84 @@ describe("/api/cron/email-queue auth", () => {
     expect(data.error).toBe("queue failure")
     expect(mockedProcessEmailQueue).toHaveBeenCalledTimes(1)
   })
+})
+
+describe("/api/cron/sync-view-counts auth", () => {
+  beforeEach(() => {
+    process.env.CRON_SECRET = defaultCronSecret
+  })
+
+  it("returns 401 when Authorization header is missing", async () => {
+    const res = await syncCronHandler(buildSyncRequest())
+    const data = await res.json()
+
+    expect(res.status).toBe(401)
+    expect(data.error).toBe("Unauthorized")
+    expect(mockedRunViewCountSync).not.toHaveBeenCalled()
+
+    const securitySpy = securityLogSpy()
+    expect(securitySpy).toHaveBeenCalledTimes(1)
+    expect(securitySpy).toHaveBeenCalledWith(
+      "CRON_SECRET_INVALID",
+      "high",
+      expect.objectContaining({
+        path: "/api/cron/sync-view-counts",
+        method: "GET",
+        hasAuthHeader: false,
+      })
+    )
+  })
+
+  it("returns 500 when cron secret is not configured", async () => {
+    delete process.env.CRON_SECRET
+
+    const res = await syncCronHandler(
+      buildSyncRequest({
+        authorization: `Bearer ${defaultCronSecret}`,
+      })
+    )
+    const data = await res.json()
+
+    expect(res.status).toBe(500)
+    expect(data.error).toBe("Cron secret is not configured")
+    expect(mockedRunViewCountSync).not.toHaveBeenCalled()
+
+    const securitySpy = securityLogSpy()
+    expect(securitySpy).toHaveBeenCalledTimes(1)
+    expect(securitySpy).toHaveBeenCalledWith(
+      "CRON_SECRET_MISSING",
+      "critical",
+      expect.objectContaining({
+        path: "/api/cron/sync-view-counts",
+        method: "GET",
+        hasAuthHeader: true,
+      })
+    )
+  })
+
+  it("allows access with correct secret", async () => {
+    mockedRunViewCountSync.mockResolvedValue({
+      synced: 1,
+      failed: 0,
+      errors: [],
+    })
+
+    const res = await syncCronHandler(
+      buildSyncRequest({
+        authorization: `Bearer ${defaultCronSecret}`,
+      })
+    )
+    const data = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(data.success).toBe(true)
+    expect(data.synced).toBe(1)
+    expect(mockedRunViewCountSync).toHaveBeenCalledTimes(1)
+
+    expect(securityLogSpy()).not.toHaveBeenCalled()
+  })
+})
+
+afterAll(() => {
+  process.env.CRON_SECRET = originalCronSecret
 })

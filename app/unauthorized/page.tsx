@@ -26,8 +26,8 @@ function UnauthorizedPageContent() {
       case "authentication_required":
         return {
           icon: (
-            <svg
-              className="h-16 w-16 text-blue-500"
+              <svg
+              className="h-16 w-16 text-status-info"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -58,7 +58,7 @@ function UnauthorizedPageContent() {
         return {
           icon: (
             <svg
-              className="h-16 w-16 text-orange-500"
+              className="h-16 w-16 text-status-warning"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -89,7 +89,7 @@ function UnauthorizedPageContent() {
         return {
           icon: (
             <svg
-              className="h-16 w-16 text-red-500"
+              className="h-16 w-16 text-status-error"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -120,7 +120,7 @@ function UnauthorizedPageContent() {
         return {
           icon: (
             <svg
-              className="h-16 w-16 text-gray-500"
+              className="h-16 w-16 text-muted-foreground"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -151,7 +151,7 @@ function UnauthorizedPageContent() {
         return {
           icon: (
             <svg
-              className="h-16 w-16 text-gray-500"
+              className="h-16 w-16 text-muted-foreground"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"

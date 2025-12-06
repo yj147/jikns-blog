@@ -46,6 +46,7 @@ interface PostLikeItem {
     published: boolean
     isPinned: boolean
     coverImage: string | null
+    signedCoverImage?: string | null
     viewCount: number
     publishedAt: string | null
     createdAt: string

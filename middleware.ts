@@ -22,7 +22,7 @@ import {
 } from "@/lib/security/middleware"
 import { generateRequestId } from "@/lib/utils/request-id"
 
-// 中间件只负责认证，不做角色鉴权。角色检查交给 Server Component / API。
+// 中间件负责基础认证 + 状态/角色阻断，细粒度权限交给上层处理。
 
 /**
  * 路径权限配置
@@ -34,6 +34,8 @@ const PATH_PERMISSIONS = {
   authenticated: [
     "/settings",
     "/api/user",
+    "/api/users",
+    "/api/users/*",
     "/admin",
     "/admin/dashboard",
     "/admin/users",
@@ -118,7 +120,7 @@ function createUnauthorizedResponse(
 ): NextResponse {
   const isApiRequest = request.nextUrl.pathname.startsWith("/api/")
 
-  if (isApiRequest) {
+  if (isApiRequest && reason !== "AUTHENTICATION_REQUIRED") {
     // API 请求返回 JSON 错误响应
     return NextResponse.json(
       {
@@ -130,12 +132,40 @@ function createUnauthorizedResponse(
     )
   }
 
+  if (isApiRequest && reason === "AUTHENTICATION_REQUIRED") {
+    const loginUrl = new URL("/login", request.url)
+    loginUrl.searchParams.set("redirect", request.nextUrl.pathname)
+    return NextResponse.redirect(loginUrl)
+  }
+
   // 页面请求重定向到未授权页面
   const unauthorizedUrl = new URL("/unauthorized", request.url)
   unauthorizedUrl.searchParams.set("reason", reason.toLowerCase())
   unauthorizedUrl.searchParams.set("redirect", request.nextUrl.pathname)
 
   return NextResponse.redirect(unauthorizedUrl)
+}
+
+function createForbiddenResponse(
+  request: NextRequest,
+  reason: "INSUFFICIENT_PERMISSIONS" | "ACCOUNT_BANNED"
+): NextResponse {
+  const status = getStatusCode(reason)
+  const payload = {
+    error: getErrorMessage(reason),
+    code: reason,
+    timestamp: new Date().toISOString(),
+  }
+
+  if (request.nextUrl.pathname.startsWith("/api/")) {
+    return NextResponse.json(payload, { status })
+  }
+
+  const unauthorizedUrl = new URL("/unauthorized", request.url)
+  unauthorizedUrl.searchParams.set("reason", reason.toLowerCase())
+  unauthorizedUrl.searchParams.set("redirect", request.nextUrl.pathname)
+
+  return NextResponse.rewrite(unauthorizedUrl, { status })
 }
 
 function isSupabaseSessionMissingError(error: any): boolean {
@@ -207,7 +237,7 @@ export async function middleware(request: NextRequest) {
   // Phase 1 任务 1.2：公开路径直接返回，避免不必要的 Supabase/Auth/审计逻辑
   if (matchesPath(pathname, PATH_PERMISSIONS.public)) {
     const response = NextResponse.next({ request: { headers: forwardedHeaders } })
-    return attachTraceHeaders(setSecurityHeaders(response))
+    return attachTraceHeaders(setSecurityHeaders(response, { request }))
   }
 
   try {
@@ -266,7 +296,21 @@ export async function middleware(request: NextRequest) {
       if (userError) {
         if (!isSupabaseSessionMissingError(userError)) {
           console.error("中间件用户验证错误:", userError)
-          return attachTraceHeaders(createUnauthorizedResponse(request, "AUTHENTICATION_REQUIRED"))
+          // 用户认证错误时，区分 API 和页面请求
+          const isApiRequest = pathname.startsWith("/api/")
+          if (isApiRequest) {
+            return attachTraceHeaders(
+              NextResponse.json(
+                { error: "用户未认证", code: "AUTHENTICATION_REQUIRED", timestamp: new Date().toISOString() },
+                { status: 401 }
+              )
+            )
+          } else {
+            // 页面请求重定向到登录页
+            const loginUrl = new URL("/login", request.url)
+            loginUrl.searchParams.set("redirect", pathname)
+            return attachTraceHeaders(createRedirectResponse(loginUrl.toString(), request))
+          }
         }
       } else {
         user = fetchedUser
@@ -274,7 +318,21 @@ export async function middleware(request: NextRequest) {
     } catch (error) {
       if (!isSupabaseSessionMissingError(error)) {
         console.error("中间件用户验证异常:", error)
-        return attachTraceHeaders(createUnauthorizedResponse(request, "AUTHENTICATION_REQUIRED"))
+        // 用户认证异常时，区分 API 和页面请求
+        const isApiRequest = pathname.startsWith("/api/")
+        if (isApiRequest) {
+          return attachTraceHeaders(
+            NextResponse.json(
+              { error: "用户未认证", code: "AUTHENTICATION_REQUIRED", timestamp: new Date().toISOString() },
+              { status: 401 }
+            )
+          )
+        } else {
+          // 页面请求重定向到登录页
+          const loginUrl = new URL("/login", request.url)
+          loginUrl.searchParams.set("redirect", pathname)
+          return attachTraceHeaders(createRedirectResponse(loginUrl.toString(), request))
+        }
       }
     }
 
@@ -296,8 +354,11 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    // 中间件保持最小职责：仅验证登录状态、附加安全头部
-    // 角色权限检查由 Server Components 和 API 路由通过 lib/permissions.ts 处理
+    // 注意：角色/封禁检查已移至 API 路由和 Server Components（lib/permissions.ts）
+    // Edge Runtime 不支持 Prisma，细粒度权限检查不能在 middleware 中进行
+
+    // 中间件保持最小职责：验证登录状态 + 基础封禁/管理员阻断、附加安全头部
+    // 细粒度角色权限仍由 Server Components 和 API 路由通过 lib/permissions.ts 处理
 
     // 性能日志（仅在开发环境）
     if (process.env.NODE_ENV === "development") {
@@ -309,7 +370,7 @@ export async function middleware(request: NextRequest) {
     }
 
     // 应用安全头部
-    return attachTraceHeaders(setSecurityHeaders(response))
+    return attachTraceHeaders(setSecurityHeaders(response, { request }))
   } catch (error) {
     console.error("中间件处理错误:", error)
 
@@ -319,22 +380,15 @@ export async function middleware(request: NextRequest) {
     console.error(`中间件错误处理耗时: ${duration.toFixed(2)}ms`)
 
     // 对于错误情况，返回服务不可用响应
-    if (request.nextUrl.pathname.startsWith("/api/")) {
-      return attachTraceHeaders(
-        NextResponse.json(
-          {
-            error: "服务暂时不可用",
-            code: "SERVICE_UNAVAILABLE",
-            timestamp: new Date().toISOString(),
-          },
-          { status: 500 }
-        )
-      )
-    }
-
-    // 页面请求重定向到错误页
     return attachTraceHeaders(
-      createRedirectResponse("/unauthorized?reason=service_unavailable", request)
+      NextResponse.json(
+        {
+          error: "服务暂时不可用",
+          code: "SERVICE_UNAVAILABLE",
+          timestamp: new Date().toISOString(),
+        },
+        { status: 500 }
+      )
     )
   }
 }

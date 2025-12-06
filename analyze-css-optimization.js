@@ -89,7 +89,7 @@ const improvement = {
   score: cssMedians.score - fontMedians.score
 };
 
-let report = `# Phase 2: 关键CSS内联优化对比报告
+const report = `# Phase 2: 关键CSS内联优化对比报告
 
 ## 测试环境
 - **测试页面**: 首页 (http://localhost:3999/)

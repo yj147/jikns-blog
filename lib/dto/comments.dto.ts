@@ -42,9 +42,7 @@ export type CommentTargetType = z.infer<typeof CommentTargetTypeEnum>
 export const CommentAuthorSchema = z.object({
   id: flexibleIdSchema,
   name: z.string().min(1).nullable(),
-  email: z.string().email(),
   avatarUrl: z.string().nullable(),
-  role: z.enum(["USER", "ADMIN"]),
 })
 
 /**

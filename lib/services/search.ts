@@ -459,7 +459,6 @@ async function searchUsers(
       SELECT
         u.id,
         u.name,
-        u.email,
         u."avatarUrl",
         u.bio,
         ${rankSelect} as rank
@@ -496,7 +495,6 @@ async function searchUsers(
       SELECT
         u.id,
         u.name,
-        u.email,
         u."avatarUrl",
         u.bio,
         0 as rank

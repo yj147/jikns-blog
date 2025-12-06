@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { apiLogger } from "@/lib/utils/logger"
 import { createErrorResponse, ErrorCode } from "@/lib/api/unified-response"
-import { generateRequestId } from "@/lib/auth/session"
+import { generateRequestId, getOptionalViewer } from "@/lib/auth/session"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
+import { signAvatarUrl } from "@/lib/storage/signed-url"
+import { privacySettingsSchema } from "@/types/user-settings"
 
 /**
  * 获取用户公开资料
@@ -11,7 +13,7 @@ import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
  * Linus 原则：数据结构驱动设计
  * - 只返回公开信息（id, name, avatarUrl, bio, status）
  * - 绝不暴露 PII（email, role, lastLoginAt, socialLinks）
- * - 无需鉴权，任何人都可访问
+ * - 按 privacySettings.profileVisibility 进行访问控制
  * 
  * @route GET /api/users/[userId]/public
  * @access Public
@@ -35,7 +37,7 @@ async function handleGet(
   const requestId = generateRequestId()
 
   try {
-    const { userId } = await params
+    const [{ userId }, viewer] = await Promise.all([params, getOptionalViewer({ request })])
 
     // Linus 原则：好品味
     // 使用与 lib/interactions/follow.ts 相同的 PUBLIC_USER_SELECT
@@ -50,6 +52,7 @@ async function handleGet(
         avatarUrl: true,
         bio: true,
         status: true,
+        privacySettings: true,
         _count: {
           select: {
             posts: true,
@@ -71,14 +74,75 @@ async function handleGet(
       )
     }
 
+    const parsedPrivacy = privacySettingsSchema.safeParse(user.privacySettings ?? {})
+    const privacySettings = parsedPrivacy.success
+      ? parsedPrivacy.data
+      : privacySettingsSchema.parse({})
+
+    if (!parsedPrivacy.success) {
+      apiLogger.warn("解析隐私设置失败", { requestId, userId, error: parsedPrivacy.error })
+    }
+
+    const isOwner = viewer?.id === user.id
+    const isAdmin = viewer?.role === "ADMIN"
+
+    if (!isOwner && !isAdmin) {
+      if (privacySettings.profileVisibility === "private") {
+        return createErrorResponse(
+          ErrorCode.NOT_FOUND,
+          "用户不存在",
+          undefined,
+          404,
+          { requestId }
+        )
+      }
+
+      if (privacySettings.profileVisibility === "followers") {
+        if (!viewer) {
+          return createErrorResponse(
+            ErrorCode.NOT_FOUND,
+            "用户不存在",
+            undefined,
+            404,
+            { requestId }
+          )
+        }
+
+        const viewerFollowsTarget = await prisma.follow.findUnique({
+          where: {
+            followerId_followingId: {
+              followerId: viewer.id,
+              followingId: user.id,
+            },
+          },
+          select: {
+            followerId: true,
+          },
+        })
+
+        if (!viewerFollowsTarget) {
+          return createErrorResponse(
+            ErrorCode.NOT_FOUND,
+            "用户不存在",
+            undefined,
+            404,
+            { requestId }
+          )
+        }
+      }
+    }
+
     // Linus 原则：消除特殊情况
     // 统一响应格式，与其他公开 API 保持一致
+    // 签名头像 URL（activity-images bucket 是私有的）
+    const signedAvatarUrl = await signAvatarUrl(user.avatarUrl)
+
     return NextResponse.json({
       success: true,
       data: {
         id: user.id,
         name: user.name,
-        avatarUrl: user.avatarUrl,
+        avatarUrl: signedAvatarUrl,
         bio: user.bio,
         status: user.status,
         counts: {

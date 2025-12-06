@@ -7,6 +7,7 @@ import { validateImageFile, generateFileName, formatFileSize } from "@/lib/uploa
 import { createSignedUrlIfNeeded } from "@/lib/storage/signed-url"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 import { CSRFProtection } from "@/lib/security"
+import { getClientIp } from "@/lib/api/get-client-ip"
 
 // 上传配置
 const uploadConfig = {
@@ -274,10 +275,8 @@ export const POST = withApiResponseMetrics(handlePost)
 export const DELETE = withApiResponseMetrics(handleDelete)
 
 function buildPolicyContext(request: NextRequest) {
-  const ip =
-    request.headers.get("x-forwarded-for") ||
-    request.headers.get("x-real-ip") ||
-    undefined
+  const ipValue = getClientIp(request)
+  const ip = ipValue === "unknown" ? undefined : ipValue
   const ua = request.headers.get("user-agent") || undefined
 
   return {

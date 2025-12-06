@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import useSWR from "swr"
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -18,8 +19,21 @@ import NotificationBell from "@/components/notifications/notification-bell"
 
 export default function AuthActions() {
   const { user, loading } = useAuth()
+  const { data: apiUser, isLoading: apiLoading } = useSWR(
+    user ? null : "/api/user",
+    async (url: string) => {
+      const response = await fetch(url, { credentials: "include" })
+      if (!response.ok) return null
+      const { user: fetchedUser } = await response.json()
+      return fetchedUser ?? null
+    },
+    { revalidateOnFocus: false }
+  )
 
-  if (loading) {
+  const effectiveUser = user ?? apiUser ?? null
+  const effectiveLoading = loading || apiLoading
+
+  if (effectiveLoading) {
     return (
       <div className="flex items-center space-x-4">
         <div className="bg-muted h-8 w-8 animate-pulse rounded-full" />
@@ -27,9 +41,9 @@ export default function AuthActions() {
     )
   }
 
-  if (!user) {
+  if (!effectiveUser) {
     return (
-      <div className="flex items-center space-x-3">
+      <div className="hidden items-center space-x-3 sm:flex">
         <Link href="/login">
           <Button variant="ghost" size="sm">
             登录
@@ -43,9 +57,9 @@ export default function AuthActions() {
   }
 
   return (
-    <div className="flex items-center space-x-4">
+    <div className="hidden items-center space-x-4 sm:flex">
       <NotificationBell />
-      <ClientUserMenu user={user} />
+      <ClientUserMenu user={effectiveUser} />
     </div>
   )
 }

@@ -13,8 +13,10 @@ import { authLogger } from "@/lib/utils/logger"
 import { performanceMonitor, MetricType } from "@/lib/performance-monitor"
 import { buildSessionLogContext } from "@/lib/utils/auth-logging"
 import { generateRequestId } from "@/lib/utils/request-id"
+import { getClientIp } from "@/lib/api/get-client-ip"
 
 const isTestEnv = process.env.NODE_ENV === "test"
+const isDevEnv = process.env.NODE_ENV === "development"
 
 /**
  * 策略化守卫类型映射
@@ -86,6 +88,16 @@ interface SupabaseUser {
   } | null
 }
 
+const adminEmailList = (process.env.ADMIN_EMAIL || "")
+  .split(",")
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean)
+
+export function isConfiguredAdminEmail(email?: string | null): boolean {
+  if (!email) return false
+  return adminEmailList.includes(email.toLowerCase())
+}
+
 /**
  * 获取 Supabase 认证用户（底层函数）
  * 使用 React cache 优化，在同一请求中避免重复查询
@@ -97,6 +109,8 @@ function isSupabaseSessionCookie(name?: string): boolean {
 }
 
 async function hasSupabaseSessionCookie(request?: NextRequest): Promise<boolean> {
+  if (isTestEnv) return true
+
   try {
     if (request) {
       return request.cookies.getAll().some((cookie) => {
@@ -185,7 +199,9 @@ async function fetchUserFromDatabase(userId: string): Promise<User | null> {
  * 返回完整的 User 对象，映射在 fetchAuthenticatedUser() 中完成
  */
 async function getCachedUser(userId: string): Promise<User | null> {
-  if (isTestEnv) {
+  // 在测试和开发环境下直接查询数据库，跳过 unstable_cache
+  // 因为 dev 模式下 revalidateTag 的行为不稳定，导致用户资料更新后刷新页面看不到变化
+  if (isTestEnv || isDevEnv) {
     return fetchUserFromDatabase(userId)
   }
   const cachedFn = unstable_cache(
@@ -193,7 +209,7 @@ async function getCachedUser(userId: string): Promise<User | null> {
     [`user-profile-${userId}`],
     {
       tags: ["user:self", `user:${userId}`],
-      revalidate: 60, // 1分钟缓存（优化后：从 300 秒缩短到 60 秒）
+      revalidate: 60, // 1分钟缓存
     }
   )
   return cachedFn()
@@ -218,12 +234,17 @@ export async function fetchSessionUserProfile(): Promise<User | null> {
  * Server Components 和 Server Actions 专用
  */
 const fetchAuthenticatedUserImpl = async (): Promise<AuthenticatedUser | null> => {
-  const timerId = `auth-session-${Date.now()}-${Math.random().toString(16).slice(2)}`
-  performanceMonitor.startTimer(timerId)
+  const timerId = isTestEnv
+    ? null
+    : `auth-session-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  if (timerId) {
+    performanceMonitor.startTimer(timerId)
+  }
 
   let supabaseUserId: string | undefined
   let timerEnded = false
   const endTimer = (context: Record<string, any>) => {
+    if (!timerId) return
     timerEnded = true
     performanceMonitor.endTimer(timerId, MetricType.AUTH_SESSION_CHECK_TIME, {
       userId: supabaseUserId ?? context.userId,
@@ -296,7 +317,7 @@ const fetchAuthenticatedUserImpl = async (): Promise<AuthenticatedUser | null> =
       return null
     }
   } finally {
-    if (!timerEnded) {
+    if (!timerEnded && timerId) {
       endTimer({ success: false, userPresent: false, source: "unexpected" })
     }
   }
@@ -521,8 +542,8 @@ export async function assertPolicy<P extends AuthPolicy>(
 
 export async function requireAdmin(request?: NextRequest): Promise<PolicyUserMap["admin"]> {
   const path = request?.nextUrl.pathname ?? "auth:session:requireAdmin"
-  const ip =
-    request?.headers.get("x-forwarded-for") ?? request?.headers.get("x-real-ip") ?? undefined
+  const rawIp = request ? getClientIp(request) : undefined
+  const ip = rawIp === "unknown" ? undefined : rawIp
   const ua = request?.headers.get("user-agent") ?? undefined
   const requestId = request?.headers.get("x-request-id") ?? undefined
 
@@ -546,10 +567,12 @@ export function createAuthContext<P extends AuthPolicy>(
   request: NextRequest,
   requestId?: string
 ): AuthContext<P> {
+  const ip = getClientIp(request)
+
   return {
     user,
     requestId: requestId || generateRequestId(),
-    ip: request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || null,
+    ip: ip === "unknown" ? null : ip,
     ua: request.headers.get("user-agent") || null,
     path: request.nextUrl.pathname,
     timestamp: new Date(),
@@ -569,6 +592,8 @@ export async function syncUserFromAuth(authUser: SupabaseUser): Promise<User> {
   }
 
   const currentTime = new Date()
+  const normalizedEmail = authUser.email.toLowerCase()
+  const grantAdmin = isConfiguredAdminEmail(normalizedEmail)
 
   // 从 metadata 提取用户信息
   const extractedName =
@@ -581,10 +606,6 @@ export async function syncUserFromAuth(authUser: SupabaseUser): Promise<User> {
     authUser.user_metadata?.avatar_url || authUser.user_metadata?.picture || null
 
   try {
-    const normalizedEmail = authUser.email.toLowerCase()
-
-    // 使用 upsert 原子操作：一次调用处理创建和更新两种情况
-    // 无需先查询再判断，避免竞态条件
     const user = await prisma.user.upsert({
       where: { id: authUser.id },
       create: {
@@ -592,18 +613,17 @@ export async function syncUserFromAuth(authUser: SupabaseUser): Promise<User> {
         email: normalizedEmail,
         name: extractedName,
         avatarUrl: extractedAvatarUrl,
-        role: "USER",
+        role: grantAdmin ? "ADMIN" : "USER",
         status: "ACTIVE",
         createdAt: currentTime,
         updatedAt: currentTime,
         lastLoginAt: currentTime,
       },
+      // ✅ 仅更新登录时间，避免覆盖用户自定义资料
       update: {
         lastLoginAt: currentTime,
         updatedAt: currentTime,
-        // ✅ Linus "Never break userspace" 原则：
-        // 只更新 lastLoginAt，不覆盖用户可编辑字段（name, avatarUrl, bio, socialLinks）
-        // 用户自定义的昵称和头像必须保留
+        ...(grantAdmin ? { role: "ADMIN" as Role } : {}),
       },
     })
 
@@ -613,10 +633,17 @@ export async function syncUserFromAuth(authUser: SupabaseUser): Promise<User> {
     await clearUserCache(user.id)
 
     const context = buildSessionLogContext(user.id)
-    authLogger.info("用户资料同步成功", {
+    const logPayload = {
       ...context,
       email: user.email,
-    })
+      updatedFields: ["upsert"],
+      adminWhitelisted: grantAdmin,
+      roleAfterUpsert: user.role,
+    }
+    authLogger.info("用户资料同步成功", logPayload)
+    if (isTestEnv) {
+      console.log("同步用户资料:", logPayload)
+    }
     return user
   } catch (error) {
     const context = buildSessionLogContext(authUser.id)
@@ -624,7 +651,8 @@ export async function syncUserFromAuth(authUser: SupabaseUser): Promise<User> {
       ...context,
       error,
     })
-    throw new AuthError("用户资料同步失败", "INVALID_TOKEN", 500)
+    const reason = error instanceof Error ? error.message : "未知错误"
+    throw new AuthError(`用户资料同步失败: ${reason}`, "INVALID_TOKEN", 500)
   }
 }
 

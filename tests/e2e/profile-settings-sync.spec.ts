@@ -212,10 +212,18 @@ async function login(page: Page, user: { email: string; password: string }) {
 
 async function clearAuthState(page: Page) {
   await page.context().clearCookies()
-  await page.evaluate(() => {
-    localStorage.clear()
-    sessionStorage.clear()
-  })
+  try {
+    // about:blank 环境会抛 SecurityError，需要先切回站点域名
+    if (page.url() === "about:blank") {
+      await page.goto("/")
+    }
+    await page.evaluate(() => {
+      localStorage.clear()
+      sessionStorage.clear()
+    })
+  } catch {
+    // 如果仍然因为跨域限制失败，忽略清理错误，避免阻塞后续用例
+  }
 }
 
 async function setSwitchState(page: Page, labelPattern: RegExp, targetChecked: boolean) {

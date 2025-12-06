@@ -54,7 +54,7 @@ class Logger {
       level: (process.env.LOG_LEVEL as LogLevel) || "info",
       enableConsole: process.env.NODE_ENV !== "production",
       enableFile: false, // 暂时禁用文件日志
-      enableRemote: process.env.NODE_ENV === "production",
+      enableRemote: process.env.ENABLE_REMOTE_LOG === "true",
       format: process.env.NODE_ENV === "production" ? "json" : "pretty",
       ...config,
     }

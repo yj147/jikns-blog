@@ -28,6 +28,11 @@ vi.mock("@/lib/prisma", () => ({
   },
 }))
 
+const sessionModule = await import("@/lib/auth/session")
+const permissionsModule = await import("@/lib/permissions")
+const { fetchAuthenticatedUser } = vi.mocked(sessionModule)
+const { requireAuth, requireAdmin } = permissionsModule
+
 describe("认证错误处理 - 边界条件测试", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -165,9 +170,6 @@ describe("认证错误处理 - 边界条件测试", () => {
 })
 
 describe("认证错误处理 - 并发场景测试", () => {
-  const { fetchAuthenticatedUser } = vi.mocked(await import("@/lib/auth/session"))
-  const { requireAuth, requireAdmin } = await import("@/lib/permissions")
-
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -312,11 +314,11 @@ describe("认证错误处理 - 并发场景测试", () => {
       let requestCount = 0
 
       fetchAuthenticatedUser.mockImplementation(async () => {
-        requestCount++
+        const current = ++requestCount
         await new Promise((resolve) => setTimeout(resolve, Math.random() * 5))
 
         // 模拟第10次请求后用户被封禁
-        const status = requestCount > 10 ? "BANNED" : "ACTIVE"
+        const status = current > 10 ? "BANNED" : "ACTIVE"
 
         return {
           id: "user-123",
@@ -340,7 +342,7 @@ describe("认证错误处理 - 并发场景测试", () => {
       // 失败的应该是因为BANNED状态
       rejected.forEach((result) => {
         if (result.status === "rejected" && isAuthError(result.reason)) {
-          expect(result.reason.code).toBe("FORBIDDEN")
+          expect(result.reason.code).toBe("ACCOUNT_BANNED")
           expect(result.reason.message).toContain("封禁")
         }
       })
@@ -350,11 +352,11 @@ describe("认证错误处理 - 并发场景测试", () => {
       let requestCount = 0
 
       fetchAuthenticatedUser.mockImplementation(async () => {
-        requestCount++
+        const current = ++requestCount
         await new Promise((resolve) => setTimeout(resolve, Math.random() * 5))
 
         // 模拟第15次请求后用户升级为管理员
-        const role = requestCount > 15 ? "ADMIN" : "USER"
+        const role = current > 15 ? "ADMIN" : "USER"
 
         return {
           id: "user-123",

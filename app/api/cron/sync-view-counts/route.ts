@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { runViewCountSync } from "@/lib/cron/sync-view-counts"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
+import { verifyCronSecret } from "@/lib/api/verify-cron-secret"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,13 +19,8 @@ export const dynamic = "force-dynamic"
  * }
  */
 async function handleGet(request: NextRequest) {
-  // 验证 Vercel Cron Secret（生产环境）
-  const authHeader = request.headers.get("authorization")
-  const cronSecret = process.env.CRON_SECRET
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  const authFailure = verifyCronSecret(request)
+  if (authFailure) return authFailure
 
   try {
     const result = await runViewCountSync()

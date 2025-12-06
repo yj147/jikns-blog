@@ -24,6 +24,7 @@ interface UseRealtimeActivitiesOptions {
 type ConnectionState = "realtime" | "polling" | "disconnected" | "error"
 
 const DEFAULT_POLL_INTERVAL = 10000
+const HYDRATION_BATCH_DELAY = 30
 
 /**
  * 订阅动态实时更新
@@ -58,6 +59,10 @@ export function useRealtimeActivities({
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(false)
   const retrySchedulerRef = useRef(createRetryScheduler())
+  const hydrationQueueRef = useRef<
+    Map<string, { activity: ActivityWithAuthor; event: "insert" | "update" }>
+  >(new Map())
+  const hydrationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const onInsertRef = useRef(onInsert)
   const onUpdateRef = useRef(onUpdate)
@@ -89,11 +94,15 @@ export function useRealtimeActivities({
       return
     }
 
-    setIsPollingFallback(true)
-
     if (!pollFetcherRef.current) {
+      const missingFetcherError = new Error("Polling fallback requires pollFetcher")
+      logger.error("未提供 pollFetcher，无法启用轮询降级")
+      setError((prev) => prev ?? missingFetcherError)
+      setIsPollingFallback(false)
       return
     }
+
+    setIsPollingFallback(true)
 
     void pollFetcherRef.current()
     pollTimerRef.current = setInterval(() => {
@@ -133,6 +142,114 @@ export function useRealtimeActivities({
       stopPolling()
     }
   })
+
+  const toActivityWithPayload = useCallback((activity: Activity | null): ActivityWithAuthor | null => {
+    if (!activity) return null
+
+    const payloadAuthor = (activity as any)?.author as ActivityWithAuthor["author"] | undefined
+
+    return {
+      ...activity,
+      author:
+        payloadAuthor && payloadAuthor.id
+          ? payloadAuthor
+          : {
+              id: activity.authorId,
+              name: payloadAuthor?.name ?? null,
+              avatarUrl: payloadAuthor?.avatarUrl ?? null,
+              role: payloadAuthor?.role ?? "USER",
+            },
+    }
+  }, [])
+
+  const needsAuthorHydration = useCallback((activity: ActivityWithAuthor | null) => {
+    if (!activity) return false
+    const author = activity.author
+    if (!author) return true
+    return author.name == null || author.avatarUrl == null
+  }, [])
+
+  const processHydrationQueue = useCallback(async () => {
+    if (!hydrationQueueRef.current.size) {
+      return
+    }
+
+    const supabase = supabaseRef.current
+    const pending = Array.from(hydrationQueueRef.current.values())
+    hydrationQueueRef.current.clear()
+
+    if (!supabase) {
+      pending.forEach(({ activity, event }) => {
+        if (event === "insert") {
+          onInsertRef.current?.(activity)
+        } else {
+          onUpdateRef.current?.(activity)
+        }
+      })
+      return
+    }
+
+    const ids = pending.map((item) => item.activity.id)
+    let fetchedMap = new Map<string, ActivityWithAuthor>()
+
+    try {
+      const { data, error: fetchError } = await supabase
+        .from("activities")
+        .select("*, author:users(id,name,avatarUrl,role,status)")
+        .in("id", ids)
+
+      if (fetchError) {
+        logger.warn("批量查询活动失败，使用原始 payload", { ids, error: fetchError })
+      }
+
+      if (data?.length) {
+        fetchedMap = new Map(
+          (data as Array<{ id: string } & Record<string, unknown>>).map((item) => [
+            item.id,
+            item as unknown as ActivityWithAuthor,
+          ])
+        )
+      }
+    } catch (err) {
+      logger.warn("批量查询活动异常，使用原始 payload", { ids, error: err })
+    }
+
+    pending.forEach(({ activity, event }) => {
+      const hydrated = fetchedMap.get(activity.id)
+      const merged: ActivityWithAuthor = hydrated
+        ? {
+            ...activity,
+            ...hydrated,
+            author: hydrated.author ?? activity.author,
+          }
+        : activity
+
+      try {
+        if (event === "insert") {
+          onInsertRef.current?.(merged)
+        } else {
+          onUpdateRef.current?.(merged)
+        }
+      } catch (err) {
+        logger.error("处理动态变更失败", { event }, err)
+        setError(err instanceof Error ? err : new Error("Unknown error"))
+      }
+    })
+  }, [])
+
+  const enqueueHydration = useCallback(
+    (activity: ActivityWithAuthor, event: "insert" | "update") => {
+      if (!activity?.id) return
+      hydrationQueueRef.current.set(activity.id, { activity, event })
+      if (hydrationTimerRef.current) return
+
+      hydrationTimerRef.current = setTimeout(() => {
+        hydrationTimerRef.current = null
+        void processHydrationQueue()
+      }, HYDRATION_BATCH_DELAY)
+    },
+    [processHydrationQueue]
+  )
 
   useEffect(() => {
     mountedRef.current = true
@@ -205,43 +322,25 @@ export function useRealtimeActivities({
             })
 
             try {
-              const fetchFullActivity = async (id: string) => {
-                const { data, error: fetchError } = await supabase
-                  .from("activities")
-                  .select("*, author:users(id,name,avatarUrl,role,status)")
-                  .eq("id", id)
-                  .single()
-
-                if (fetchError) {
-                  logger.warn("查询完整动态失败，使用原始 payload", { id, error: fetchError })
-                }
-
-                return data as ActivityWithAuthor | null
-              }
-
-              const withAuthorFallback = (activity: Activity): ActivityWithAuthor => ({
-                ...activity,
-                author: {
-                  id: activity.authorId,
-                  name: null,
-                  avatarUrl: null,
-                  role: "USER",
-                },
-              })
-
               if (payload.eventType === "INSERT" && newActivity) {
                 if (!newActivity.deletedAt) {
-                  const hydrated =
-                    (await fetchFullActivity(newActivity.id)) ?? withAuthorFallback(newActivity)
-                  onInsertRef.current?.(hydrated)
+                  const activityWithPayload = toActivityWithPayload(newActivity)
+                  if (needsAuthorHydration(activityWithPayload)) {
+                    enqueueHydration(activityWithPayload!, "insert")
+                  } else if (activityWithPayload) {
+                    onInsertRef.current?.(activityWithPayload)
+                  }
                 }
               } else if (payload.eventType === "UPDATE" && newActivity) {
                 if (newActivity.deletedAt && newActivity.id) {
                   onDeleteRef.current?.(newActivity.id)
                 } else {
-                  const hydrated =
-                    (await fetchFullActivity(newActivity.id)) ?? withAuthorFallback(newActivity)
-                  onUpdateRef.current?.(hydrated)
+                  const activityWithPayload = toActivityWithPayload(newActivity)
+                  if (needsAuthorHydration(activityWithPayload)) {
+                    enqueueHydration(activityWithPayload!, "update")
+                  } else if (activityWithPayload) {
+                    onUpdateRef.current?.(activityWithPayload)
+                  }
                 }
               } else if (payload.eventType === "DELETE" && oldActivity?.id) {
                 onDeleteRef.current?.(oldActivity.id)
@@ -277,6 +376,11 @@ export function useRealtimeActivities({
       mountedRef.current = false
       clearChannel()
       stopPolling(true)
+      hydrationQueueRef.current.clear()
+      if (hydrationTimerRef.current) {
+        clearTimeout(hydrationTimerRef.current)
+        hydrationTimerRef.current = null
+      }
     }
   }, [clearChannel, enabled, isOnline, retryToken, startPolling, stopPolling, triggerRetry])
 

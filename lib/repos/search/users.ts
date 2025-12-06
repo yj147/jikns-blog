@@ -46,20 +46,16 @@ async function executeSearchUsersMain(
       Array<{
         id: string
         name: string | null
-        email: string
         avatarUrl: string | null
         bio: string | null
-        role: string
         similarity: number
       }>
     >`
       SELECT
         id,
         name,
-        email,
         "avatarUrl",
         bio,
-        role,
         GREATEST(
           similarity(COALESCE(name, ''), ${query}),
           similarity(COALESCE(bio, ''), ${query})
@@ -118,10 +114,8 @@ async function executeSearchUsersFallback(
       select: {
         id: true,
         name: true,
-        email: true,
         avatarUrl: true,
         bio: true,
-        role: true,
       },
     }),
     prisma.user.count({ where }),

@@ -33,6 +33,8 @@ import {
   updatePrivacySettings,
   updateProfile,
   updateSocialLinks,
+  updateCoverImage,
+  deleteCoverImage,
 } from "@/app/actions/settings"
 import { useAuth } from "@/hooks/use-auth"
 import {
@@ -45,12 +47,16 @@ import {
 } from "@/types/user-settings"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Loader2 } from "lucide-react"
+import Image from "next/image"
 
 const PHONE_PATTERN = /^[0-9()+\-\.\s]*$/
 
 const AVATAR_ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const
 const AVATAR_ACCEPT = AVATAR_ALLOWED_TYPES.join(",")
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024
+const COVER_ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"] as const
+const COVER_ACCEPT = COVER_ALLOWED_TYPES.join(",")
+const MAX_COVER_SIZE = 8 * 1024 * 1024
 
 const profileFormSchema = z.object({
   name: z
@@ -80,6 +86,11 @@ export default function SettingsPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [currentAvatarUrl, setCurrentAvatarUrl] = useState<string | null>(user?.avatarUrl ?? null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [uploadingCover, setUploadingCover] = useState(false)
+  const [coverUploadError, setCoverUploadError] = useState<string | null>(null)
+  const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null)
+  const [currentCoverUrl, setCurrentCoverUrl] = useState<string | null>(user?.coverImage ?? null)
+  const coverInputRef = useRef<HTMLInputElement | null>(null)
 
   const [isProfilePending, startProfileTransition] = useTransition()
   const [isPrivacyPending, startPrivacyTransition] = useTransition()
@@ -148,6 +159,33 @@ export default function SettingsPage() {
     setUploadError(null)
   }, [user?.avatarUrl])
 
+  useEffect(() => {
+    setCurrentCoverUrl(user?.coverImage ?? null)
+    setCoverPreviewUrl(null)
+    setCoverUploadError(null)
+  }, [user?.coverImage])
+
+  // 用户数据加载后重置表单以填充默认值
+  useEffect(() => {
+    if (user && !loading) {
+      profileForm.reset(profileDefaults)
+      privacyForm.reset(privacyDefaults)
+      notificationForm.reset(notificationDefaults)
+      socialLinksForm.reset(socialLinksDefaults)
+    }
+  }, [
+    user,
+    loading,
+    profileDefaults,
+    privacyDefaults,
+    notificationDefaults,
+    socialLinksDefaults,
+    profileForm,
+    privacyForm,
+    notificationForm,
+    socialLinksForm,
+  ])
+
   const validateAvatarFile = (file: File): string | null => {
     if (!AVATAR_ALLOWED_TYPES.includes(file.type as (typeof AVATAR_ALLOWED_TYPES)[number])) {
       return "仅支持 JPG/PNG/WebP/GIF 图片"
@@ -159,6 +197,22 @@ export default function SettingsPage() {
 
     if (file.size > MAX_AVATAR_SIZE) {
       return "头像大小不能超过 5MB"
+    }
+
+    return null
+  }
+
+  const validateCoverFile = (file: File): string | null => {
+    if (!COVER_ALLOWED_TYPES.includes(file.type as (typeof COVER_ALLOWED_TYPES)[number])) {
+      return "仅支持 JPG/PNG/WebP 图片"
+    }
+
+    if (file.size === 0) {
+      return "封面文件为空"
+    }
+
+    if (file.size > MAX_COVER_SIZE) {
+      return "封面大小不能超过 8MB"
     }
 
     return null
@@ -252,6 +306,92 @@ export default function SettingsPage() {
       toast({ title: "头像上传失败，请稍后重试", variant: "destructive" })
     } finally {
       setUploadingAvatar(false)
+    }
+  }
+
+  const handleCoverSelect = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null
+    event.target.value = ""
+
+    if (!user) {
+      toast({ title: "用户未登录", variant: "destructive" })
+      return
+    }
+
+    if (!file) return
+
+    const validationMessage = validateCoverFile(file)
+    if (validationMessage) {
+      setCoverUploadError(validationMessage)
+      return
+    }
+
+    setCoverUploadError(null)
+
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setCoverPreviewUrl(reader.result as string)
+    }
+    reader.readAsDataURL(file)
+
+    const coverForm = new FormData()
+    coverForm.append("cover", file)
+
+    setUploadingCover(true)
+    try {
+      const result = await updateCoverImage(user.id, coverForm)
+      if (result.success) {
+        const newUrl = result.data.coverImage
+        setCurrentCoverUrl(newUrl)
+        setCoverPreviewUrl(null)
+        setCoverUploadError(null)
+
+        await Promise.all([
+          refreshUser(),
+          new Promise((resolve) => setTimeout(resolve, 100)),
+        ])
+        router.refresh()
+        toast({ title: "封面已更新" })
+      } else {
+        setCoverUploadError(result.error)
+        toast({ title: result.error, variant: "destructive" })
+      }
+    } catch (error) {
+      console.error("updateCoverImage failed", error)
+      setCoverUploadError("封面上传失败，请稍后重试")
+      toast({ title: "封面上传失败，请稍后重试", variant: "destructive" })
+    } finally {
+      setUploadingCover(false)
+    }
+  }
+
+  const handleCoverDelete = async () => {
+    if (!user) {
+      toast({ title: "用户未登录", variant: "destructive" })
+      return
+    }
+
+    setUploadingCover(true)
+    try {
+      const result = await deleteCoverImage(user.id)
+      if (result.success) {
+        setCurrentCoverUrl(null)
+        setCoverPreviewUrl(null)
+        setCoverUploadError(null)
+        await Promise.all([
+          refreshUser(),
+          new Promise((resolve) => setTimeout(resolve, 100)),
+        ])
+        router.refresh()
+        toast({ title: "封面已移除" })
+      } else {
+        toast({ title: result.error, variant: "destructive" })
+      }
+    } catch (error) {
+      console.error("deleteCoverImage failed", error)
+      toast({ title: "删除封面失败，请稍后重试", variant: "destructive" })
+    } finally {
+      setUploadingCover(false)
     }
   }
 
@@ -401,20 +541,74 @@ export default function SettingsPage() {
           <p className="text-muted-foreground">管理个人资料、隐私和通知偏好</p>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
+        <div className="grid gap-6 lg:grid-cols-4">
+          <Card className="lg:col-span-3">
             <CardHeader>
               <CardTitle>个人资料</CardTitle>
               <CardDescription>更新所在地、联系方式与个人简介</CardDescription>
             </CardHeader>
-            <CardContent>
-              <Form {...profileForm}>
-                <form onSubmit={handleProfileSubmit} className="space-y-4">
-                  <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center">
-                    <Avatar className="h-16 w-16">
-                      <AvatarImage
-                        src={previewUrl || currentAvatarUrl || undefined}
-                        alt={user.name || user.email || "头像"}
+              <CardContent>
+                <Form {...profileForm}>
+                  <form onSubmit={handleProfileSubmit} className="space-y-4">
+                    <div className="flex flex-col gap-3 rounded-lg border p-4">
+                      <div className="relative h-36 w-full overflow-hidden rounded-md bg-muted md:h-44">
+                        {coverPreviewUrl || currentCoverUrl ? (
+                          <Image
+                            src={coverPreviewUrl || currentCoverUrl || "/placeholder.svg"}
+                            alt="封面预览"
+                            fill
+                            sizes="(min-width: 768px) 640px, 100vw"
+                            className="object-cover"
+                          />
+                        ) : (
+                          <div className="h-full w-full bg-gradient-to-r from-sky-500/60 via-indigo-500/60 to-purple-500/60" />
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => coverInputRef.current?.click()}
+                          disabled={uploadingCover}
+                        >
+                          {uploadingCover ? "上传中..." : "选择封面图"}
+                        </Button>
+                        {currentCoverUrl && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={handleCoverDelete}
+                            disabled={uploadingCover}
+                          >
+                            移除封面图
+                          </Button>
+                        )}
+                        <input
+                          ref={coverInputRef}
+                          type="file"
+                          accept={COVER_ACCEPT}
+                          className="hidden"
+                          onChange={handleCoverSelect}
+                        />
+                        {uploadingCover && (
+                          <span className="text-muted-foreground flex items-center gap-2 text-sm">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            上传中...
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-muted-foreground text-sm">
+                        推荐 1500x500，支持 JPG/PNG/WebP，≤8MB。
+                      </p>
+                      {coverUploadError && <p className="text-destructive text-sm">{coverUploadError}</p>}
+                    </div>
+
+                    <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center">
+                      <Avatar className="h-16 w-16">
+                        <AvatarImage
+                          src={previewUrl || currentAvatarUrl || undefined}
+                          alt={user.name || user.email || "头像"}
                       />
                       <AvatarFallback>
                         {(user.name || user.email || "U").charAt(0).toUpperCase()}
@@ -660,7 +854,7 @@ export default function SettingsPage() {
             </Card>
           </div>
 
-          <Card className="lg:col-span-2">
+          <Card className="lg:col-span-3">
             <CardHeader>
               <CardTitle>社交链接</CardTitle>
               <CardDescription>添加或清空常用社交链接，将在个人资料中展示</CardDescription>
@@ -681,6 +875,18 @@ export default function SettingsPage() {
                               value={typeof field.value === "string" ? field.value : ""}
                               type="url"
                               placeholder="https://example.com"
+                              pattern="https?://.*"
+                              title="仅支持 http:// 或 https:// 开头的链接"
+                              onChange={(e) => {
+                                const val = e.target.value
+                                // 仅允许 http/https，其他协议立即提示，避免提交到后端
+                                if (val && !/^https?:\/\//i.test(val)) {
+                                  e.target.setCustomValidity("仅支持 http:// 或 https:// 开头的链接")
+                                } else {
+                                  e.target.setCustomValidity("")
+                                }
+                                field.onChange(e)
+                              }}
                             />
                           </FormControl>
                           <FormMessage />

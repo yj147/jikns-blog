@@ -288,7 +288,6 @@ function createVisibleCards(
             const cardData: SearchUserHit = {
               id: item.id,
               name: item.name,
-              email: item.email,
               avatarUrl: item.avatarUrl,
               bio: item.bio,
               rank: item.rank,

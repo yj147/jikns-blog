@@ -9,7 +9,7 @@ import { NextResponse } from "next/server"
 import { authLogger } from "@/lib/utils/logger"
 import { syncUserFromAuth, isConfiguredAdminEmail } from "@/lib/auth"
 import { notificationPreferencesSchema, privacySettingsSchema } from "@/types/user-settings"
-import { signAvatarUrl } from "@/lib/storage/signed-url"
+import { signAvatarUrl, signCoverImageUrl } from "@/lib/storage/signed-url"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 async function handleGet() {
@@ -43,13 +43,14 @@ async function handleGet() {
         select: {
           id: true,
           email: true,
-          name: true,
-          avatarUrl: true,
-          bio: true,
-          socialLinks: true,
-          location: true,
-          phone: true,
-          notificationPreferences: true,
+        name: true,
+        avatarUrl: true,
+        coverImage: true,
+        bio: true,
+        socialLinks: true,
+        location: true,
+        phone: true,
+        notificationPreferences: true,
           privacySettings: true,
           role: true,
           status: true,
@@ -82,6 +83,7 @@ async function handleGet() {
         email: authUser.email || "",
         name: fallbackName,
         avatarUrl: fallbackAvatar,
+        coverImage: null,
         bio: null,
         socialLinks: null,
         location: null,
@@ -99,6 +101,7 @@ async function handleGet() {
         name: user.name || fallbackName,
         // avatarUrl 完全使用数据库值，syncUserFromAuth 已处理首次登录时的初始化
         avatarUrl: user.avatarUrl,
+        coverImage: user.coverImage ?? null,
         notificationPreferences: normalizedNotificationPreferences,
         privacySettings: normalizedPrivacySettings,
       }
@@ -108,6 +111,12 @@ async function handleGet() {
     if (avatarSignedUrl) {
       user.avatarUrl = avatarSignedUrl
       ;(user as any).avatarSignedUrl = avatarSignedUrl
+    }
+
+    const coverSignedUrl = await signCoverImageUrl(user.coverImage)
+    if (coverSignedUrl) {
+      user.coverImage = coverSignedUrl
+      ;(user as any).coverImageSignedUrl = coverSignedUrl
     }
 
     // 组合认证信息和业务信息

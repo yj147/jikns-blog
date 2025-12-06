@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { FollowButtonContent } from "./follow-button-content"
 import { FollowButtonError } from "./follow-button-error"
 import { FollowButtonDisabled } from "./follow-button-disabled"
+import { mutate as globalMutate } from "swr"
 
 type ButtonVariant = "default" | "outline" | "secondary" | "ghost"
 type ButtonSize = "default" | "sm" | "lg" | "icon"
@@ -60,13 +61,73 @@ export default function FollowButton({
     [initialFollowing, targetUserId]
   )
 
+  const cacheMatchers = useMemo(
+    () => [
+      (key: unknown) =>
+        typeof key === "string" && key.startsWith(`/api/users/${targetUserId}/followers`),
+      (key: unknown) =>
+        typeof key === "string" && key.startsWith(`/api/users/${targetUserId}/following`),
+      (key: unknown) =>
+        typeof key === "string" && key.startsWith(`/api/users/${targetUserId}/stats`),
+      (key: unknown) =>
+        typeof key === "string" && key.startsWith(`/api/users/${targetUserId}/public`),
+    ],
+    [targetUserId]
+  )
+
   const { toggleFollow, isFollowing, isLoading, error, clearError } = useFollowUser({
     optimistic: true,
     showToast: true,
     initialFollowing: initialFollowingIds,
+    mutateMatchers: cacheMatchers,
   })
 
   const isCurrentlyFollowing = isFollowing(targetUserId)
+
+  const bumpFollowerCache = useCallback(
+    (delta: number) => {
+      const applyDelta = (data: any, path: "counts" | "root") => {
+        if (!data) return data
+        if (path === "counts" && data.counts && typeof data.counts.followers === "number") {
+          return {
+            ...data,
+            counts: { ...data.counts, followers: Math.max(0, data.counts.followers + delta) },
+          }
+        }
+        if (path === "root" && typeof data.followers === "number") {
+          return { ...data, followers: Math.max(0, data.followers + delta) }
+        }
+        return data
+      }
+
+      // /public: { data: { counts: { followers } } }
+      void globalMutate(
+        `/api/users/${targetUserId}/public`,
+        (resp: any) =>
+          resp?.data
+            ? {
+                ...resp,
+                data: applyDelta(resp.data, "counts"),
+              }
+            : resp,
+        false
+      )
+
+      // /stats: { data: { followers } }
+      void globalMutate(
+        `/api/users/${targetUserId}/stats`,
+        (resp: any) =>
+          resp?.data
+            ? {
+                ...resp,
+                data: applyDelta(resp.data, "root"),
+              }
+            : resp,
+        false
+      )
+    },
+    [targetUserId]
+  )
 
   const handleClick = useCallback(async () => {
     if (disabled || isLoading) return
@@ -78,8 +139,10 @@ export default function FollowButton({
       if (result.success) {
         if (isCurrentlyFollowing) {
           onUnfollowSuccess?.(targetUserId)
+          bumpFollowerCache(-1)
         } else {
           onFollowSuccess?.(targetUserId)
+          bumpFollowerCache(1)
         }
       } else {
         onError?.(result.error)
@@ -98,6 +161,7 @@ export default function FollowButton({
     onUnfollowSuccess,
     onError,
     isCurrentlyFollowing,
+    bumpFollowerCache,
   ])
 
   const buttonVariant = isCurrentlyFollowing && variant === "default" ? "outline" : variant

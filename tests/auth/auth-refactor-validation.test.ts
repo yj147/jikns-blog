@@ -94,6 +94,10 @@ describe("P2-3: 认证系统重构验证", () => {
         global.gc()
       }
 
+      // 让GC有时间完成，避免瞬时波动
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      global.gc?.()
+
       // 记录最终内存
       const finalMemory = process.memoryUsage().heapUsed
       const memoryIncrease = finalMemory - initialMemory

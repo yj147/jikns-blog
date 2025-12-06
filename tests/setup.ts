@@ -8,6 +8,12 @@ import { beforeAll, beforeEach, afterEach, afterAll, vi } from "vitest"
 import { cleanup } from "@testing-library/react"
 import { setupTestEnv, cleanupTestEnv } from "./helpers/test-env"
 
+// 提前填充安全相关的环境变量，避免安全模块静态初始化失败
+process.env.JWT_ACCESS_SECRET ||= "test-access-secret"
+process.env.JWT_REFRESH_SECRET ||= "test-refresh-secret"
+process.env.JWT_ISSUER ||= "jikns-blog-test"
+process.env.JWT_AUDIENCE ||= "jikns-blog-test"
+
 // 让 Testing Library 能识别 Vitest 的 fake timers
 ;(globalThis as any).jest = vi
 

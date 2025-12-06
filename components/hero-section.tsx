@@ -1,75 +1,32 @@
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { BookOpen, Users, Sparkles } from "lucide-react"
+import { Sparkles, ArrowRight } from "lucide-react"
 
 export function HeroSection() {
   return (
-    <section className="relative overflow-hidden px-4 py-20">
-      <div className="absolute inset-0 -z-10">
-        <div
-          className="bg-primary/10 absolute left-1/4 top-1/4 h-64 w-64 rounded-full blur-3xl opacity-70"
-          aria-hidden
-        />
-        <div
-          className="absolute bottom-1/4 right-1/4 h-96 w-96 rounded-full bg-emerald-500/10 blur-3xl opacity-60"
-          aria-hidden
-        />
-      </div>
-
-      <div className="container mx-auto text-center">
-        <div className="mx-auto max-w-3xl space-y-6">
-          <h1 className="text-balance text-4xl font-bold tracking-tight md:text-6xl">
-            现代化博客与
-            <span className="relative mx-2 inline-block text-primary">
-              <span className="absolute inset-x-0 bottom-0 h-3 rounded-full bg-primary/15" aria-hidden />
-              <span className="relative">社交平台</span>
-            </span>
+    <div className="relative overflow-hidden rounded-xl border border-border bg-gradient-to-br from-primary/5 to-primary/10 px-6 py-8 sm:px-10 sm:py-12">
+      <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl flex items-center gap-2">
+            <Sparkles className="h-6 w-6 text-primary" />
+            欢迎来到现代博客
           </h1>
-          <p className="text-muted-foreground mx-auto max-w-2xl text-lg md:text-xl">
-            探索精彩内容，分享生活动态，与志同道合的朋友建立连接
+          <p className="text-muted-foreground max-w-[600px] text-base">
+            这里是极客与创造者的聚集地。分享代码、探讨技术、记录生活。
           </p>
         </div>
-
-        <div className="mt-10 flex flex-col justify-center gap-4 sm:flex-row">
-          <div className="group">
-            <Button
-              size="lg"
-              asChild
-              className="relative overflow-hidden transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:shadow-lg"
-            >
-              <Link href="/blog">
-                <span className="pointer-events-none absolute inset-0 bg-gradient-to-r from-primary/10 to-emerald-500/10 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                <span className="relative z-10 flex items-center justify-center gap-2">
-                  <BookOpen className="h-4 w-4" />
-                  浏览博客
-                </span>
-              </Link>
-            </Button>
-          </div>
-
-          <div className="group">
-            <Button
-              size="lg"
-              variant="outline"
-              asChild
-              className="relative overflow-hidden bg-transparent transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:shadow-lg"
-            >
-              <Link href="/feed">
-                <span className="pointer-events-none absolute inset-0 bg-gradient-to-r from-primary/5 to-emerald-500/5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                <span className="relative z-10 flex items-center justify-center gap-2">
-                  <Users className="h-4 w-4" />
-                  查看动态
-                </span>
-              </Link>
-            </Button>
-          </div>
-        </div>
-
-        <div className="pointer-events-none" aria-hidden>
-          <Sparkles className="text-primary/20 absolute left-20 top-16 h-8 w-8" />
-          <BookOpen className="absolute right-24 top-28 h-6 w-6 text-emerald-500/30" />
+        <div className="flex gap-3">
+          <Button asChild className="font-semibold shadow-md">
+            <Link href="/login">
+              加入社区
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+          <Button variant="outline" asChild className="bg-background/50">
+            <Link href="/about">了解更多</Link>
+          </Button>
         </div>
       </div>
-    </section>
+    </div>
   )
 }

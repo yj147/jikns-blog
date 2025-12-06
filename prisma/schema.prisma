@@ -242,6 +242,7 @@ model User {
   email                   String                   @unique
   name                    String?
   avatarUrl               String?
+  coverImage              String?
   bio                     String?
   socialLinks             Json?
   role                    Role                     @default(USER)

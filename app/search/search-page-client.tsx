@@ -1,5 +1,5 @@
 /**
- * 统一搜索客户端页面
+ * 统一搜索客户端页面 - Social Feed Style
  * 通过 /api/search 获取结果，支持 Tab、分页、加载/空/错误状态
  */
 
@@ -9,15 +9,13 @@ import useSWR from "swr"
 import { useEffect, useMemo, useState } from "react"
 import type { ElementType } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { FileText, Hash, Search, User, Activity } from "lucide-react"
+import { FileText, Hash, Search, User, Activity, Sparkles, Newspaper } from "lucide-react"
 
 import NavigationSearch from "@/components/navigation-search"
 import { SearchResultCard } from "@/components/search/search-result-card"
 import { SearchResultsSkeleton } from "@/components/search/search-results-skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { fetchJson } from "@/lib/api/fetch-json"
 import type { ApiResponse } from "@/types/api"
 import {
@@ -27,10 +25,12 @@ import {
   type UnifiedSearchSort,
   type UnifiedSearchType,
 } from "@/types/search"
+import { cn } from "@/lib/utils"
+import TrendingTopicsCard from "@/components/feed/trending-topics-card"
 
 const TAB_CONFIG: { value: UnifiedSearchType; label: string; icon: ElementType }[] = [
-  { value: "all", label: "全部", icon: Search },
-  { value: "posts", label: "文章", icon: FileText },
+  { value: "all", label: "综合", icon: Sparkles },
+  { value: "posts", label: "文章", icon: Newspaper },
   { value: "activities", label: "动态", icon: Activity },
   { value: "users", label: "用户", icon: User },
   { value: "tags", label: "标签", icon: Hash },
@@ -68,7 +68,7 @@ export function SearchPageClient() {
 
   const swrKey = query ? ["unified-search", query, type, page, limit, sort] : null
 
-  const { data, error, isLoading, isValidating, mutate } = useSWR(
+  const { data, error, isLoading, isValidating } = useSWR(
     swrKey,
     async ([, q, activeType, activePage, activeLimit, activeSort]) => {
       const response = await fetchJson<ApiResponse<UnifiedSearchResult>>("/api/search", {
@@ -142,19 +142,18 @@ export function SearchPageClient() {
     }
 
     return (
-      <div className="space-y-6" data-testid="search-results">
+      <div className="min-h-[50vh]">
         {type === "all"
           ? renderAllBuckets(data, query)
           : renderSingleBucket(data, type as Exclude<UnifiedSearchType, "all">, query)}
 
-        <div className="flex justify-center gap-3">
+        <div className="flex justify-center gap-3 py-8 border-t border-border">
           <Button variant="outline" disabled={!hasPrev} onClick={() => changePage(page - 1)}>
             上一页
           </Button>
           <Button variant="outline" disabled={!hasNext} onClick={() => changePage(page + 1)}>
             下一页
           </Button>
-          {isValidating && <Badge variant="secondary">刷新中</Badge>}
         </div>
       </div>
     )
@@ -162,57 +161,74 @@ export function SearchPageClient() {
 
   return (
     <div className="bg-background min-h-screen">
-      <div className="container mx-auto px-4 py-10 space-y-8">
-        <header className="space-y-4 text-center">
-          <p className="text-primary/80 text-sm font-semibold uppercase tracking-[0.18em]">
-            Unified Search
-          </p>
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">搜索文章、动态、用户与标签</h1>
-          <p className="text-muted-foreground mx-auto max-w-2xl text-base">
-            全文检索由 PostgreSQL FTS 提供支持。按 Tab 切换结果类型，使用分页查看更多内容。
-          </p>
-          <div className="mx-auto max-w-3xl">
-            <NavigationSearch className="w-full" />
-          </div>
-        </header>
-
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-muted-foreground text-sm">
-                {hasQuery ? (
-                  <>
-                    找到 <span className="font-semibold">{tabCounts[type]}</span>{" "}
-                    {type === "all" ? "条相关内容（全部类型）" : "条结果"}
-                  </>
-                ) : (
-                  "输入关键词开始搜索"
-                )}
-              </p>
-              {hasQuery && (
-                <p className="text-muted-foreground mt-1 text-xs">
-                  当前页：{page}，每页 {limit} 条，排序：{sortLabel(sort)}
-                </p>
-              )}
+      <div className="container mx-auto grid grid-cols-1 gap-8 px-0 py-6 lg:grid-cols-12 lg:px-4">
+        
+        {/* Main Search Feed */}
+        <main className="col-span-1 lg:col-span-8">
+            {/* Sticky Header Area */}
+            <div className="sticky top-16 z-30 mb-0 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+                <div className="px-4 py-3">
+                    <NavigationSearch className="w-full" />
+                </div>
+                
+                {/* Tabs */}
+                <div className="flex w-full overflow-x-auto no-scrollbar px-2">
+                    {TAB_CONFIG.map(({ value, label, icon: Icon }) => (
+                        <button
+                            key={value}
+                            onClick={() => changeType(value)}
+                            className={cn(
+                                "flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors relative shrink-0",
+                                type === value ? "text-foreground" : "text-muted-foreground hover:text-foreground/80"
+                            )}
+                        >
+                            <Icon className="h-4 w-4" />
+                            {label}
+                            {tabCounts[value] > 0 && (
+                                <span className="bg-muted text-muted-foreground text-[10px] px-1.5 py-0.5 rounded-full ml-1">
+                                    {tabCounts[value]}
+                                </span>
+                            )}
+                            {type === value && (
+                                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                            )}
+                        </button>
+                    ))}
+                </div>
             </div>
-          </div>
 
-          <Tabs value={type} onValueChange={(next) => changeType(next as UnifiedSearchType)}>
-            <TabsList className="grid w-full grid-cols-5">
-              {TAB_CONFIG.map(({ value, label, icon: Icon }) => (
-                <TabsTrigger key={value} value={value} className="gap-2">
-                  <Icon className="h-4 w-4" />
-                  {label}
-                  <Badge variant="secondary" className="ml-1">
-                    {tabCounts[value]}
-                  </Badge>
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </section>
+            {/* Status Bar */}
+            {hasQuery && (isValidating || data) && (
+                <div className="bg-muted/30 px-4 py-2 text-xs text-muted-foreground flex justify-between items-center">
+                    <span>
+                        {isValidating ? "搜索中..." : `找到约 ${tabCounts[type]} 条结果`}
+                    </span>
+                    <span>
+                        {sortLabel(sort)}
+                    </span>
+                </div>
+            )}
 
-        {renderContent()}
+            {/* Results */}
+            <div className="divide-y divide-border">
+                {renderContent()}
+            </div>
+        </main>
+
+        {/* Right Sidebar */}
+        <aside className="hidden lg:col-span-4 lg:block">
+            <div className="sticky top-24 space-y-6 px-4">
+                <div className="rounded-xl bg-muted/30 border border-transparent p-4">
+                     <h3 className="font-bold text-lg mb-4">搜索趋势</h3>
+                     <TrendingTopicsCard />
+                </div>
+                
+                <div className="text-xs text-muted-foreground px-2">
+                    <p>提示：支持全文检索。尝试搜索 "Next.js" 或 "React"。</p>
+                </div>
+            </div>
+        </aside>
+
       </div>
     </div>
   )
@@ -236,47 +252,13 @@ export function SearchPageClient() {
 
 function renderAllBuckets(result: UnifiedSearchResult, query: string) {
   return (
-    <div className="space-y-8">
-      {result.posts.items.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline">文章</Badge>
-            <span className="text-muted-foreground text-sm">{result.posts.items.length} 条</span>
-          </div>
-          <div className="space-y-4">
-            {result.posts.items.map((item) => (
-              <SearchResultCard key={`posts-${item.id}`} type="posts" data={item} query={query} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {result.activities.items.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline">动态</Badge>
-            <span className="text-muted-foreground text-sm">{result.activities.items.length} 条</span>
-          </div>
-          <div className="space-y-4">
-            {result.activities.items.map((item) => (
-              <SearchResultCard
-                key={`activities-${item.id}`}
-                type="activities"
-                data={item}
-                query={query}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
+    <div className="space-y-2 py-4">
+      {/* We render sections separated by a heavier border or headers */}
+      
       {result.users.items.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline">用户</Badge>
-            <span className="text-muted-foreground text-sm">{result.users.items.length} 条</span>
-          </div>
-          <div className="space-y-4">
+        <div className="pb-4">
+          <h4 className="px-4 mb-2 text-sm font-bold text-muted-foreground uppercase tracking-wider">相关用户</h4>
+          <div className="divide-y divide-border border-y border-border">
             {result.users.items.map((item) => (
               <SearchResultCard key={`users-${item.id}`} type="users" data={item} query={query} />
             ))}
@@ -285,14 +267,38 @@ function renderAllBuckets(result: UnifiedSearchResult, query: string) {
       )}
 
       {result.tags.items.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline">标签</Badge>
-            <span className="text-muted-foreground text-sm">{result.tags.items.length} 条</span>
-          </div>
-          <div className="space-y-4">
+        <div className="pb-4">
+          <h4 className="px-4 mb-2 text-sm font-bold text-muted-foreground uppercase tracking-wider">相关标签</h4>
+          <div className="divide-y divide-border border-y border-border">
             {result.tags.items.map((item) => (
               <SearchResultCard key={`tags-${item.id}`} type="tags" data={item} query={query} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {result.posts.items.length > 0 && (
+        <div className="pb-4">
+          <h4 className="px-4 mb-2 text-sm font-bold text-muted-foreground uppercase tracking-wider">文章</h4>
+          <div className="divide-y divide-border border-y border-border">
+            {result.posts.items.map((item) => (
+              <SearchResultCard key={`posts-${item.id}`} type="posts" data={item} query={query} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {result.activities.items.length > 0 && (
+        <div className="pb-4">
+          <h4 className="px-4 mb-2 text-sm font-bold text-muted-foreground uppercase tracking-wider">动态</h4>
+          <div className="divide-y divide-border border-y border-border">
+            {result.activities.items.map((item) => (
+              <SearchResultCard
+                key={`activities-${item.id}`}
+                type="activities"
+                data={item}
+                query={query}
+              />
             ))}
           </div>
         </div>
@@ -310,7 +316,7 @@ function renderSingleBucket(
     case "posts": {
       if (result.posts.items.length === 0) return <SearchEmptyState />
       return (
-        <div className="space-y-4">
+        <div>
           {result.posts.items.map((item) => (
             <SearchResultCard key={`posts-${item.id}`} type="posts" data={item} query={query} />
           ))}
@@ -320,7 +326,7 @@ function renderSingleBucket(
     case "activities": {
       if (result.activities.items.length === 0) return <SearchEmptyState />
       return (
-        <div className="space-y-4">
+        <div>
           {result.activities.items.map((item) => (
             <SearchResultCard
               key={`activities-${item.id}`}
@@ -335,7 +341,7 @@ function renderSingleBucket(
     case "users": {
       if (result.users.items.length === 0) return <SearchEmptyState />
       return (
-        <div className="space-y-4">
+        <div>
           {result.users.items.map((item) => (
             <SearchResultCard key={`users-${item.id}`} type="users" data={item} query={query} />
           ))}
@@ -345,7 +351,7 @@ function renderSingleBucket(
     case "tags": {
       if (result.tags.items.length === 0) return <SearchEmptyState />
       return (
-        <div className="space-y-4">
+        <div>
           {result.tags.items.map((item) => (
             <SearchResultCard key={`tags-${item.id}`} type="tags" data={item} query={query} />
           ))}
@@ -359,40 +365,32 @@ function renderSingleBucket(
 
 function SearchEmptyHint() {
   return (
-    <Card data-testid="search-empty-hint">
-      <CardContent className="py-12 text-center space-y-3">
-        <Search className="text-muted-foreground mx-auto h-10 w-10" />
-        <h3 className="text-xl font-semibold">输入关键词开始搜索</h3>
-        <p className="text-muted-foreground text-sm">
-          支持模糊匹配与全文检索，最多 100 字。按 Tab 可筛选结果类型。
+    <div className="py-20 text-center">
+        <Search className="text-muted-foreground mx-auto h-12 w-12 mb-4 opacity-20" />
+        <h3 className="text-lg font-semibold">准备搜索</h3>
+        <p className="text-muted-foreground text-sm mt-2">
+          输入关键词，探索感兴趣的内容
         </p>
-      </CardContent>
-    </Card>
+    </div>
   )
 }
 
 function SearchEmptyState() {
   return (
-    <Card data-testid="search-empty-state">
-      <CardContent className="py-12 text-center space-y-3">
-        <Search className="text-muted-foreground mx-auto h-10 w-10" />
-        <h3 className="text-xl font-semibold">没有找到相关结果</h3>
-        <p className="text-muted-foreground text-sm">尝试更短的关键词或切换其他 Tab。</p>
-      </CardContent>
-    </Card>
+    <div className="py-20 text-center">
+        <div className="text-4xl mb-4">🦕</div>
+        <h3 className="text-lg font-semibold">未找到结果</h3>
+        <p className="text-muted-foreground text-sm mt-2">换个关键词试试看？</p>
+    </div>
   )
 }
 
 function SearchError({ message }: { message: string }) {
   return (
-    <Card data-testid="search-error">
-      <CardContent className="py-12 text-center space-y-3">
-        <Search className="text-destructive mx-auto h-10 w-10" />
-        <h3 className="text-xl font-semibold">搜索出错</h3>
-        <p className="text-muted-foreground text-sm">{message}</p>
-        <p className="text-muted-foreground text-xs">请稍后重试或检查网络连接。</p>
-      </CardContent>
-    </Card>
+    <div className="py-20 text-center text-destructive">
+        <h3 className="text-lg font-semibold">出错了</h3>
+        <p className="text-sm mt-2">{message}</p>
+    </div>
   )
 }
 
@@ -422,9 +420,9 @@ function parseSort(raw: string | null): UnifiedSearchSort {
 function sortLabel(sort: UnifiedSearchSort) {
   switch (sort) {
     case "latest":
-      return "最新优先"
+      return "按时间排序"
     default:
-      return "相关度优先"
+      return "按相关度排序"
   }
 }
 

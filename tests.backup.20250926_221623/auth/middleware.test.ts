@@ -22,7 +22,7 @@ vi.mock("@/lib/prisma", () => ({
 }))
 
 vi.mock("@/lib/security", () => ({
-  setSecurityHeaders: vi.fn((response) => response),
+  setSecurityHeaders: vi.fn((response, _options) => response),
   validateRequestOrigin: vi.fn(() => true),
   RateLimiter: {
     checkRateLimit: vi.fn(() => true),
@@ -78,7 +78,12 @@ describe("认证中间件测试", () => {
       const response = await middleware(request as NextRequest)
 
       const { setSecurityHeaders } = await import("@/lib/security")
-      expect(setSecurityHeaders).toHaveBeenCalledWith(expect.any(NextResponse))
+      expect(setSecurityHeaders).toHaveBeenCalledWith(
+        expect.any(NextResponse),
+        expect.objectContaining({
+          request: expect.any(NextRequest),
+        })
+      )
     })
   })
 

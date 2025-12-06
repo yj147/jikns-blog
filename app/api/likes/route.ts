@@ -59,7 +59,7 @@ async function handleGet(request: NextRequest) {
       const status = await getLikeStatus(targetType, targetId, user?.id)
 
       // 记录审计日志
-      await auditLogger.logEvent({
+      auditLogger.logEventAsync({
         action: "LIKE_STATUS",
         resource: `${targetType}:${targetId}`,
         details: {
@@ -86,7 +86,7 @@ async function handleGet(request: NextRequest) {
       const result = await getLikeUsers(targetType, targetId, limit, cursor)
 
       // 记录审计日志
-      await auditLogger.logEvent({
+      auditLogger.logEventAsync({
         action: "LIKE_USERS",
         resource: `${targetType}:${targetId}`,
         details: {
@@ -176,7 +176,7 @@ async function handlePost(request: NextRequest) {
     const status = await toggleLike(targetType, targetId, user.id, requestId)
 
     // 记录审计日志
-    await auditLogger.logEvent({
+    auditLogger.logEventAsync({
       action: "LIKE_TOGGLE",
       resource: `${targetType}:${targetId}`,
       details: {
@@ -260,7 +260,7 @@ async function handlePut(request: NextRequest) {
     const status = await ensureLiked(targetType, targetId, user.id, requestId)
 
     // 记录审计日志
-    await auditLogger.logEvent({
+    auditLogger.logEventAsync({
       action: "LIKE_ENSURE",
       resource: `${targetType}:${targetId}`,
       details: {
@@ -350,7 +350,7 @@ async function handleDelete(request: NextRequest) {
     const status = await ensureUnliked(targetType as LikeTargetType, targetId, user.id, requestId)
 
     // 记录审计日志
-    await auditLogger.logEvent({
+    auditLogger.logEventAsync({
       action: "LIKE_ENSURE",
       resource: `${targetType}:${targetId}`,
       details: {

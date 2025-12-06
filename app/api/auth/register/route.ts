@@ -10,6 +10,7 @@ import { z } from "zod"
 import { authLogger } from "@/lib/utils/logger"
 import { getSetting, type RegistrationToggle } from "@/lib/services/system-settings"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
+import { getClientIp } from "@/lib/api/get-client-ip"
 
 // 注册请求验证 Schema
 const RegisterSchema = z
@@ -30,8 +31,7 @@ const RegisterSchema = z
   })
 
 async function handlePost(request: NextRequest) {
-  const clientIP =
-    request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown"
+  const clientIP = getClientIp(request)
 
   try {
     // 速率限制检查 - 每个IP每小时最多注册3次

@@ -11,6 +11,26 @@ import { logger } from "@/lib/utils/logger"
 import { assertPolicy, generateRequestId } from "@/lib/auth/session"
 import { auditLogger, getClientIP, getClientUserAgent } from "@/lib/audit-log"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
+import { getCached, setCached } from "@/lib/cache/simple-cache"
+import { signAvatarUrl } from "@/lib/storage/signed-url"
+
+const SUGGESTED_CACHE_TTL = 60000
+type SuggestedResponse = {
+  data: {
+    id: string
+    name: string | null
+    username: string
+    avatarUrl: string | null
+    bio: string
+    role: string
+    followers: number
+    postsCount: number
+    activitiesCount: number
+    isVerified: boolean
+  }[]
+  meta: { total: number; limit: number; algorithm: string }
+  message: string
+}
 
 /**
  * 获取推荐用户列表
@@ -55,14 +75,12 @@ async function handleGet(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const limit = Math.min(10, Math.max(1, parseInt(searchParams.get("limit") || "5")))
 
-    // 获取当前用户已关注的用户ID列表
-    const currentUserFollowing = await prisma.follow.findMany({
-      where: { followerId: user.id },
-      select: { followingId: true },
-    })
+    const cacheKey = `suggested:${user.id}`
+    const cached = getCached<SuggestedResponse>(cacheKey)
 
-    const followingIds = currentUserFollowing.map((f) => f.followingId)
-    const excludeIds = [...followingIds, user.id] // 排除已关注的用户和自己
+    if (cached) {
+      return createSuccessResponse(cached)
+    }
 
     // 推荐算法：
     // 1. 优先推荐活跃用户（有发布动态或博客的用户）
@@ -70,8 +88,9 @@ async function handleGet(request: NextRequest) {
     // 3. 排除已关注的用户和自己
     const suggestedUsers = await prisma.user.findMany({
       where: {
-        id: { notIn: excludeIds },
-        status: "ACTIVE", // 只推荐活跃用户
+        id: { not: user.id },
+        followers: { none: { followerId: user.id } },
+        status: "ACTIVE",
         OR: [
           { posts: { some: { published: true } } }, // 有发布的博客
           { activities: { some: {} } }, // 有发布的动态
@@ -101,23 +120,37 @@ async function handleGet(request: NextRequest) {
       take: limit,
     })
 
-    // 转换数据格式，添加用户名
-    const formattedUsers = suggestedUsers.map((suggestedUser) => ({
-      id: suggestedUser.id,
-      name: suggestedUser.name,
-      username: `@${suggestedUser.name?.toLowerCase().replace(/\s+/g, "_") || "user"}`,
-      avatarUrl: suggestedUser.avatarUrl,
-      bio:
-        suggestedUser.bio ||
-        `${suggestedUser.role === "ADMIN" ? "博客作者" : "用户"}，加入于 ${suggestedUser.createdAt.getFullYear()} 年`,
-      role: suggestedUser.role,
-      followers: suggestedUser._count.followers,
-      postsCount: suggestedUser._count.posts,
-      activitiesCount: suggestedUser._count.activities,
-      isVerified: suggestedUser.role === "ADMIN", // 管理员显示为验证用户
-    }))
+    // 转换数据格式，添加用户名，并签名头像 URL
+    const formattedUsers = await Promise.all(
+      suggestedUsers.map(async (suggestedUser) => ({
+        id: suggestedUser.id,
+        name: suggestedUser.name,
+        username: `@${suggestedUser.name?.toLowerCase().replace(/\s+/g, "_") || "user"}`,
+        avatarUrl: await signAvatarUrl(suggestedUser.avatarUrl),
+        bio:
+          suggestedUser.bio ||
+          `${suggestedUser.role === "ADMIN" ? "博客作者" : "用户"}，加入于 ${suggestedUser.createdAt.getFullYear()} 年`,
+        role: suggestedUser.role,
+        followers: suggestedUser._count.followers,
+        postsCount: suggestedUser._count.posts,
+        activitiesCount: suggestedUser._count.activities,
+        isVerified: suggestedUser.role === "ADMIN", // 管理员显示为验证用户
+      }))
+    )
 
-    await auditLogger.logEvent({
+    const responsePayload = {
+      data: formattedUsers,
+      meta: {
+        total: formattedUsers.length,
+        limit,
+        algorithm: "activity_and_popularity",
+      },
+      message: "推荐用户获取成功",
+    }
+
+    setCached(cacheKey, responsePayload, SUGGESTED_CACHE_TTL)
+
+    auditLogger.logEventAsync({
       action: "USER_SUGGESTIONS",
       resource: `user:${user.id}`,
       details: {
@@ -132,15 +165,7 @@ async function handleGet(request: NextRequest) {
       userAgent: ua,
     })
 
-    return createSuccessResponse({
-      data: formattedUsers,
-      meta: {
-        total: formattedUsers.length,
-        limit,
-        algorithm: "activity_and_popularity",
-      },
-      message: "推荐用户获取成功",
-    })
+    return createSuccessResponse(responsePayload)
   } catch (error) {
     logger.error("获取推荐用户失败", {
       error,

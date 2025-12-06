@@ -4,6 +4,7 @@
  */
 
 import { NextRequest } from "next/server"
+import { getClientIp } from "@/lib/api/get-client-ip"
 import { Prisma } from "@/lib/generated/prisma"
 import {
   createSuccessResponse,
@@ -39,11 +40,27 @@ async function handleGet(request: NextRequest) {
     const { searchParams } = request.nextUrl
     const rawPage = searchParams.get("page")
     const parsedPage = Number.parseInt(rawPage ?? "", 10)
-    const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1
+
+    const rawCursor = searchParams.get("cursor")
+    const parsedCursor = rawCursor !== null ? Number.parseInt(rawCursor, 10) : NaN
     const monitorOnly = featureFlags.postsPublicParamMonitor()
     const enforcementEnabled = featureFlags.postsPublicParamEnforce()
 
     const paramViolations: ParamViolation[] = []
+
+    const cursorPage =
+      rawCursor !== null && Number.isFinite(parsedCursor) && parsedCursor > 0 ? parsedCursor : null
+
+    if (rawCursor !== null && cursorPage === null) {
+      paramViolations.push({
+        param: "cursor",
+        value: rawCursor,
+        reason: "必须为大于 0 的数字",
+      })
+    }
+
+    const page =
+      cursorPage ?? (Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1)
 
     const rawLimit = searchParams.get("limit")
     let limit = DEFAULT_LIMIT
@@ -104,7 +121,17 @@ async function handleGet(request: NextRequest) {
       }
     }
 
-    const search = searchParams.get("search") || ""
+    const MAX_SEARCH_LENGTH = 200
+    const rawSearch = searchParams.get("search") || ""
+    let search = rawSearch
+    if (rawSearch.length > MAX_SEARCH_LENGTH) {
+      paramViolations.push({
+        param: "search",
+        value: `${rawSearch.slice(0, 50)}...`,
+        reason: `搜索词超出最大长度 ${MAX_SEARCH_LENGTH}`,
+      })
+      search = rawSearch.slice(0, MAX_SEARCH_LENGTH)
+    }
     const tagParam = searchParams.get("tag")
     const tag = tagParam ? tagParam.trim() : undefined
     const seriesId = searchParams.get("seriesId") || undefined
@@ -112,11 +139,8 @@ async function handleGet(request: NextRequest) {
     const traceHeader =
       request.headers.get("x-request-id") || request.headers.get("x-vercel-id") || undefined
     const requestId = traceHeader ?? crypto.randomUUID()
-    const ipAddress =
-      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      request.headers.get("x-real-ip") ||
-      request.headers.get("x-client-ip") ||
-      undefined
+    const ipValue = getClientIp(request)
+    const ipAddress = ipValue === "unknown" ? undefined : ipValue
     const userAgent = request.headers.get("user-agent") || undefined
     const referer = request.headers.get("referer") || undefined
 
@@ -286,6 +310,7 @@ async function handleGet(request: NextRequest) {
           totalCount,
           hasNext: page < totalPages,
           hasPrev: page > 1,
+          nextCursor: pagination.nextCursor,
         },
       },
       { pagination, requestId }

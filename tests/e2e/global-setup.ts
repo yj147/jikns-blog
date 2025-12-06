@@ -14,10 +14,18 @@ async function globalSetup(config: FullConfig) {
   try {
     // 1. 检查开发服务器是否正常运行
     console.log("📡 检查开发服务器连接...")
+    // 优先使用项目配置的 baseURL，避免与 Playwright 配置不一致导致连不上服务器
     const baseUrl =
-      process.env.PLAYWRIGHT_BASE_URL || config.webServer?.url || "http://localhost:3000"
-    await page.goto(baseUrl)
-    await page.waitForLoadState("networkidle")
+      process.env.PLAYWRIGHT_BASE_URL ||
+      config.projects[0]?.use?.baseURL ||
+      config.use?.baseURL ||
+      config.webServer?.url ||
+      "http://localhost:3999"
+    const response = await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 15000 })
+    if (!response || !response.ok()) {
+      throw new Error(`无法访问开发服务器: ${response?.status()} ${response?.statusText()}`)
+    }
+    await page.waitForSelector("body", { timeout: 10000 })
     console.log("✅ 开发服务器连接正常")
 
     // 2. 准备测试数据（如果需要）

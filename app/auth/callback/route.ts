@@ -5,49 +5,45 @@
  */
 
 import { createRouteHandlerClient } from "@/lib/supabase"
-import { syncUserFromAuth, validateRedirectUrl } from "@/lib/auth"
+import { syncUserFromAuth, validateRedirectUrl, validateOAuthState } from "@/lib/auth"
 import { revalidateUserProfile } from "@/lib/actions/auth"
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { authLogger } from "@/lib/utils/logger"
-
-// 防止重复处理授权码的简单缓存
-const processedCodes = new Set<string>()
-
-// 定时清理过期授权码（10分钟后清理）
-setInterval(
-  () => {
-    processedCodes.clear()
-  },
-  10 * 60 * 1000
-)
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get("code")
   const redirectPath =
     requestUrl.searchParams.get("redirect_to") || requestUrl.searchParams.get("redirect") || "/"
+  const stateParam = requestUrl.searchParams.get("state")
   const error = requestUrl.searchParams.get("error")
   const errorDescription = requestUrl.searchParams.get("error_description")
   // 处理 OAuth 认证错误
   if (error) {
     const errorMsg = errorDescription || error
     authLogger.error("OAuth 认证错误", { error, error_description: errorMsg })
-    return NextResponse.redirect(
+    const stateValidation = validateOAuthState(request, stateParam)
+    const response = NextResponse.redirect(
       new URL(`/login?error=oauth_error&message=${encodeURIComponent(errorMsg)}`, requestUrl.origin)
     )
+    stateValidation.clearCookie(response)
+    return response
   }
 
   // 处理授权码交换会话
   if (code) {
-    // 防止重复处理
-    if (processedCodes.has(code)) {
-      const finalRedirect = validateRedirectUrl(redirectPath) ? redirectPath : "/"
-      return NextResponse.redirect(new URL(finalRedirect, requestUrl.origin))
-    }
+    const stateValidation = validateOAuthState(request, stateParam)
 
-    // 标记为已处理
-    processedCodes.add(code)
+    if (!stateValidation.isValid) {
+      const redirectUrl = new URL(
+        `/login?error=oauth_state_invalid&reason=${stateValidation.reason}`,
+        requestUrl.origin
+      )
+      const response = NextResponse.redirect(redirectUrl)
+      stateValidation.clearCookie(response)
+      return response
+    }
 
     const supabase = await createRouteHandlerClient()
 
@@ -72,12 +68,14 @@ export async function GET(request: NextRequest) {
           errorMessage = "code_expired"
         }
 
-        return NextResponse.redirect(
+        const response = NextResponse.redirect(
           new URL(
             `/login?error=${errorMessage}&message=${encodeURIComponent(exchangeError.message)}`,
             requestUrl.origin
           )
         )
+        stateValidation.clearCookie(response)
+        return response
       }
 
       if (session?.user) {
@@ -111,36 +109,49 @@ export async function GET(request: NextRequest) {
           // 验证重定向 URL 安全性
           const finalRedirect = validateRedirectUrl(redirectPath) ? redirectPath : "/"
 
-          return NextResponse.redirect(new URL(finalRedirect, requestUrl.origin))
+          const response = NextResponse.redirect(new URL(finalRedirect, requestUrl.origin))
+          stateValidation.clearCookie(response)
+          return response
         } catch (syncError) {
           authLogger.error("用户数据同步失败", { userId: session.user.id }, syncError)
 
           // 同步失败，禁止继续登录，提示用户重新尝试
           const message =
             syncError instanceof Error ? syncError.message : "用户数据同步失败，请重试"
-          return NextResponse.redirect(
+          const response = NextResponse.redirect(
             new URL(
               `/login?error=sync_failed&message=${encodeURIComponent(message)}`,
               requestUrl.origin
             )
           )
+          stateValidation.clearCookie(response)
+          return response
         }
       } else {
         authLogger.error("授权码交换成功但会话中没有用户信息")
-        return NextResponse.redirect(new URL("/login?error=no_user_data", requestUrl.origin))
+        const response = NextResponse.redirect(new URL("/login?error=no_user_data", requestUrl.origin))
+        stateValidation.clearCookie(response)
+        return response
       }
     } catch (error) {
       authLogger.error("认证回调处理异常", {}, error)
-      return NextResponse.redirect(
+      const response = NextResponse.redirect(
         new URL(
           `/login?error=callback_error&message=${encodeURIComponent(String(error))}`,
           requestUrl.origin
         )
       )
+      stateValidation.clearCookie(response)
+      return response
     }
   }
 
   // 没有授权码或错误参数，可能是直接访问回调 URL
   authLogger.warn("认证回调缺少必要参数 (code 或 error)")
-  return NextResponse.redirect(new URL("/login?error=missing_callback_params", requestUrl.origin))
+  const fallbackState = validateOAuthState(request, stateParam)
+  const response = NextResponse.redirect(
+    new URL("/login?error=missing_callback_params", requestUrl.origin)
+  )
+  fallbackState.clearCookie(response)
+  return response
 }

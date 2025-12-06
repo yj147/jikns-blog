@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { Prisma } from "@/lib/generated/prisma"
 import { prisma } from "@/lib/prisma"
 import { apiLogger } from "@/lib/utils/logger"
 import { generateRequestId } from "@/lib/auth/session"
@@ -70,7 +71,6 @@ async function handleGet(
           publishedAt: true,
           createdAt: true,
           viewCount: true,
-          content: true,
           tags: {
             select: {
               tag: {
@@ -93,6 +93,32 @@ async function handleGet(
       prisma.post.count({ where }),
     ])
 
+    const wordsCountMap = new Map<string, number>()
+
+    if (posts.length > 0) {
+      const wordCounts = await prisma.$queryRaw<
+        Array<{ id: string; words_count: bigint | number | null }>
+      >(Prisma.sql`
+        SELECT id,
+               COALESCE(
+                 array_length(
+                   regexp_split_to_array(
+                     regexp_replace(content, '<[^>]+>', ' ', 'g'),
+                     '\\s+'
+                   ),
+                   1
+                 ),
+                 0
+               ) AS words_count
+        FROM posts
+        WHERE id IN (${Prisma.join(posts.map((post) => post.id))})
+      `)
+
+      wordCounts.forEach(({ id, words_count }) => {
+        wordsCountMap.set(id, Number(words_count ?? 0))
+      })
+    }
+
     const signedCoverImages = await Promise.all(
       posts.map((post) =>
         createSignedUrlIfNeeded(post.coverImage, POST_IMAGE_SIGN_EXPIRES_IN, "post-images")
@@ -108,7 +134,7 @@ async function handleGet(
       signedCoverImage: signedCoverImages[index],
       publishedAt: (post.publishedAt ?? post.createdAt)?.toISOString() ?? null,
       viewCount: post.viewCount,
-      readTimeMinutes: calculateReadingMinutes(post.content),
+      readTimeMinutes: calculateReadingMinutes(wordsCountMap.get(post.id) ?? 0),
       tags: post.tags
         .map((relation) => relation.tag)
         .filter(

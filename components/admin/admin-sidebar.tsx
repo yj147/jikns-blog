@@ -16,7 +16,7 @@ import {
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
@@ -120,6 +120,10 @@ export default function AdminSidebar() {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-64 max-w-[256px] p-0">
+              <SheetHeader className="sr-only">
+                <SheetTitle>管理后台导航</SheetTitle>
+                <SheetDescription>管理后台侧边栏菜单</SheetDescription>
+              </SheetHeader>
               <SidebarContent onNavigate={() => setOpen(false)} />
             </SheetContent>
           </Sheet>
