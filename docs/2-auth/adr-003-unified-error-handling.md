@@ -187,23 +187,46 @@ export async function requireAdmin(): Promise<User> {
 #### 3. 统一错误处理器 - `handleApiError`
 
 ```typescript
-// lib/api/error-handler.ts
+// 自动识别错误类型并返回合适响应
 export function handleApiError(error: unknown): NextResponse {
-  // 自动识别错误类型
+  // 处理认证错误（AuthError）
   if (isAuthError(error)) {
     return handleAuthError(error)
   }
 
-  // 处理Prisma错误
-  if (error instanceof Error) {
-    if (error.message.includes("P2002")) {
+  // 处理 Prisma 错误（类型安全的错误检查）
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    // P2002: 唯一约束冲突
+    if (error.code === "P2002") {
       return createErrorResponse(ErrorCode.DUPLICATE_ENTRY, "数据已存在")
     }
-    // ...其他错误类型
+    // P2025: 记录不存在
+    if (error.code === "P2025") {
+      return createErrorResponse(ErrorCode.NOT_FOUND, "数据不存在")
+    }
+    // ...其他 Prisma 错误
+  }
+
+  // 通用 Error 处理
+  if (error instanceof Error) {
+    return createErrorResponse(ErrorCode.INTERNAL_ERROR, error.message)
   }
 
   // 兜底处理
   return createErrorResponse(ErrorCode.UNKNOWN_ERROR, "未知错误")
+}
+
+// 装饰器模式（最简洁）
+export function withErrorHandler<T extends any[]>(
+  handler: (...args: T) => Promise<NextResponse>
+) {
+  return async (...args: T): Promise<NextResponse> => {
+    try {
+      return await handler(...args)
+    } catch (error) {
+      return handleApiError(error)
+    }
+  }
 }
 
 function handleAuthError(error: AuthError): NextResponse {
