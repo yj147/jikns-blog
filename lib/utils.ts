@@ -11,7 +11,7 @@ const compactNumberFormatter = new Intl.NumberFormat("en", {
 })
 
 export function formatCompactCount(value: number | null | undefined): string {
-  if (value == null) {
+  if (value === null || value === undefined) {
     return "0"
   }
   const formatted = compactNumberFormatter.format(value)
