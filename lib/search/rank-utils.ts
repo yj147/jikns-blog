@@ -4,11 +4,14 @@ import {
   SEARCH_TIME_DECAY_HALF_LIFE_DAYS,
 } from "@/lib/search/full-text-config"
 import type { SearchSortOption } from "@/lib/search/search-params"
+import { tokenizeText } from "@/lib/search/tokenizer"
 
 const FULLTEXT_CONFIG_SQL = Prisma.raw(`'${SEARCH_FULLTEXT_CONFIG}'`)
 
-export const buildTsQuery = (term: string) =>
-  Prisma.sql`plainto_tsquery(${FULLTEXT_CONFIG_SQL}, ${term})`
+export const buildTsQuery = (term: string) => {
+  const tokenizedQuery = tokenizeText(term)
+  return Prisma.sql`(plainto_tsquery(${FULLTEXT_CONFIG_SQL}::regconfig, ${tokenizedQuery}::text))::tsquery`
+}
 
 export type SearchExecutionMode = "ts" | "like"
 

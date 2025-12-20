@@ -58,11 +58,16 @@ async function executeSearchUsersMain(
         bio,
         GREATEST(
           similarity(COALESCE(name, ''), ${query}),
-          similarity(COALESCE(bio, ''), ${query})
+          similarity(COALESCE(bio, ''), ${query}),
+          similarity(COALESCE(email, ''), ${query})
         ) as similarity
       FROM users
       WHERE status = 'ACTIVE'
-        AND (name ILIKE ${likeQuery} OR COALESCE(bio, '') ILIKE ${likeQuery})
+        AND (
+          name ILIKE ${likeQuery} OR
+          email ILIKE ${likeQuery} OR
+          COALESCE(bio, '') ILIKE ${likeQuery}
+        )
       ORDER BY similarity DESC, name ASC NULLS LAST
       LIMIT ${limit}
       OFFSET ${offset}
@@ -71,7 +76,11 @@ async function executeSearchUsersMain(
       SELECT COUNT(*)::bigint AS total
       FROM users
       WHERE status = 'ACTIVE'
-        AND (name ILIKE ${likeQuery} OR COALESCE(bio, '') ILIKE ${likeQuery})
+        AND (
+          name ILIKE ${likeQuery} OR
+          email ILIKE ${likeQuery} OR
+          COALESCE(bio, '') ILIKE ${likeQuery}
+        )
     `,
   ])
 
@@ -100,6 +109,7 @@ async function executeSearchUsersFallback(
   const where = {
     OR: [
       { name: { contains: query, mode: "insensitive" as const } },
+      { email: { contains: query, mode: "insensitive" as const } },
       { bio: { contains: query, mode: "insensitive" as const } },
     ],
     status: "ACTIVE" as const,

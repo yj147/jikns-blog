@@ -183,6 +183,7 @@ export async function unifiedSearch(params: UnifiedSearchParams): Promise<Unifie
       query: normalized.query,
       limit: resolveLimit(shouldFetchTags),
       offset: resolveOffset(shouldFetchTags),
+      sort: normalized.sort,
     }),
   ])
 

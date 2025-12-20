@@ -128,12 +128,14 @@ export interface SearchTagsParams {
   query: string
   limit?: number
   offset?: number
+  sort?: SearchSortOption
 }
 
 export interface ResolvedSearchTagsParams {
   query: string
   limit: number
   offset: number
+  sort: SearchSortOption
 }
 
 export interface SearchTagResult {
