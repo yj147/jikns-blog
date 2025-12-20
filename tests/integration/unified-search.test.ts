@@ -14,8 +14,8 @@ vi.mock("@/lib/rate-limit/shared", () => ({
 }))
 
 let prisma: typeof import("@/lib/prisma").prisma
-let servicesModule: typeof import("@/lib/services/search")
-let runUnifiedSearch: typeof import("@/lib/services/search").unifiedSearch
+let searchModule: typeof import("@/lib/repos/search/unified-search")
+let runUnifiedSearch: typeof import("@/lib/repos/search/unified-search").unifiedSearch
 let searchHandler: typeof import("@/app/api/search/route").GET
 let originalQueryRaw: typeof import("@/lib/prisma").prisma.$queryRaw
 
@@ -25,8 +25,8 @@ describe("unified search", () => {
   beforeAll(async () => {
     const prismaModule = await import("@/lib/prisma")
     prisma = prismaModule.prisma
-    servicesModule = await import("@/lib/services/search")
-    runUnifiedSearch = servicesModule.unifiedSearch
+    searchModule = await import("@/lib/repos/search/unified-search")
+    runUnifiedSearch = searchModule.unifiedSearch
     ;({ GET: searchHandler } = await import("@/app/api/search/route"))
     originalQueryRaw = prisma.$queryRaw.bind(prisma)
 
@@ -201,7 +201,7 @@ describe("unified search", () => {
   })
 
   it("API route returns unified response", async () => {
-    const searchSpy = vi.spyOn(servicesModule, "unifiedSearch").mockResolvedValue({
+    const searchSpy = vi.spyOn(searchModule, "unifiedSearch").mockResolvedValue({
       query: "Unified",
       type: "all",
       page: 1,
@@ -234,7 +234,7 @@ describe("unified search", () => {
 
   it("API route surfaces SearchValidationError from service", async () => {
     const searchSpy = vi
-      .spyOn(servicesModule, "unifiedSearch")
+      .spyOn(searchModule, "unifiedSearch")
       .mockRejectedValue(new SearchValidationError("服务校验失败", { reason: "invalid" }))
     const request = new NextRequest("http://localhost:3000/api/search?q=Unified&type=all")
     const response = await searchHandler(request)
@@ -248,7 +248,7 @@ describe("unified search", () => {
 
   it("API route delegates unknown errors to handleApiError", async () => {
     const genericError = new Error("boom")
-    const searchSpy = vi.spyOn(servicesModule, "unifiedSearch").mockRejectedValue(genericError)
+    const searchSpy = vi.spyOn(searchModule, "unifiedSearch").mockRejectedValue(genericError)
     const apiErrorSpy = vi.spyOn(errorHandler, "handleApiError")
 
     const request = new NextRequest("http://localhost:3000/api/search?q=Unified&type=all")

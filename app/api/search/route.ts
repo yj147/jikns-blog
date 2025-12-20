@@ -2,9 +2,9 @@ import { NextRequest } from "next/server"
 import { z } from "zod"
 import { createErrorResponse, createSuccessResponse, ErrorCode } from "@/lib/api/unified-response"
 import { handleApiError } from "@/lib/api/error-handler"
-import { applyDistributedRateLimit } from "@/lib/rate-limit/shared"
 import { getClientIP } from "@/lib/audit-log"
-import { unifiedSearch } from "@/lib/services/search"
+import { checkSearchRateLimit } from "@/lib/rate-limit/search-limits"
+import { unifiedSearch } from "@/lib/repos/search"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 import {
   SearchValidationError,
@@ -29,11 +29,6 @@ const SearchQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(10).optional(),
   sort: z.enum(UNIFIED_SEARCH_SORTS).optional(),
 })
-
-const RATE_LIMIT = {
-  limit: 30,
-  windowMs: 60_000,
-}
 
 function mapQueryParams(params: z.infer<typeof SearchQuerySchema>): {
   query: string
@@ -64,18 +59,13 @@ async function handleGet(request: NextRequest) {
       )
     }
 
-    const ip = getClientIP(request) ?? "anonymous"
-    const rateLimitKey = `unified-search:ip:${ip}`
-    const rateResult = await applyDistributedRateLimit(
-      rateLimitKey,
-      RATE_LIMIT.limit,
-      RATE_LIMIT.windowMs
-    )
+    const ip = getClientIP(request)
+    const rateResult = await checkSearchRateLimit({ ip })
     if (!rateResult.allowed) {
       return createErrorResponse(
         ErrorCode.RATE_LIMIT_EXCEEDED,
         "搜索过于频繁，请稍后再试",
-        { retryAfter: rateResult.retryAfter, backend: rateResult.backend },
+        { retryAfter: rateResult.retryAfter },
         429
       )
     }
