@@ -16,9 +16,7 @@ describe("withApiResponseMetrics", () => {
 
   it("x-metrics-sample=0 时跳过指标记录", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0)
-    const recordSpy = vi
-      .spyOn(performanceMonitor, "recordApiResponse")
-      .mockImplementation(() => {})
+    const recordSpy = vi.spyOn(performanceMonitor, "recordApiResponse").mockImplementation(() => {})
     const handler = vi.fn(async () => new Response("ok"))
 
     const wrapped = withApiResponseMetrics(handler)
@@ -33,9 +31,7 @@ describe("withApiResponseMetrics", () => {
   it("处理器抛错时记录失败并向上抛出", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0.1)
     vi.spyOn(Date, "now").mockReturnValue(1_000_000)
-    const recordSpy = vi
-      .spyOn(performanceMonitor, "recordApiResponse")
-      .mockImplementation(() => {})
+    const recordSpy = vi.spyOn(performanceMonitor, "recordApiResponse").mockImplementation(() => {})
 
     const handler = vi.fn(() => {
       throw new Error("boom")
@@ -57,9 +53,7 @@ describe("withApiResponseMetrics", () => {
   it("自定义采样率与 trace 起点会参与耗时计算", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0.2)
     vi.spyOn(Date, "now").mockReturnValue(1_500)
-    const recordSpy = vi
-      .spyOn(performanceMonitor, "recordApiResponse")
-      .mockImplementation(() => {})
+    const recordSpy = vi.spyOn(performanceMonitor, "recordApiResponse").mockImplementation(() => {})
 
     const handler = vi.fn(async () => new Response("ok"))
     const wrapped = withApiResponseMetrics(handler, { sampleRate: 0.3 })

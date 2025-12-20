@@ -87,19 +87,22 @@ async function backfillPosts() {
       break
     }
 
-    await prisma.$transaction(async (tx) => {
-      for (const post of batch) {
-        await tx.post.update({
-          where: { id: post.id },
-          data: {
-            titleTokens: tokenizeText(post.title),
-            excerptTokens: tokenizeText(post.excerpt),
-            seoDescriptionTokens: tokenizeText(post.seoDescription),
-            contentTokens: tokenizeText(post.content),
-          },
-        })
-      }
-    }, { timeout: TRANSACTION_TIMEOUT_MS })
+    await prisma.$transaction(
+      async (tx) => {
+        for (const post of batch) {
+          await tx.post.update({
+            where: { id: post.id },
+            data: {
+              titleTokens: tokenizeText(post.title),
+              excerptTokens: tokenizeText(post.excerpt),
+              seoDescriptionTokens: tokenizeText(post.seoDescription),
+              contentTokens: tokenizeText(post.content),
+            },
+          })
+        }
+      },
+      { timeout: TRANSACTION_TIMEOUT_MS }
+    )
 
     cursor = batch[batch.length - 1]!.id
     progress.processed += batch.length
@@ -154,17 +157,20 @@ async function backfillTags() {
       break
     }
 
-    await prisma.$transaction(async (tx) => {
-      for (const tag of batch) {
-        await tx.tag.update({
-          where: { id: tag.id },
-          data: {
-            nameTokens: tokenizeText(tag.name),
-            descriptionTokens: tokenizeText(tag.description),
-          },
-        })
-      }
-    }, { timeout: TRANSACTION_TIMEOUT_MS })
+    await prisma.$transaction(
+      async (tx) => {
+        for (const tag of batch) {
+          await tx.tag.update({
+            where: { id: tag.id },
+            data: {
+              nameTokens: tokenizeText(tag.name),
+              descriptionTokens: tokenizeText(tag.description),
+            },
+          })
+        }
+      },
+      { timeout: TRANSACTION_TIMEOUT_MS }
+    )
 
     cursor = batch[batch.length - 1]!.id
     progress.processed += batch.length
@@ -221,18 +227,21 @@ async function backfillUsers() {
       break
     }
 
-    await prisma.$transaction(async (tx) => {
-      for (const user of batch) {
-        const nameSource = [user.name, user.email].filter(Boolean).join(" ")
-        await tx.user.update({
-          where: { id: user.id },
-          data: {
-            nameTokens: tokenizeText(nameSource),
-            bioTokens: tokenizeText(user.bio),
-          },
-        })
-      }
-    }, { timeout: TRANSACTION_TIMEOUT_MS })
+    await prisma.$transaction(
+      async (tx) => {
+        for (const user of batch) {
+          const nameSource = [user.name, user.email].filter(Boolean).join(" ")
+          await tx.user.update({
+            where: { id: user.id },
+            data: {
+              nameTokens: tokenizeText(nameSource),
+              bioTokens: tokenizeText(user.bio),
+            },
+          })
+        }
+      },
+      { timeout: TRANSACTION_TIMEOUT_MS }
+    )
 
     cursor = batch[batch.length - 1]!.id
     progress.processed += batch.length
@@ -285,16 +294,19 @@ async function backfillActivities() {
       break
     }
 
-    await prisma.$transaction(async (tx) => {
-      for (const activity of batch) {
-        await tx.activity.update({
-          where: { id: activity.id },
-          data: {
-            contentTokens: tokenizeText(activity.content),
-          },
-        })
-      }
-    }, { timeout: TRANSACTION_TIMEOUT_MS })
+    await prisma.$transaction(
+      async (tx) => {
+        for (const activity of batch) {
+          await tx.activity.update({
+            where: { id: activity.id },
+            data: {
+              contentTokens: tokenizeText(activity.content),
+            },
+          })
+        }
+      },
+      { timeout: TRANSACTION_TIMEOUT_MS }
+    )
 
     cursor = batch[batch.length - 1]!.id
     progress.processed += batch.length

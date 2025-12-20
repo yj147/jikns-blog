@@ -167,7 +167,7 @@ function useFollowList(
   const shouldFetch = autoLoad && !accessDenied
 
   // 是否还有更多数据
-  const hasMore = accessDenied ? false : pagination?.hasMore ?? false
+  const hasMore = accessDenied ? false : (pagination?.hasMore ?? false)
 
   // 是否正在加载更多
   const isInitialLoading = shouldFetch && isLoading && size <= 1

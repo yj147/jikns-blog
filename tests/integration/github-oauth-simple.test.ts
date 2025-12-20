@@ -212,9 +212,7 @@ describe("GitHub OAuth 简化集成测试", () => {
         `oauth_state=${stateToken.state}.${stateToken.issuedAt}.${stateToken.signature}`
       )
       const request = new NextRequest(
-        new URL(
-          `http://localhost:3000/auth/callback?code=test-code&state=${stateToken.state}`
-        ),
+        new URL(`http://localhost:3000/auth/callback?code=test-code&state=${stateToken.state}`),
         { headers }
       )
 

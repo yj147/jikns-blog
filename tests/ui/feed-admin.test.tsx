@@ -184,14 +184,18 @@ describe("FeedAdminClient", () => {
     await userEvent.click(confirmButton)
 
     await waitFor(() => {
-      const postCall = fetchMock.mock.calls.find(([, options]) => (options as RequestInit | undefined)?.method === "POST")
+      const postCall = fetchMock.mock.calls.find(
+        ([, options]) => (options as RequestInit | undefined)?.method === "POST"
+      )
       expect(postCall).toBeTruthy()
       const body = JSON.parse((postCall?.[1] as RequestInit).body as string)
       expect(body).toEqual({ action: "hide", ids: ["feed-1", "feed-2"] })
     })
 
     await waitFor(() => {
-      const listCalls = fetchMock.mock.calls.filter(([url]) => (url as string).startsWith("/api/admin/feeds"))
+      const listCalls = fetchMock.mock.calls.filter(([url]) =>
+        (url as string).startsWith("/api/admin/feeds")
+      )
       expect(listCalls.length).toBeGreaterThanOrEqual(2)
     })
 

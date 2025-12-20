@@ -52,10 +52,12 @@ const notificationPreferencesBaseSchema = z
   })
   .default({})
 
-export const notificationPreferencesSchema = notificationPreferencesBaseSchema.transform((value) => ({
-  ...notificationPreferenceDefaults,
-  ...value,
-}))
+export const notificationPreferencesSchema = notificationPreferencesBaseSchema.transform(
+  (value) => ({
+    ...notificationPreferenceDefaults,
+    ...value,
+  })
+)
 
 export type NotificationPreferencesInput = z.input<typeof notificationPreferencesBaseSchema>
 export type NotificationPreferences = z.output<typeof notificationPreferencesSchema>

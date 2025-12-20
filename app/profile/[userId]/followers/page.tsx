@@ -110,7 +110,6 @@ export default function FollowersPage({ params }: FollowersPageProps) {
 
   return (
     <div className="bg-background min-h-screen">
-
       <div className="container mx-auto px-4 py-6">
         <div className="mx-auto max-w-2xl">
           {/* Header */}

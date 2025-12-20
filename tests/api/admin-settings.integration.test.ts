@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from "vitest"
 import { NextRequest } from "next/server"
-import { realPrisma, cleanupTestData, createTestUser, disconnectRealDb } from "../integration/setup-real-db"
+import {
+  realPrisma,
+  cleanupTestData,
+  createTestUser,
+  disconnectRealDb,
+} from "../integration/setup-real-db"
 
 vi.unmock("@/lib/prisma")
 vi.mock("@/lib/permissions", () => ({

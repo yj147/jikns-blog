@@ -79,12 +79,12 @@ export function TableOfContents({ items }: TableOfContentsProps) {
 
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-medium text-muted-foreground">目录</h3>
-      <div ref={containerRef} className="relative border-l border-border pl-4">
-        <div className="absolute left-0 top-0 h-full w-[1px] bg-border" />
+      <h3 className="text-muted-foreground text-sm font-medium">目录</h3>
+      <div ref={containerRef} className="border-border relative border-l pl-4">
+        <div className="bg-border absolute left-0 top-0 h-full w-[1px]" />
         <motion.div
           aria-hidden
-          className="absolute left-[-1px] w-[2px] rounded-full bg-primary"
+          className="bg-primary absolute left-[-1px] w-[2px] rounded-full"
           animate={
             indicator.visible
               ? { opacity: 1, y: indicator.top, height: indicator.height }
@@ -112,10 +112,8 @@ export function TableOfContents({ items }: TableOfContentsProps) {
                   setActiveId(item.id)
                 }}
                 className={cn(
-                  "block text-sm transition-colors duration-200 hover:text-primary line-clamp-1",
-                  activeId === item.id
-                    ? "font-medium text-primary"
-                    : "text-muted-foreground"
+                  "hover:text-primary line-clamp-1 block text-sm transition-colors duration-200",
+                  activeId === item.id ? "text-primary font-medium" : "text-muted-foreground"
                 )}
               >
                 {item.text}

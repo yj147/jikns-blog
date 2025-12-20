@@ -51,12 +51,10 @@ async function handleGet(request: NextRequest) {
       prisma.activity.count({ where: { deletedAt: null } }),
     ])
 
-    const performancePromise = performanceMonitor
-      .getPerformanceReport(24)
-      .catch((perfError) => {
-        logger.warn("获取性能报告失败，回退为仅计数", { requestId, error: perfError })
-        return null
-      })
+    const performancePromise = performanceMonitor.getPerformanceReport(24).catch((perfError) => {
+      logger.warn("获取性能报告失败，回退为仅计数", { requestId, error: perfError })
+      return null
+    })
 
     const [[users, posts, comments, activities], performanceReport] = await Promise.all([
       countsPromise,

@@ -57,7 +57,9 @@ const CommentItemComponent = function CommentItem({
         width: 96,
         height: 96,
         format: "webp",
-      }) ?? comment.author?.avatarUrl ?? "/placeholder.svg",
+      }) ??
+      comment.author?.avatarUrl ??
+      "/placeholder.svg",
     [comment.author?.avatarUrl]
   )
 
@@ -103,9 +105,7 @@ const CommentItemComponent = function CommentItem({
         <div className="flex-1">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <span className="font-medium">
-                {displayName}
-              </span>
+              <span className="font-medium">{displayName}</span>
               <span className="text-sm text-gray-500">{formattedDate}</span>
             </div>
 
@@ -236,8 +236,10 @@ function areCommentsEqual(prevProps: CommentItemProps, nextProps: CommentItemPro
   if (prevProps.comment.updatedAt !== nextProps.comment.updatedAt) return false
   if (prevProps.comment.content !== nextProps.comment.content) return false
   if (prevProps.comment.isDeleted !== nextProps.comment.isDeleted) return false
-  if ((prevProps.comment.canDelete ?? false) !== (nextProps.comment.canDelete ?? false)) return false
-  if ((prevProps.comment._count?.replies ?? 0) !== (nextProps.comment._count?.replies ?? 0)) return false
+  if ((prevProps.comment.canDelete ?? false) !== (nextProps.comment.canDelete ?? false))
+    return false
+  if ((prevProps.comment._count?.replies ?? 0) !== (nextProps.comment._count?.replies ?? 0))
+    return false
   if (prevProps.comment.author?.avatarUrl !== nextProps.comment.author?.avatarUrl) return false
   if (prevProps.comment.author?.name !== nextProps.comment.author?.name) return false
   if (prevProps.comment.createdAt !== nextProps.comment.createdAt) return false

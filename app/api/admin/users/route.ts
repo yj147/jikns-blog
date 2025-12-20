@@ -40,8 +40,7 @@ async function handleGet(request: NextRequest) {
   try {
     await requireAdmin(request)
   } catch (error) {
-    const message =
-      error instanceof Error && error.message ? error.message : "需要管理员权限"
+    const message = error instanceof Error && error.message ? error.message : "需要管理员权限"
 
     apiLogger.warn("admin users list forbidden", {
       requestId,

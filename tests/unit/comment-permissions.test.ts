@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest"
-import { CommentPermissions, type CommentForPermission } from "@/lib/permissions/comment-permissions"
+import {
+  CommentPermissions,
+  type CommentForPermission,
+} from "@/lib/permissions/comment-permissions"
 import type { AuthenticatedUser } from "@/lib/auth/session"
 import { Role, UserStatus } from "@/lib/generated/prisma"
 

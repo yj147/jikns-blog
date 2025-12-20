@@ -110,7 +110,10 @@ export function BlogListClient({
     if (!initialPosts || initialPosts.length === 0) return undefined
 
     const nextCursor = initialPagination.nextCursor ?? (initialPagination.hasNext ? "2" : null)
-    const totalPages = Math.max(1, Math.ceil((initialPagination.total || initialPosts.length) / PAGE_SIZE))
+    const totalPages = Math.max(
+      1,
+      Math.ceil((initialPagination.total || initialPosts.length) / PAGE_SIZE)
+    )
 
     return {
       success: true,
@@ -135,45 +138,49 @@ export function BlogListClient({
         },
       },
     }
-  }, [initialPagination.hasNext, initialPagination.nextCursor, initialPagination.total, initialPosts])
+  }, [
+    initialPagination.hasNext,
+    initialPagination.nextCursor,
+    initialPagination.total,
+    initialPosts,
+  ])
 
-  const { data, error, isLoading, isValidating, size, setSize, mutate } = useSWRInfinite<PostsApiResponse>(
-    (pageIndex, previousPage) => {
-      if (previousPage && !getHasMore(previousPage)) return null
+  const { data, error, isLoading, isValidating, size, setSize, mutate } =
+    useSWRInfinite<PostsApiResponse>(
+      (pageIndex, previousPage) => {
+        if (previousPage && !getHasMore(previousPage)) return null
 
-      const params = new URLSearchParams()
-      params.set("limit", PAGE_SIZE.toString())
-      params.set("page", String(pageIndex + 1))
-      params.set("orderBy", orderBy)
-      params.set("order", "desc")
+        const params = new URLSearchParams()
+        params.set("limit", PAGE_SIZE.toString())
+        params.set("page", String(pageIndex + 1))
+        params.set("orderBy", orderBy)
+        params.set("order", "desc")
 
-      if (normalizedSearch) params.set("search", normalizedSearch)
-      if (normalizedTag) params.set("tag", normalizedTag)
+        if (normalizedSearch) params.set("search", normalizedSearch)
+        if (normalizedTag) params.set("tag", normalizedTag)
 
-      if (pageIndex > 0) {
-        const cursor = getNextCursor(previousPage)
-        if (!cursor) return null
-        params.set("cursor", cursor)
+        if (pageIndex > 0) {
+          const cursor = getNextCursor(previousPage)
+          if (!cursor) return null
+          params.set("cursor", cursor)
+        }
+
+        return `/api/posts?${params.toString()}`
+      },
+      fetcher,
+      {
+        fallbackData: initialPage ? [initialPage] : undefined,
+        revalidateOnFocus: false,
+        revalidateFirstPage: false,
+        revalidateIfStale: false,
+        revalidateOnReconnect: true,
       }
-
-      return `/api/posts?${params.toString()}`
-    },
-    fetcher,
-    {
-      fallbackData: initialPage ? [initialPage] : undefined,
-      revalidateOnFocus: false,
-      revalidateFirstPage: false,
-      revalidateIfStale: false,
-      revalidateOnReconnect: true,
-    }
-  )
+    )
 
   const pages = useMemo(() => data ?? (initialPage ? [initialPage] : []), [data, initialPage])
   const posts = useMemo(() => pages.flatMap((page) => page?.data?.posts ?? []), [pages])
 
-  const hasMore = pages.length
-    ? getHasMore(pages[pages.length - 1])
-    : initialPagination.hasNext
+  const hasMore = pages.length ? getHasMore(pages[pages.length - 1]) : initialPagination.hasNext
   const total = pages.length ? getTotal(pages[0], initialPagination.total) : initialPagination.total
   const isInitialLoading = isLoading && posts.length === 0
   const isLoadingMore = isValidating && size > pages.length
@@ -203,10 +210,11 @@ export function BlogListClient({
     return (
       <Card className="border-destructive/40 bg-destructive/5">
         <CardContent className="flex flex-col items-center gap-3 py-8 text-center">
-          <AlertCircle className="h-8 w-8 text-destructive" />
-          <p className="text-sm text-muted-foreground">加载文章失败</p>
+          <AlertCircle className="text-destructive h-8 w-8" />
+          <p className="text-muted-foreground text-sm">加载文章失败</p>
           <Button variant="outline" onClick={() => mutate()}>
-            <RefreshCcw className="mr-2 h-4 w-4" />重试
+            <RefreshCcw className="mr-2 h-4 w-4" />
+            重试
           </Button>
         </CardContent>
       </Card>
@@ -220,10 +228,12 @@ export function BlogListClient({
   if (!posts.length) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
-        <div className="mb-4 rounded-full bg-muted p-6">
-          <Sparkles className="h-12 w-12 text-muted-foreground" />
+        <div className="bg-muted mb-4 rounded-full p-6">
+          <Sparkles className="text-muted-foreground h-12 w-12" />
         </div>
-        <h3 className="mb-2 text-xl font-bold">{normalizedSearch || normalizedTag ? "暂无相关内容" : "这里还很空旷"}</h3>
+        <h3 className="mb-2 text-xl font-bold">
+          {normalizedSearch || normalizedTag ? "暂无相关内容" : "这里还很空旷"}
+        </h3>
         <p className="text-muted-foreground mb-6 max-w-sm text-sm">
           {normalizedSearch
             ? "换个关键词试试？"
@@ -245,7 +255,7 @@ export function BlogListClient({
       ))}
 
       {isLoadingMore && (
-        <div className="flex items-center justify-center gap-2 py-6 text-muted-foreground">
+        <div className="text-muted-foreground flex items-center justify-center gap-2 py-6">
           <Loader2 className="h-4 w-4 animate-spin" />
           <span>加载中…</span>
         </div>
@@ -255,10 +265,16 @@ export function BlogListClient({
 
       {hasMore && (
         <div className="py-4 text-center">
-          <Button onClick={() => setSize((current) => current + 1)} disabled={isLoadingMore} variant="outline">
+          <Button
+            onClick={() => setSize((current) => current + 1)}
+            disabled={isLoadingMore}
+            variant="outline"
+          >
             {isLoadingMore ? "加载中…" : "加载更多"}
           </Button>
-          <p className="text-muted-foreground mt-2 text-xs">已加载 {posts.length} / {displayTotal} 篇</p>
+          <p className="text-muted-foreground mt-2 text-xs">
+            已加载 {posts.length} / {displayTotal} 篇
+          </p>
         </div>
       )}
 

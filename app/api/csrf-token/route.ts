@@ -18,7 +18,8 @@ async function handleGet(request: NextRequest) {
     const existingToken = request.cookies.get("csrf-token")?.value
 
     // 只有在显式请求刷新或没有现有 token 时才生成新 token
-    const token = !refreshRequested && existingToken ? existingToken : CSRFProtection.generateToken()
+    const token =
+      !refreshRequested && existingToken ? existingToken : CSRFProtection.generateToken()
     const rotated = !existingToken || refreshRequested
 
     const response = NextResponse.json({

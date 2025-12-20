@@ -54,9 +54,9 @@ function VerifyContent() {
     state.status === "success" ? (
       <CheckCircle2 className="h-8 w-8 text-green-600" />
     ) : state.status === "loading" ? (
-      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <Loader2 className="text-primary h-8 w-8 animate-spin" />
     ) : (
-      <XCircle className="h-8 w-8 text-destructive" />
+      <XCircle className="text-destructive h-8 w-8" />
     )
 
   return (
@@ -67,7 +67,7 @@ function VerifyContent() {
             {icon}
             邮箱验证
           </CardTitle>
-          <CardDescription className="text-base text-muted-foreground">
+          <CardDescription className="text-muted-foreground text-base">
             {state.status === "loading"
               ? "正在确认你的订阅请求..."
               : state.message || "正在处理你的请求"}
@@ -75,7 +75,7 @@ function VerifyContent() {
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {state.status === "success" ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               你将开始收到最新文章和重要通知。如果想调整偏好或退订，可随时通过邮件底部的链接操作。
             </p>
           ) : null}
@@ -99,12 +99,10 @@ function VerifyFallback() {
       <Card className="w-full">
         <CardHeader className="space-y-3">
           <CardTitle className="flex items-center gap-3 text-2xl font-semibold">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <Loader2 className="text-primary h-8 w-8 animate-spin" />
             邮箱验证
           </CardTitle>
-          <CardDescription className="text-base text-muted-foreground">
-            正在加载...
-          </CardDescription>
+          <CardDescription className="text-muted-foreground text-base">正在加载...</CardDescription>
         </CardHeader>
       </Card>
     </div>

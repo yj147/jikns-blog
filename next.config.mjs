@@ -105,7 +105,6 @@ const supabaseRemotePatterns = [
   },
 ]
 
-
 const withBundleAnalyzer = bundleAnalyzer({
   enabled: process.env.ANALYZE === "true",
 })

@@ -4,7 +4,13 @@ import { Filter, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import type { FeedFiltersValue, PinnedFilter } from "@/hooks/useFeedFilters"
 
@@ -34,8 +40,8 @@ export function FeedFilters({
   onReset,
 }: FeedFiltersProps) {
   return (
-    <section className="rounded-xl border bg-card p-4 shadow-sm">
-      <header className="mb-4 flex items-center gap-2 text-sm font-medium text-muted-foreground">
+    <section className="bg-card rounded-xl border p-4 shadow-sm">
+      <header className="text-muted-foreground mb-4 flex items-center gap-2 text-sm font-medium">
         <Filter className="h-4 w-4" />
         筛选条件
       </header>

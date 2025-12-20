@@ -424,11 +424,7 @@ export async function getUserBookmarks(
   const [signedCovers, signedAvatars] = await Promise.all([
     Promise.all(
       items.map((bookmark) =>
-        createSignedUrlIfNeeded(
-          bookmark.post.coverImage,
-          POST_IMAGE_SIGN_EXPIRES_IN,
-          "post-images"
-        )
+        createSignedUrlIfNeeded(bookmark.post.coverImage, POST_IMAGE_SIGN_EXPIRES_IN, "post-images")
       )
     ),
     Promise.all(items.map((bookmark) => signAvatarUrl(bookmark.post.author.avatarUrl))),

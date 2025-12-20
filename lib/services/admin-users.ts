@@ -33,7 +33,9 @@ const MAX_LIMIT = 100
 export const ADMIN_USERS_DEFAULT_PAGE = DEFAULT_PAGE
 export const ADMIN_USERS_DEFAULT_LIMIT = DEFAULT_LIMIT
 
-export async function getAdminUsersPayload(query: AdminUsersQuery = {}): Promise<AdminUsersPayload> {
+export async function getAdminUsersPayload(
+  query: AdminUsersQuery = {}
+): Promise<AdminUsersPayload> {
   const page = Math.max(1, query.page ?? DEFAULT_PAGE)
   const limit = clampLimit(query.limit ?? DEFAULT_LIMIT)
   const skip = (page - 1) * limit
@@ -44,10 +46,7 @@ export async function getAdminUsersPayload(query: AdminUsersQuery = {}): Promise
       where,
       skip,
       take: limit,
-      orderBy: [
-        { createdAt: "desc" },
-        { id: "asc" },
-      ],
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       select: {
         id: true,
         email: true,

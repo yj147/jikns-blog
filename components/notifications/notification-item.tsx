@@ -61,7 +61,12 @@ function formatRelative(value: string) {
   }
 }
 
-export function NotificationItem({ notification, onMarkRead, onNavigate, compact = false }: NotificationItemProps) {
+export function NotificationItem({
+  notification,
+  onMarkRead,
+  onNavigate,
+  compact = false,
+}: NotificationItemProps) {
   const unread = !notification.readAt
   const meta = TYPE_META[notification.type]
   const actorName = notification.actor?.name || notification.actor?.email || "神秘用户"
@@ -70,7 +75,8 @@ export function NotificationItem({ notification, onMarkRead, onNavigate, compact
     notification.post?.slug || notification.post?.id || notification.comment?.postId
   const postLink = postIdentifier ? `/blog/${postIdentifier}` : undefined
   const profileLink =
-    notification.type === NotificationType.FOLLOW && (notification.actor?.id || notification.actorId)
+    notification.type === NotificationType.FOLLOW &&
+    (notification.actor?.id || notification.actorId)
       ? `/profile/${notification.actor?.id ?? notification.actorId}`
       : undefined
   const commentLink =
@@ -131,7 +137,9 @@ export function NotificationItem({ notification, onMarkRead, onNavigate, compact
           <Badge variant="outline" className={cn("border-transparent", meta.tone)}>
             {meta.label}
           </Badge>
-          <span className="text-muted-foreground text-xs">{formatRelative(notification.createdAt)}</span>
+          <span className="text-muted-foreground text-xs">
+            {formatRelative(notification.createdAt)}
+          </span>
         </div>
         <div className="flex items-start gap-3">
           <Avatar className="h-9 w-9">
@@ -139,7 +147,7 @@ export function NotificationItem({ notification, onMarkRead, onNavigate, compact
             <AvatarFallback>{avatarText}</AvatarFallback>
           </Avatar>
           <div className="space-y-1">
-            <p className="text-sm font-medium text-foreground">
+            <p className="text-foreground text-sm font-medium">
               {actorName} <span className="text-muted-foreground font-normal">{description}</span>
             </p>
             {notification.post?.title ? (

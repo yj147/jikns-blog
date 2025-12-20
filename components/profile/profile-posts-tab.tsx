@@ -21,7 +21,7 @@ interface UserPostRecord {
   slug: string
   excerpt: string | null
   coverImage: string | null
-   signedCoverImage?: string | null
+  signedCoverImage?: string | null
   publishedAt: string | null
   viewCount: number
   readTimeMinutes: number

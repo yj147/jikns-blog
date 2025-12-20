@@ -66,7 +66,11 @@ async function handleGet(request: NextRequest) {
 
     const ip = getClientIP(request) ?? "anonymous"
     const rateLimitKey = `unified-search:ip:${ip}`
-    const rateResult = await applyDistributedRateLimit(rateLimitKey, RATE_LIMIT.limit, RATE_LIMIT.windowMs)
+    const rateResult = await applyDistributedRateLimit(
+      rateLimitKey,
+      RATE_LIMIT.limit,
+      RATE_LIMIT.windowMs
+    )
     if (!rateResult.allowed) {
       return createErrorResponse(
         ErrorCode.RATE_LIMIT_EXCEEDED,

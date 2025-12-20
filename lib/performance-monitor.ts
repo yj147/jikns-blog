@@ -237,7 +237,11 @@ export class PerformanceMonitor {
   async getStatsFromDB(
     metricType: MetricType,
     timeRange: { start: Date; end: Date },
-    queryFn?: (type: PersistedMetricType, startTime: Date, endTime: Date) => Promise<{
+    queryFn?: (
+      type: PersistedMetricType,
+      startTime: Date,
+      endTime: Date
+    ) => Promise<{
       count: number
       sum: number
       min: number
@@ -251,9 +255,7 @@ export class PerformanceMonitor {
     }
 
     try {
-      const queryMetrics =
-        queryFn ??
-        (await import("./metrics/persistence")).queryMetrics
+      const queryMetrics = queryFn ?? (await import("./metrics/persistence")).queryMetrics
 
       const aggregated = await queryMetrics(persistedType, timeRange.start, timeRange.end)
       const count = aggregated.count
@@ -492,7 +494,10 @@ export class PerformanceMonitor {
     }
   }
 
-  private async fetchDbMetrics(timeRange: { start: Date; end: Date }): Promise<PerformanceMetric[]> {
+  private async fetchDbMetrics(timeRange: {
+    start: Date
+    end: Date
+  }): Promise<PerformanceMetric[]> {
     if (typeof window !== "undefined") {
       return []
     }

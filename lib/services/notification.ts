@@ -31,7 +31,10 @@ type NotificationBroadcastPayload = {
 
 const notificationsLogger = createLogger("notification-service")
 
-async function isNotificationEnabled(recipientId: string, type: NotificationType): Promise<boolean> {
+async function isNotificationEnabled(
+  recipientId: string,
+  type: NotificationType
+): Promise<boolean> {
   const recipient = await prisma.user.findUnique({
     where: { id: recipientId },
     select: { notificationPreferences: true },
@@ -120,7 +123,10 @@ export function getUnreadCount(userId: string): Promise<number> {
   })
 }
 
-async function broadcastNotification(recipientId: string, notification: Notification): Promise<void> {
+async function broadcastNotification(
+  recipientId: string,
+  notification: Notification
+): Promise<void> {
   try {
     const supabase = createServiceRoleClient()
     const channelName = `notifications:user-${recipientId}`

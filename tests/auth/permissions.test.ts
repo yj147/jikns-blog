@@ -157,14 +157,20 @@ describe("权限框架 - 管理员与作者识别", () => {
 
     it("validateApiPermissions admin 成功返回用户", async () => {
       setCurrentUser(TEST_USERS.admin)
-      const res = await permissions.validateApiPermissions(new Request("http://localhost/api"), "admin")
+      const res = await permissions.validateApiPermissions(
+        new Request("http://localhost/api"),
+        "admin"
+      )
       expect(res.success).toBe(true)
       expect(res.user?.role).toBe("ADMIN")
     })
 
     it("validateApiPermissions auth 未登录返回错误", async () => {
       setCurrentUser(null)
-      const res = await permissions.validateApiPermissions(new Request("http://localhost/api"), "auth")
+      const res = await permissions.validateApiPermissions(
+        new Request("http://localhost/api"),
+        "auth"
+      )
       expect(res.success).toBe(false)
       expect(res.error?.statusCode).toBe(401)
     })

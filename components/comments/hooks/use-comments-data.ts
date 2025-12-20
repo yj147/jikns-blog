@@ -24,13 +24,20 @@ interface UseCommentsDataOptions {
   targetType: CommentTargetType
   targetId: string
   initialCount?: number
+  enabled?: boolean
 }
 
-export function useCommentsData({ targetType, targetId, initialCount = 0 }: UseCommentsDataOptions) {
+export function useCommentsData({
+  targetType,
+  targetId,
+  initialCount = 0,
+  enabled = true,
+}: UseCommentsDataOptions) {
   const fetcher = useCallback(async (url: string) => fetchGet(url), [])
 
   const getKey = useCallback(
     (pageIndex: number, previousPageData: CommentsApiResponse | null) => {
+      if (!enabled) return null
       if (previousPageData && !previousPageData.meta?.pagination?.hasMore) {
         return null
       }
@@ -51,14 +58,11 @@ export function useCommentsData({ targetType, targetId, initialCount = 0 }: UseC
     [targetType, targetId]
   )
 
-  const { data, error, isLoading, isValidating, size, setSize, mutate } = useSWRInfinite<CommentsApiResponse>(
-    getKey,
-    fetcher,
-    {
+  const { data, error, isLoading, isValidating, size, setSize, mutate } =
+    useSWRInfinite<CommentsApiResponse>(getKey, fetcher, {
       revalidateOnFocus: false,
       revalidateAll: false,
-    }
-  )
+    })
 
   const pages = data ?? []
   const comments = useMemo(() => pages.flatMap((page) => page?.data ?? []), [pages])
@@ -116,4 +120,3 @@ export function useCommentsData({ targetType, targetId, initialCount = 0 }: UseC
     resetList,
   }
 }
-

@@ -23,7 +23,6 @@ function loadNodeJieba(): NodeJiebaModule | null {
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
     const dynamicRequire: NodeRequire = eval("require")
     cachedNodeJieba = dynamicRequire("nodejieba") as NodeJiebaModule
   } catch {

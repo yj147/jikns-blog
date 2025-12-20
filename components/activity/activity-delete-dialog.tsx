@@ -58,9 +58,7 @@ export function ActivityDeleteDialog({
   if (!activity) return null
 
   const contentPreview =
-    activity.content.length > 50
-      ? `${activity.content.slice(0, 50)}...`
-      : activity.content
+    activity.content.length > 50 ? `${activity.content.slice(0, 50)}...` : activity.content
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -69,8 +67,8 @@ export function ActivityDeleteDialog({
           <AlertDialogTitle>确认删除</AlertDialogTitle>
           <AlertDialogDescription>
             确定要删除这条动态吗？此操作无法撤销。
-            <span className="mt-2 block rounded bg-muted p-2 text-sm text-foreground">
-              "{contentPreview}"
+            <span className="bg-muted text-foreground mt-2 block rounded p-2 text-sm">
+              {`"${contentPreview}"`}
             </span>
           </AlertDialogDescription>
         </AlertDialogHeader>

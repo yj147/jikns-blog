@@ -88,7 +88,7 @@ export class SecurityMiddleware {
     },
     rateLimit: {
       windowMs: 15 * 60 * 1000, // 15分钟
-      maxRequests: 100,
+      maxRequests: 2000, // 增加到 2000 次，适配 N+1 模式的 API 请求
       skipSuccessfulRequests: false,
     },
     session: {
@@ -164,17 +164,17 @@ export class SecurityMiddleware {
       maxRequests = 1000 // 开发环境允许大量请求
       windowMs = 5 * 60 * 1000 // 5分钟窗口期
     } else if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
-      // 管理员后台需要频繁操作，使用更宽松的限制
-      maxRequests = 500 // 管理员允许更多请求
-      windowMs = 5 * 60 * 1000 // 5分钟窗口期
+      // 管理员后台需要频繁操作
+      maxRequests = 5000
+      windowMs = 5 * 60 * 1000
     } else if (
       pathname.includes("/api/user") ||
       pathname.includes("/auth/") ||
       pathname.includes("/logout")
     ) {
-      // 生产环境认证相关路径的优化设置
-      maxRequests = 200 // 认证相关操作允许更多请求
-      windowMs = 10 * 60 * 1000 // 缩短窗口期到10分钟
+      // 敏感接口保持较严格限制，但稍微放宽
+      maxRequests = 300
+      windowMs = 15 * 60 * 1000
     }
 
     const isLimited = !RateLimiter.checkRateLimit(context.clientIP, maxRequests, windowMs)

@@ -124,31 +124,29 @@ describe("Posts Server Actions 错误分类与审计", () => {
     const { createPost } = await import("@/lib/actions/posts")
     const customSlug = "custom-slug"
 
-    postMock.findUnique
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
-        id: "post-1",
-        slug: customSlug,
-        title: "测试文章",
-        content: "有效内容至少十个字符",
-        excerpt: null,
-        published: false,
-        isPinned: false,
-        canonicalUrl: null,
-        seoTitle: null,
-        seoDescription: null,
-        coverImage: null,
-        viewCount: 0,
-        createdAt: new Date("2025-01-01T00:00:00Z"),
-        updatedAt: new Date("2025-01-01T00:00:00Z"),
-        publishedAt: null,
-        authorId: "admin-1",
-        seriesId: null,
-        author: { id: "admin-1", name: "Admin", avatarUrl: null, bio: null },
-        series: null,
-        tags: [],
-        _count: { comments: 0, likes: 0, bookmarks: 0 },
-      })
+    postMock.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: "post-1",
+      slug: customSlug,
+      title: "测试文章",
+      content: "有效内容至少十个字符",
+      excerpt: null,
+      published: false,
+      isPinned: false,
+      canonicalUrl: null,
+      seoTitle: null,
+      seoDescription: null,
+      coverImage: null,
+      viewCount: 0,
+      createdAt: new Date("2025-01-01T00:00:00Z"),
+      updatedAt: new Date("2025-01-01T00:00:00Z"),
+      publishedAt: null,
+      authorId: "admin-1",
+      seriesId: null,
+      author: { id: "admin-1", name: "Admin", avatarUrl: null, bio: null },
+      series: null,
+      tags: [],
+      _count: { comments: 0, likes: 0, bookmarks: 0 },
+    })
 
     postMock.create.mockResolvedValue({
       id: "post-1",

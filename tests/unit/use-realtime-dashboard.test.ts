@@ -26,9 +26,7 @@ const createClientMock = vi.mocked((await import("@/lib/supabase")).createClient
 const ensureSessionReadyMock = vi.mocked(
   (await import("@/lib/realtime/connection")).ensureSessionReady
 )
-const useNetworkStatusMock = vi.mocked(
-  (await import("@/lib/realtime/connection")).useNetworkStatus
-)
+const useNetworkStatusMock = vi.mocked((await import("@/lib/realtime/connection")).useNetworkStatus)
 const useOnlineCallbackMock = vi.mocked(
   (await import("@/lib/realtime/connection")).useOnlineCallback
 )

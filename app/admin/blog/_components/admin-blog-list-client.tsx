@@ -14,7 +14,7 @@ export type AdminBlogPostDTO = {
   slug: string
   summary?: string | null
   coverImage?: string | null
-   signedCoverImage?: string | null
+  signedCoverImage?: string | null
   tags: string[]
   isPublished: boolean
   isPinned: boolean
@@ -78,28 +78,25 @@ export default function AdminBlogListClient({ initialPosts }: AdminBlogListClien
     router.push("/admin/blog/create")
   }, [router])
 
-  const handleDelete = useCallback(
-    async (post: Post) => {
-      try {
-        const result = await deletePost(post.id)
+  const handleDelete = useCallback(async (post: Post) => {
+    try {
+      const result = await deletePost(post.id)
 
-        if (result.success) {
-          setPosts((prev) => prev.filter((item) => item.id !== post.id))
-          toast.success("文章删除成功")
-        } else {
-          toast.error("删除文章失败: " + (result.error?.message ?? "未知错误"))
-        }
-      } catch (error) {
-        logger.error(
-          "删除文章失败",
-          { module: "app/admin/blog/page", postId: post.id },
-          error instanceof Error ? error : undefined
-        )
-        toast.error("删除文章失败")
+      if (result.success) {
+        setPosts((prev) => prev.filter((item) => item.id !== post.id))
+        toast.success("文章删除成功")
+      } else {
+        toast.error("删除文章失败: " + (result.error?.message ?? "未知错误"))
       }
-    },
-    []
-  )
+    } catch (error) {
+      logger.error(
+        "删除文章失败",
+        { module: "app/admin/blog/page", postId: post.id },
+        error instanceof Error ? error : undefined
+      )
+      toast.error("删除文章失败")
+    }
+  }, [])
 
   const handleTogglePin = useCallback(async (post: Post) => {
     try {
@@ -133,7 +130,9 @@ export default function AdminBlogListClient({ initialPosts }: AdminBlogListClien
 
       if (result.success) {
         setPosts((prev) =>
-          prev.map((item) => (item.id === post.id ? { ...item, isPublished: !item.isPublished } : item))
+          prev.map((item) =>
+            item.id === post.id ? { ...item, isPublished: !item.isPublished } : item
+          )
         )
         toast.success(result.data?.message ?? "操作成功")
       } else {

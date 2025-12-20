@@ -120,7 +120,7 @@ export function bumpActivityCounts(
         : activity.commentsCount
 
     const nextIsLiked =
-      typeof delta.isLiked === "boolean" ? delta.isLiked : activity.isLiked ?? activity.isLiked
+      typeof delta.isLiked === "boolean" ? delta.isLiked : (activity.isLiked ?? activity.isLiked)
 
     return {
       ...activity,

@@ -8,7 +8,7 @@ import {
 
 describe("archive search utils", () => {
   it("escapeSearchQuery 会处理特殊字符", () => {
-    expect(escapeSearchQuery("hello.*")) .toBe("hello\\.\\*")
+    expect(escapeSearchQuery("hello.*")).toBe("hello\\.\\*")
   })
 
   it("buildHighlightSegments 会返回匹配片段", () => {

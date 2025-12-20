@@ -1,7 +1,0 @@
-{
-  "q1": "E2E测试应该使用真实的本地Supabase数据库，通过Playwright的globalSetup在测试前自动seed必要的测试数据（2-3个测试用户、关注关系），测试后在globalTeardown中清理。参考现有的tests/e2e/permissions-e2e.spec.ts模式。",
-  "q2": "当Feature Flag关闭时：1) Feed页面的'关注'Tab应完全隐藏（使用条件渲染）；2) 所有FollowButton组件应显示但禁用，并在hover时显示tooltip提示'该功能暂时维护中'；3) Settings页面的'社交关系管理'Tab保持可访问，但关注/取关按钮禁用。这样既保持了UI一致性，又给用户明确反馈。",
-  "q3": "监控脚本的'--focus follow'参数是可选优化项，优先级P2（Nice to have）。如果时间允许可以实现，但不应阻塞上线。核心是确保关注指标被正确记录，即使没有专门的focus参数，通过现有的监控输出也能观察到关注系统的健康状态。",
-  "q4": "现有的app/profile/[userId]/page.tsx已经满足设计要求（包含FollowButton、关注/粉丝数统计），无需路由重构。设计文档中提到的路由重构可能是过度设计。应该直接验证现有实现的功能完整性（通过E2E测试覆盖），而不是重新实现。符合Linus的'Never break userspace'原则。",
-  "q5": "Release Note的主要目标读者是开发团队和运维团队。应侧重技术细节：1) 新增的4个API端点及其用途；2) Feature Flag配置说明；3) 性能指标清单；4) 灰度上线和回滚步骤；5) 已知限制和兼容性说明。使用技术语言，避免营销化表达。"
-}

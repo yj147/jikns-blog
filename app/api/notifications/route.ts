@@ -31,21 +31,17 @@ type NotificationView = {
     avatarUrl: string | null
     email: string | null
   }
-  post?:
-    | {
-        id: string
-        title: string | null
-        slug: string | null
-      }
-    | null
-  comment?:
-    | {
-        id: string
-        content: string | null
-        postId: string | null
-        activityId: string | null
-      }
-    | null
+  post?: {
+    id: string
+    title: string | null
+    slug: string | null
+  } | null
+  comment?: {
+    id: string
+    content: string | null
+    postId: string | null
+    activityId: string | null
+  } | null
 }
 
 function buildTargetUrl(record: any): string | null {
@@ -179,7 +175,9 @@ function toResponseUser(user: AuthenticatedUser): Partial<User> {
   }
 }
 
-async function signNotificationAvatars(notifications: NotificationView[]): Promise<NotificationView[]> {
+async function signNotificationAvatars(
+  notifications: NotificationView[]
+): Promise<NotificationView[]> {
   return Promise.all(
     notifications.map(async (notification) => {
       const signedAvatar = await signAvatarUrl(notification.actor?.avatarUrl ?? null)
@@ -215,7 +213,12 @@ async function handleGet(request: NextRequest) {
 
     if (authError || !user) {
       const errorCode = authError ? mapAuthErrorCode(authError) : ErrorCode.UNAUTHORIZED
-      return createErrorResponse(errorCode, authError?.message || "未登录", undefined, authError?.statusCode)
+      return createErrorResponse(
+        errorCode,
+        authError?.message || "未登录",
+        undefined,
+        authError?.statusCode
+      )
     }
 
     const type = parseType(searchParams.get("type"))
@@ -235,10 +238,7 @@ async function handleGet(request: NextRequest) {
 
     const notifications = await prisma.notification.findMany({
       where,
-      orderBy: [
-        { createdAt: "desc" },
-        { id: "desc" },
-      ],
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       ...(ids.length
         ? {}
         : {
@@ -273,8 +273,12 @@ async function handleGet(request: NextRequest) {
     })
 
     const hasMore = !ids.length && notifications.length > limit
-    const items = ids.length ? notifications : hasMore ? notifications.slice(0, limit) : notifications
-    const nextCursor = !ids.length && hasMore ? items[items.length - 1]?.id ?? null : null
+    const items = ids.length
+      ? notifications
+      : hasMore
+        ? notifications.slice(0, limit)
+        : notifications
+    const nextCursor = !ids.length && hasMore ? (items[items.length - 1]?.id ?? null) : null
     const stats = await getUnreadStats(user.id, type)
     const signedItems = await signNotificationAvatars(items.map(mapNotification))
 
@@ -317,7 +321,12 @@ async function handlePatch(request: NextRequest) {
 
     if (authError || !user) {
       const errorCode = authError ? mapAuthErrorCode(authError) : ErrorCode.UNAUTHORIZED
-      return createErrorResponse(errorCode, authError?.message || "未登录", undefined, authError?.statusCode)
+      return createErrorResponse(
+        errorCode,
+        authError?.message || "未登录",
+        undefined,
+        authError?.statusCode
+      )
     }
 
     const body = await request.json().catch(() => null)

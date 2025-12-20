@@ -1269,7 +1269,9 @@ describe("标签管理 API", () => {
 
     it("找不到标签时返回 NOT_FOUND", async () => {
       vi.mocked(permissions.requireAdmin).mockResolvedValue({ id: "admin1" } as any)
-      vi.mocked(prisma.tag.findMany).mockResolvedValue([{ id: "target", name: "New", slug: "new" }] as any)
+      vi.mocked(prisma.tag.findMany).mockResolvedValue([
+        { id: "target", name: "New", slug: "new" },
+      ] as any)
 
       const result = await mergeTags("source", "target")
 

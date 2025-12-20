@@ -79,10 +79,7 @@ async function handlePost(request: NextRequest) {
     // 创建 Supabase 客户端
     const supabase = await createRouteHandlerClient()
     // 使用 Supabase Auth 进行身份验证
-    let {
-      data,
-      error: signInError,
-    } = await supabase.auth.signInWithPassword({
+    let { data, error: signInError } = await supabase.auth.signInWithPassword({
       email: normalizedEmail,
       password: password,
     })
@@ -288,7 +285,11 @@ async function ensureSupabaseUserWithId(
       email_confirm: true,
     })
     if (updateError) {
-      authLogger.error("更新 Supabase 用户密码失败", { stage: "autoProvision:update", email }, updateError)
+      authLogger.error(
+        "更新 Supabase 用户密码失败",
+        { stage: "autoProvision:update", email },
+        updateError
+      )
       return false
     }
     return true
@@ -330,7 +331,11 @@ async function ensureSupabaseUserWithId(
         })
 
         if (retry.error) {
-          authLogger.error("重新创建 Supabase 用户失败", { stage: "autoProvision:retry", email }, retry.error)
+          authLogger.error(
+            "重新创建 Supabase 用户失败",
+            { stage: "autoProvision:retry", email },
+            retry.error
+          )
           return false
         }
         return true
@@ -342,7 +347,11 @@ async function ensureSupabaseUserWithId(
       })
 
       if (updateError) {
-        authLogger.error("更新 Supabase 用户密码失败", { stage: "autoProvision:updateExisting", email }, updateError)
+        authLogger.error(
+          "更新 Supabase 用户密码失败",
+          { stage: "autoProvision:updateExisting", email },
+          updateError
+        )
         return false
       }
 
@@ -350,7 +359,11 @@ async function ensureSupabaseUserWithId(
     }
   }
 
-  authLogger.error("自动创建 Supabase 用户失败", { stage: "autoProvision:create", email }, createError)
+  authLogger.error(
+    "自动创建 Supabase 用户失败",
+    { stage: "autoProvision:create", email },
+    createError
+  )
   return false
 }
 

@@ -147,7 +147,7 @@ export function SearchPageClient() {
           ? renderAllBuckets(data, query)
           : renderSingleBucket(data, type as Exclude<UnifiedSearchType, "all">, query)}
 
-        <div className="flex justify-center gap-3 py-8 border-t border-border">
+        <div className="border-border flex justify-center gap-3 border-t py-8">
           <Button variant="outline" disabled={!hasPrev} onClick={() => changePage(page - 1)}>
             上一页
           </Button>
@@ -162,73 +162,67 @@ export function SearchPageClient() {
   return (
     <div className="bg-background min-h-screen">
       <div className="container mx-auto grid grid-cols-1 gap-8 px-0 py-6 lg:grid-cols-12 lg:px-4">
-        
         {/* Main Search Feed */}
         <main className="col-span-1 lg:col-span-8">
-            {/* Sticky Header Area */}
-            <div className="sticky top-16 z-30 mb-0 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="px-4 py-3">
-                    <NavigationSearch className="w-full" />
-                </div>
-                
-                {/* Tabs */}
-                <div className="flex w-full overflow-x-auto no-scrollbar px-2">
-                    {TAB_CONFIG.map(({ value, label, icon: Icon }) => (
-                        <button
-                            key={value}
-                            onClick={() => changeType(value)}
-                            className={cn(
-                                "flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors relative shrink-0",
-                                type === value ? "text-foreground" : "text-muted-foreground hover:text-foreground/80"
-                            )}
-                        >
-                            <Icon className="h-4 w-4" />
-                            {label}
-                            {tabCounts[value] > 0 && (
-                                <span className="bg-muted text-muted-foreground text-[10px] px-1.5 py-0.5 rounded-full ml-1">
-                                    {tabCounts[value]}
-                                </span>
-                            )}
-                            {type === value && (
-                                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-                            )}
-                        </button>
-                    ))}
-                </div>
+          {/* Sticky Header Area */}
+          <div className="border-border bg-background/95 supports-[backdrop-filter]:bg-background/60 sticky top-16 z-30 mb-0 border-b backdrop-blur">
+            <div className="px-4 py-3">
+              <NavigationSearch className="w-full" />
             </div>
 
-            {/* Status Bar */}
-            {hasQuery && (isValidating || data) && (
-                <div className="bg-muted/30 px-4 py-2 text-xs text-muted-foreground flex justify-between items-center">
-                    <span>
-                        {isValidating ? "搜索中..." : `找到约 ${tabCounts[type]} 条结果`}
+            {/* Tabs */}
+            <div className="no-scrollbar flex w-full overflow-x-auto px-2">
+              {TAB_CONFIG.map(({ value, label, icon: Icon }) => (
+                <button
+                  key={value}
+                  onClick={() => changeType(value)}
+                  className={cn(
+                    "relative flex shrink-0 items-center gap-2 px-4 py-3 text-sm font-medium transition-colors",
+                    type === value
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:text-foreground/80"
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {label}
+                  {tabCounts[value] > 0 && (
+                    <span className="bg-muted text-muted-foreground ml-1 rounded-full px-1.5 py-0.5 text-[10px]">
+                      {tabCounts[value]}
                     </span>
-                    <span>
-                        {sortLabel(sort)}
-                    </span>
-                </div>
-            )}
-
-            {/* Results */}
-            <div className="divide-y divide-border">
-                {renderContent()}
+                  )}
+                  {type === value && (
+                    <div className="bg-primary absolute bottom-0 left-0 right-0 h-0.5" />
+                  )}
+                </button>
+              ))}
             </div>
+          </div>
+
+          {/* Status Bar */}
+          {hasQuery && (isValidating || data) && (
+            <div className="bg-muted/30 text-muted-foreground flex items-center justify-between px-4 py-2 text-xs">
+              <span>{isValidating ? "搜索中..." : `找到约 ${tabCounts[type]} 条结果`}</span>
+              <span>{sortLabel(sort)}</span>
+            </div>
+          )}
+
+          {/* Results */}
+          <div className="divide-border divide-y">{renderContent()}</div>
         </main>
 
         {/* Right Sidebar */}
         <aside className="hidden lg:col-span-4 lg:block">
-            <div className="sticky top-24 space-y-6 px-4">
-                <div className="rounded-xl bg-muted/30 border border-transparent p-4">
-                     <h3 className="font-bold text-lg mb-4">搜索趋势</h3>
-                     <TrendingTopicsCard />
-                </div>
-                
-                <div className="text-xs text-muted-foreground px-2">
-                    <p>提示：支持全文检索。尝试搜索 "Next.js" 或 "React"。</p>
-                </div>
+          <div className="sticky top-24 space-y-6 px-4">
+            <div className="bg-muted/30 rounded-xl border border-transparent p-4">
+              <h3 className="mb-4 text-lg font-bold">搜索趋势</h3>
+              <TrendingTopicsCard />
             </div>
-        </aside>
 
+            <div className="text-muted-foreground px-2 text-xs">
+              <p>提示：支持全文检索。尝试搜索 &ldquo;Next.js&rdquo; 或 &ldquo;React&rdquo;。</p>
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
   )
@@ -254,11 +248,13 @@ function renderAllBuckets(result: UnifiedSearchResult, query: string) {
   return (
     <div className="space-y-2 py-4">
       {/* We render sections separated by a heavier border or headers */}
-      
+
       {result.users.items.length > 0 && (
         <div className="pb-4">
-          <h4 className="px-4 mb-2 text-sm font-bold text-muted-foreground uppercase tracking-wider">相关用户</h4>
-          <div className="divide-y divide-border border-y border-border">
+          <h4 className="text-muted-foreground mb-2 px-4 text-sm font-bold uppercase tracking-wider">
+            相关用户
+          </h4>
+          <div className="divide-border border-border divide-y border-y">
             {result.users.items.map((item) => (
               <SearchResultCard key={`users-${item.id}`} type="users" data={item} query={query} />
             ))}
@@ -268,8 +264,10 @@ function renderAllBuckets(result: UnifiedSearchResult, query: string) {
 
       {result.tags.items.length > 0 && (
         <div className="pb-4">
-          <h4 className="px-4 mb-2 text-sm font-bold text-muted-foreground uppercase tracking-wider">相关标签</h4>
-          <div className="divide-y divide-border border-y border-border">
+          <h4 className="text-muted-foreground mb-2 px-4 text-sm font-bold uppercase tracking-wider">
+            相关标签
+          </h4>
+          <div className="divide-border border-border divide-y border-y">
             {result.tags.items.map((item) => (
               <SearchResultCard key={`tags-${item.id}`} type="tags" data={item} query={query} />
             ))}
@@ -279,8 +277,10 @@ function renderAllBuckets(result: UnifiedSearchResult, query: string) {
 
       {result.posts.items.length > 0 && (
         <div className="pb-4">
-          <h4 className="px-4 mb-2 text-sm font-bold text-muted-foreground uppercase tracking-wider">文章</h4>
-          <div className="divide-y divide-border border-y border-border">
+          <h4 className="text-muted-foreground mb-2 px-4 text-sm font-bold uppercase tracking-wider">
+            文章
+          </h4>
+          <div className="divide-border border-border divide-y border-y">
             {result.posts.items.map((item) => (
               <SearchResultCard key={`posts-${item.id}`} type="posts" data={item} query={query} />
             ))}
@@ -290,8 +290,10 @@ function renderAllBuckets(result: UnifiedSearchResult, query: string) {
 
       {result.activities.items.length > 0 && (
         <div className="pb-4">
-          <h4 className="px-4 mb-2 text-sm font-bold text-muted-foreground uppercase tracking-wider">动态</h4>
-          <div className="divide-y divide-border border-y border-border">
+          <h4 className="text-muted-foreground mb-2 px-4 text-sm font-bold uppercase tracking-wider">
+            动态
+          </h4>
+          <div className="divide-border border-border divide-y border-y">
             {result.activities.items.map((item) => (
               <SearchResultCard
                 key={`activities-${item.id}`}
@@ -366,11 +368,9 @@ function renderSingleBucket(
 function SearchEmptyHint() {
   return (
     <div className="py-20 text-center">
-        <Search className="text-muted-foreground mx-auto h-12 w-12 mb-4 opacity-20" />
-        <h3 className="text-lg font-semibold">准备搜索</h3>
-        <p className="text-muted-foreground text-sm mt-2">
-          输入关键词，探索感兴趣的内容
-        </p>
+      <Search className="text-muted-foreground mx-auto mb-4 h-12 w-12 opacity-20" />
+      <h3 className="text-lg font-semibold">准备搜索</h3>
+      <p className="text-muted-foreground mt-2 text-sm">输入关键词，探索感兴趣的内容</p>
     </div>
   )
 }
@@ -378,18 +378,18 @@ function SearchEmptyHint() {
 function SearchEmptyState() {
   return (
     <div className="py-20 text-center">
-        <div className="text-4xl mb-4">🦕</div>
-        <h3 className="text-lg font-semibold">未找到结果</h3>
-        <p className="text-muted-foreground text-sm mt-2">换个关键词试试看？</p>
+      <div className="mb-4 text-4xl">🦕</div>
+      <h3 className="text-lg font-semibold">未找到结果</h3>
+      <p className="text-muted-foreground mt-2 text-sm">换个关键词试试看？</p>
     </div>
   )
 }
 
 function SearchError({ message }: { message: string }) {
   return (
-    <div className="py-20 text-center text-destructive">
-        <h3 className="text-lg font-semibold">出错了</h3>
-        <p className="text-sm mt-2">{message}</p>
+    <div className="text-destructive py-20 text-center">
+      <h3 className="text-lg font-semibold">出错了</h3>
+      <p className="mt-2 text-sm">{message}</p>
     </div>
   )
 }

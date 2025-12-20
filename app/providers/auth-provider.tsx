@@ -149,7 +149,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
 
       if (setError) {
-        logger.error("同步 Supabase 客户端会话失败", { module: "AuthProvider.syncSession" }, setError)
+        logger.error(
+          "同步 Supabase 客户端会话失败",
+          { module: "AuthProvider.syncSession" },
+          setError
+        )
         return null
       }
 

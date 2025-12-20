@@ -212,9 +212,7 @@ describe("metrics-repo getMetricsTimeseries", () => {
           count: 4,
         },
       ])
-      .mockResolvedValueOnce([
-        { total: 4, min: 60, max: 120, avg: 80, p50: 70, p95: 120 },
-      ])
+      .mockResolvedValueOnce([{ total: 4, min: 60, max: 120, avg: 80, p50: 70, p95: 120 }])
       .mockResolvedValueOnce([
         {
           bucket_start: compareStart,
@@ -224,9 +222,7 @@ describe("metrics-repo getMetricsTimeseries", () => {
           count: 3,
         },
       ])
-      .mockResolvedValueOnce([
-        { total: 3, min: 50, max: 100, avg: 60, p50: 55, p95: 100 },
-      ])
+      .mockResolvedValueOnce([{ total: 3, min: 50, max: 100, avg: 60, p50: 55, p95: 100 }])
 
     const result = await getMetricsTimeseries({
       startTime,

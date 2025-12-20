@@ -98,8 +98,7 @@ async function handleLikeHandler(request: NextRequest, user: User, parsedBody?: 
 
       if (!ActivityPermissions.canLike(user, permissionSubject)) {
         const code = user.id === activity.authorId ? "CANNOT_LIKE_SELF" : "LIKE_NOT_ALLOWED"
-        const message =
-          code === "CANNOT_LIKE_SELF" ? "不能给自己的内容点赞" : "当前动态无法点赞"
+        const message = code === "CANNOT_LIKE_SELF" ? "不能给自己的内容点赞" : "当前动态无法点赞"
         return createErrorResponse(message, code, code === "CANNOT_LIKE_SELF" ? 400 : 403)
       }
     }

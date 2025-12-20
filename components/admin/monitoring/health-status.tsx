@@ -54,11 +54,11 @@ export const HealthStatus: React.FC<HealthStatusProps> = ({ status, uptime }) =>
         <div className="space-y-4">
           <div>
             <p className={cn("text-lg font-semibold", config.textColor)}>{config.label}</p>
-            <p className="text-sm text-muted-foreground">{config.description}</p>
+            <p className="text-muted-foreground text-sm">{config.description}</p>
           </div>
           <div>
-            <p className="text-sm font-medium text-foreground">运行时间</p>
-            <p className="text-sm text-muted-foreground">{formatUptime()}</p>
+            <p className="text-foreground text-sm font-medium">运行时间</p>
+            <p className="text-muted-foreground text-sm">{formatUptime()}</p>
           </div>
         </div>
       </CardContent>

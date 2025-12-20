@@ -11,36 +11,37 @@ const featurePalette = {
 
 type FeatureTheme = keyof typeof featurePalette
 
-const features: { icon: typeof BookOpen; title: string; subtitle: string; theme: FeatureTheme }[] = [
-  {
-    icon: BookOpen,
-    title: "深度文章",
-    subtitle: "每日精选技术干货",
-    theme: "article",
-  },
-  {
-    icon: Users,
-    title: "社区互动",
-    subtitle: "找到志同道合的伙伴",
-    theme: "community",
-  },
-  {
-    icon: Zap,
-    title: "即时动态",
-    subtitle: "掌握第一手资讯",
-    theme: "realtime",
-  },
-  {
-    icon: TrendingUp,
-    title: "热门话题",
-    subtitle: "大家都在讨论什么",
-    theme: "trending",
-  },
-]
+const features: { icon: typeof BookOpen; title: string; subtitle: string; theme: FeatureTheme }[] =
+  [
+    {
+      icon: BookOpen,
+      title: "深度文章",
+      subtitle: "每日精选技术干货",
+      theme: "article",
+    },
+    {
+      icon: Users,
+      title: "社区互动",
+      subtitle: "找到志同道合的伙伴",
+      theme: "community",
+    },
+    {
+      icon: Zap,
+      title: "即时动态",
+      subtitle: "掌握第一手资讯",
+      theme: "realtime",
+    },
+    {
+      icon: TrendingUp,
+      title: "热门话题",
+      subtitle: "大家都在讨论什么",
+      theme: "trending",
+    },
+  ]
 
 export function FeaturesSection() {
   return (
-    <Card className="border-none shadow-none bg-muted/30">
+    <Card className="bg-muted/30 border-none shadow-none">
       <CardHeader className="pb-2">
         <CardTitle className="text-lg font-bold">探索更多</CardTitle>
       </CardHeader>
@@ -51,7 +52,7 @@ export function FeaturesSection() {
           return (
             <div
               key={feature.title}
-              className="flex items-center gap-3 rounded-lg p-2 transition-colors hover:bg-muted/50 cursor-pointer group"
+              className="hover:bg-muted/50 group flex cursor-pointer items-center gap-3 rounded-lg p-2 transition-colors"
             >
               <div
                 className={cn(
@@ -63,8 +64,10 @@ export function FeaturesSection() {
                 <Icon className="h-5 w-5" />
               </div>
               <div>
-                <p className="font-medium leading-none group-hover:text-primary transition-colors">{feature.title}</p>
-                <p className="text-xs text-muted-foreground mt-1">{feature.subtitle}</p>
+                <p className="group-hover:text-primary font-medium leading-none transition-colors">
+                  {feature.title}
+                </p>
+                <p className="text-muted-foreground mt-1 text-xs">{feature.subtitle}</p>
               </div>
             </div>
           )

@@ -200,11 +200,7 @@ async function seedPostsAndActivities(users: any[]) {
   return { posts, activities }
 }
 
-async function seedNotifications(
-  users: any[],
-  posts: any[],
-  activities: any[]
-) {
+async function seedNotifications(users: any[], posts: any[], activities: any[]) {
   console.log("🔔 创建通知...")
 
   const notifications = []
@@ -300,14 +296,10 @@ async function seedNotifications(
     read: notifications.filter((n) => n.readAt !== null).length,
     unread: notifications.filter((n) => n.readAt === null).length,
     byType: {
-      LIKE: notifications.filter((n) => n.type === NotificationType.LIKE)
-        .length,
-      COMMENT: notifications.filter((n) => n.type === NotificationType.COMMENT)
-        .length,
-      FOLLOW: notifications.filter((n) => n.type === NotificationType.FOLLOW)
-        .length,
-      SYSTEM: notifications.filter((n) => n.type === NotificationType.SYSTEM)
-        .length,
+      LIKE: notifications.filter((n) => n.type === NotificationType.LIKE).length,
+      COMMENT: notifications.filter((n) => n.type === NotificationType.COMMENT).length,
+      FOLLOW: notifications.filter((n) => n.type === NotificationType.FOLLOW).length,
+      SYSTEM: notifications.filter((n) => n.type === NotificationType.SYSTEM).length,
     },
   }
 

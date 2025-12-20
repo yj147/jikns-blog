@@ -45,7 +45,11 @@ const generateToken = (): TokenPair => {
   }
 }
 
-async function sendVerificationEmail(input: { email: string; token: string; unsubscribeToken: string }) {
+async function sendVerificationEmail(input: {
+  email: string
+  token: string
+  unsubscribeToken: string
+}) {
   const verificationLink = `${APP_URL}/api/subscribe/verify?token=${input.token}`
   const unsubscribeLink = `${APP_URL}/api/subscribe/unsubscribe?token=${input.unsubscribeToken}`
 
@@ -100,7 +104,11 @@ export async function createSubscription(email: string, userId?: string) {
     unsubscribeToken: unsubscribeToken.token,
   })
 
-  return { subscriber, verificationToken: verifyToken.token, unsubscribeToken: unsubscribeToken.token }
+  return {
+    subscriber,
+    verificationToken: verifyToken.token,
+    unsubscribeToken: unsubscribeToken.token,
+  }
 }
 
 export async function verifySubscription(token: string) {

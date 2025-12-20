@@ -10,12 +10,7 @@ import { AuthError } from "@/lib/error-handling/auth-error"
 import { mergeSupabaseUserMetadata } from "@/lib/auth/supabase-metadata"
 import { createServiceRoleClient } from "@/lib/supabase"
 import { apiLogger } from "@/lib/utils/logger"
-import {
-  auditLogger,
-  AuditEventType,
-  getClientIP,
-  getClientUserAgent,
-} from "@/lib/audit-log"
+import { auditLogger, AuditEventType, getClientIP, getClientUserAgent } from "@/lib/audit-log"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 type AdminUser = PolicyUserMap["admin"]
@@ -110,8 +105,7 @@ async function handlePost(
       ? (parsedBody as RolePayload).role
       : undefined
 
-  const normalizedRole =
-    typeof roleInput === "string" ? roleInput.trim().toUpperCase() : null
+  const normalizedRole = typeof roleInput === "string" ? roleInput.trim().toUpperCase() : null
 
   if (!normalizedRole || !VALID_ROLES.includes(normalizedRole as RoleValue)) {
     apiLogger.warn("admin role update invalid role", {

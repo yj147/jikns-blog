@@ -129,9 +129,7 @@ describe("认证中间件测试", () => {
 
     it("应该拒绝被封禁用户访问认证路径", async () => {
       setCurrentTestUser("bannedUser")
-      ;(mockPrisma.user.findUnique as any).mockResolvedValue(
-        TEST_USERS.bannedUser as any
-      )
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(TEST_USERS.bannedUser as any)
 
       const request = createTestRequest("/profile")
       const response = await middleware(request as NextRequest)
@@ -162,9 +160,7 @@ describe("认证中间件测试", () => {
 
     it.each(adminPaths)("应该拒绝普通用户访问管理路径: %s", async (path) => {
       setCurrentTestUser("user")
-      ;(mockPrisma.user.findUnique as any).mockResolvedValue(
-        TEST_USERS.user as any
-      )
+      ;(mockPrisma.user.findUnique as any).mockResolvedValue(TEST_USERS.user as any)
 
       const request = createTestRequest(path)
       const response = await middleware(request as NextRequest)
@@ -365,7 +361,9 @@ describe("认证中间件测试", () => {
   describe("错误处理", () => {
     it("应该处理数据库查询错误", async () => {
       setCurrentTestUser("user")
-      ;(mockPrisma.user.findUnique as any).mockRejectedValue(new Error("Database connection failed"))
+      ;(mockPrisma.user.findUnique as any).mockRejectedValue(
+        new Error("Database connection failed")
+      )
 
       const request = createTestRequest("/profile")
       const response = await middleware(request as NextRequest)
@@ -518,7 +516,9 @@ describe("认证中间件测试", () => {
   describe("中间件配置测试", () => {
     it("应该匹配配置的路径模式", () => {
       expect(middlewareConfig.matcher).toBeDefined()
-      expect(Array.isArray(middlewareConfig.matcher) || typeof middlewareConfig.matcher === "string").toBe(true)
+      expect(
+        Array.isArray(middlewareConfig.matcher) || typeof middlewareConfig.matcher === "string"
+      ).toBe(true)
 
       // 检查是否排除了静态文件
       const matcher = Array.isArray(middlewareConfig.matcher)

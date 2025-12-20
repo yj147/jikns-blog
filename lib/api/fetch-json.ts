@@ -37,7 +37,7 @@ const ERROR_MESSAGES: Record<number, string> = {
   500: "服务器错误，请稍后重试",
 }
 
-/** 
+/**
  * 统一的 fetch 封装
  */
 export async function fetchJson<T = any>(url: string, options: FetchOptions = {}): Promise<T> {

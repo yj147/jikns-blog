@@ -88,7 +88,10 @@ async function loadActor(userId: string): Promise<AuthenticatedUser> {
   return actor
 }
 
-async function loadLikeTarget(targetType: LikeTargetType, targetId: string): Promise<LikeTargetInfo> {
+async function loadLikeTarget(
+  targetType: LikeTargetType,
+  targetId: string
+): Promise<LikeTargetInfo> {
   if (targetType === "post") {
     const post = await prisma.post.findFirst({
       where: {

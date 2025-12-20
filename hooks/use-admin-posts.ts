@@ -25,7 +25,7 @@ interface ApiPostItem {
   published: boolean
   isPinned: boolean
   coverImage: string | null
-   signedCoverImage?: string | null
+  signedCoverImage?: string | null
   viewCount: number
   createdAt: string
   publishedAt: string | null
@@ -163,16 +163,22 @@ export function useAdminPosts() {
 
   const endpoint = useMemo(() => `/api/admin/posts?${queryString}`, [queryString])
 
-  const { data, error: swrError, isLoading, isValidating, mutate } = useSWR<AdminPostsApiResponse>(
-    endpoint,
-    fetchAdminPosts,
-    {
-      revalidateOnMount: true,
-      dedupingInterval: 5000,
-    }
-  )
+  const {
+    data,
+    error: swrError,
+    isLoading,
+    isValidating,
+    mutate,
+  } = useSWR<AdminPostsApiResponse>(endpoint, fetchAdminPosts, {
+    revalidateOnMount: true,
+    dedupingInterval: 5000,
+  })
 
-  const swrErrorMessage = swrError ? (swrError instanceof Error ? swrError.message : String(swrError)) : null
+  const swrErrorMessage = swrError
+    ? swrError instanceof Error
+      ? swrError.message
+      : String(swrError)
+    : null
 
   useEffect(() => {
     if (!swrErrorMessage) return

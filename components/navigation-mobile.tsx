@@ -7,7 +7,14 @@ import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/app/providers/auth-provider"
@@ -27,10 +34,17 @@ export default function MobileNavigation() {
           <span className="sr-only">打开导航菜单</span>
         </Button>
       </SheetTrigger>
-      <SheetContent id="mobile-navigation" side="left" className="max-w-xs gap-0 border-r p-0 sm:max-w-sm" aria-label="移动端导航抽屉">
+      <SheetContent
+        id="mobile-navigation"
+        side="left"
+        className="max-w-xs gap-0 border-r p-0 sm:max-w-sm"
+        aria-label="移动端导航抽屉"
+      >
         <SheetHeader className="border-b px-4 py-3 text-left">
           <SheetTitle className="text-base">导航菜单</SheetTitle>
-          <SheetDescription className="text-muted-foreground text-sm">快速访问博客、动态和账号设置</SheetDescription>
+          <SheetDescription className="text-muted-foreground text-sm">
+            快速访问博客、动态和账号设置
+          </SheetDescription>
         </SheetHeader>
 
         <div className="flex h-full flex-col gap-5 overflow-y-auto px-4 py-4">
@@ -45,10 +59,10 @@ export default function MobileNavigation() {
                   onClick={() => setIsOpen(false)}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "flex items-center gap-3 rounded-lg border px-3 py-2 text-base font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    "focus-visible:ring-ring flex items-center gap-3 rounded-lg border px-3 py-2 text-base font-medium transition focus-visible:outline-none focus-visible:ring-2",
                     isActive
                       ? "border-primary bg-primary/10 text-primary"
-                      : "border-transparent text-foreground hover:border-muted hover:bg-muted/60"
+                      : "text-foreground hover:border-muted hover:bg-muted/60 border-transparent"
                   )}
                 >
                   <Icon className="h-4 w-4" />
@@ -83,7 +97,13 @@ function MobileUserSection({ closeSheet }: { closeSheet: () => void }) {
       <div className="space-y-3">
         <p className="text-muted-foreground text-sm">登录后可访问通知与个人设置</p>
         <div className="grid gap-2">
-          <Button asChild variant="secondary" size="lg" className="justify-start gap-2" onClick={closeSheet}>
+          <Button
+            asChild
+            variant="secondary"
+            size="lg"
+            className="justify-start gap-2"
+            onClick={closeSheet}
+          >
             <Link href="/login">
               <LogIn className="h-4 w-4" /> 登录
             </Link>
@@ -140,7 +160,12 @@ function MobileUserSection({ closeSheet }: { closeSheet: () => void }) {
           </Link>
         </Button>
         {user.role === "ADMIN" && (
-          <Button asChild variant="ghost" className="justify-start gap-2 text-blue-600 hover:text-blue-700" onClick={closeSheet}>
+          <Button
+            asChild
+            variant="ghost"
+            className="justify-start gap-2 text-blue-600 hover:text-blue-700"
+            onClick={closeSheet}
+          >
             <Link href="/admin">
               <Shield className="h-4 w-4" /> 管理后台
             </Link>

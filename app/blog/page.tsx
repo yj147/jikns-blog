@@ -94,69 +94,67 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
   return (
     <div className="bg-background min-h-screen">
       <div className="container mx-auto grid grid-cols-1 gap-8 px-4 py-6 lg:grid-cols-12">
-        
         {/* Main Feed Column */}
         <main className="col-span-1 lg:col-span-8">
-            {/* Sticky Header */}
-            <div className="sticky top-16 z-30 mb-0 border-b border-border bg-background/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex items-center justify-between">
-                    <h1 className="text-xl font-bold flex items-center gap-2">
-                        <Newspaper className="h-5 w-5 text-primary" />
-                        {q ? `搜索: ${q}` : tag ? `标签: ${tag}` : "博客动态"}
-                    </h1>
-                     {/* Mobile Search Toggle or simple info could go here */}
-                     <span className="text-xs text-muted-foreground font-medium">
-                         {pagination.total} 篇文章
-                     </span>
-                </div>
-                
-                {/* Compact Filter Bar */}
-                 <div className="mt-4">
-                    <Suspense fallback={<div className="h-10 animate-pulse bg-muted rounded" />}>
-                        <BlogSearchFilter className="" popularTags={popularTags} />
-                    </Suspense>
-                </div>
+          {/* Sticky Header */}
+          <div className="border-border bg-background/95 supports-[backdrop-filter]:bg-background/60 sticky top-16 z-30 mb-0 border-b px-4 py-4 backdrop-blur">
+            <div className="flex items-center justify-between">
+              <h1 className="flex items-center gap-2 text-xl font-bold">
+                <Newspaper className="text-primary h-5 w-5" />
+                {q ? `搜索: ${q}` : tag ? `标签: ${tag}` : "博客动态"}
+              </h1>
+              {/* Mobile Search Toggle or simple info could go here */}
+              <span className="text-muted-foreground text-xs font-medium">
+                {pagination.total} 篇文章
+              </span>
             </div>
 
-            {/* Posts Feed */}
-            <div className="min-h-[50vh]">
-              <BlogListClient
-                initialPosts={posts}
-                initialPagination={{
-                  total: pagination.total,
-                  hasNext: pagination.hasNext,
-                  nextCursor: pagination.hasNext ? String((pagination.page ?? 1) + 1) : null,
-                }}
-                searchQuery={q || undefined}
-                tagFilter={tag || undefined}
-                sortBy={sort || undefined}
-              />
+            {/* Compact Filter Bar */}
+            <div className="mt-4">
+              <Suspense fallback={<div className="bg-muted h-10 animate-pulse rounded" />}>
+                <BlogSearchFilter className="" popularTags={popularTags} />
+              </Suspense>
             </div>
+          </div>
+
+          {/* Posts Feed */}
+          <div className="min-h-[50vh]">
+            <BlogListClient
+              initialPosts={posts}
+              initialPagination={{
+                total: pagination.total,
+                hasNext: pagination.hasNext,
+                nextCursor: pagination.hasNext ? String((pagination.page ?? 1) + 1) : null,
+              }}
+              searchQuery={q || undefined}
+              tagFilter={tag || undefined}
+              sortBy={sort || undefined}
+            />
+          </div>
         </main>
 
         {/* Sidebar Column */}
         <aside className="hidden lg:col-span-4 lg:block">
           <div className="sticky top-24 space-y-6">
-            
             {/* Tags Widget */}
-            <Card className="border-none bg-muted/30 shadow-none">
-                <CardHeader className="pb-3">
-                    <CardTitle className="text-base font-bold flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-purple-500" />
-                        热门话题
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <TagFilter
-                        className="shadow-none p-0"
-                        limit={popularTags?.length ?? 12}
-                        initialTags={popularTags}
-                    />
-                </CardContent>
+            <Card className="bg-muted/30 border-none shadow-none">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base font-bold">
+                  <Sparkles className="h-4 w-4 text-purple-500" />
+                  热门话题
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <TagFilter
+                  className="p-0 shadow-none"
+                  limit={popularTags?.length ?? 12}
+                  initialTags={popularTags}
+                />
+              </CardContent>
             </Card>
 
             {/* Newsletter Widget */}
-            <Card className="border-none bg-muted/30 shadow-none">
+            <Card className="bg-muted/30 border-none shadow-none">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-bold">订阅更新</CardTitle>
               </CardHeader>
@@ -164,25 +162,34 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
                 <div className="space-y-3">
                   <Input placeholder="your@email.com" type="email" className="bg-background" />
                   <Button className="w-full font-bold">订阅周刊</Button>
-                  <p className="text-xs text-muted-foreground text-center">
-                      每周一发送，随时取消订阅
+                  <p className="text-muted-foreground text-center text-xs">
+                    每周一发送，随时取消订阅
                   </p>
                 </div>
               </CardContent>
             </Card>
 
-             {/* Footer Links */}
-             <div className="px-4 text-xs text-muted-foreground">
-                <div className="flex flex-wrap gap-2">
-                    <Link href="#" className="hover:underline">关于</Link>
-                    <Link href="#" className="hover:underline">帮助</Link>
-                    <Link href="#" className="hover:underline">API</Link>
-                    <Link href="#" className="hover:underline">隐私</Link>
-                    <Link href="#" className="hover:underline">条款</Link>
-                </div>
-                <p className="mt-2">&copy; 2025 现代博客平台</p>
-             </div>
-
+            {/* Footer Links */}
+            <div className="text-muted-foreground px-4 text-xs">
+              <div className="flex flex-wrap gap-2">
+                <Link href="#" className="hover:underline">
+                  关于
+                </Link>
+                <Link href="#" className="hover:underline">
+                  帮助
+                </Link>
+                <Link href="#" className="hover:underline">
+                  API
+                </Link>
+                <Link href="#" className="hover:underline">
+                  隐私
+                </Link>
+                <Link href="#" className="hover:underline">
+                  条款
+                </Link>
+              </div>
+              <p className="mt-2">&copy; 2025 现代博客平台</p>
+            </div>
           </div>
         </aside>
       </div>

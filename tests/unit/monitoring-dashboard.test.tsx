@@ -41,9 +41,10 @@ vi.mock("recharts", () => {
 })
 
 vi.mock("@/components/ui/select", () => {
-  const SelectItem: React.FC<{ value: string; children: React.ReactNode }> = ({ value, children }) => (
-    <option value={value}>{children}</option>
-  )
+  const SelectItem: React.FC<{ value: string; children: React.ReactNode }> = ({
+    value,
+    children,
+  }) => <option value={value}>{children}</option>
 
   const flattenOptions = (children: React.ReactNode): React.ReactNode[] =>
     React.Children.toArray(children).flatMap((child: any) => {

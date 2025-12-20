@@ -60,28 +60,18 @@ async function handleGet(request: NextRequest) {
     const parsed = activityQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams))
     if (!parsed.success) {
       const issue = parsed.error.issues[0]
-      return createErrorResponse(
-        ErrorCode.VALIDATION_ERROR,
-        issue?.message || "参数验证失败",
-        {
-          field: issue?.path?.join("."),
-        }
-      )
+      return createErrorResponse(ErrorCode.VALIDATION_ERROR, issue?.message || "参数验证失败", {
+        field: issue?.path?.join("."),
+      })
     }
 
     const queryParams = parsed.data as ActivityQueryParams
 
     if (queryParams.orderBy === "following" && !viewer) {
-      return createErrorResponse(
-        ErrorCode.UNAUTHORIZED,
-        "请先登录后再查看关注动态",
-        undefined,
-        401
-      )
+      return createErrorResponse(ErrorCode.UNAUTHORIZED, "请先登录后再查看关注动态", undefined, 401)
     }
 
-    const followingUserId =
-      queryParams.orderBy === "following" && viewer ? viewer.id : undefined
+    const followingUserId = queryParams.orderBy === "following" && viewer ? viewer.id : undefined
 
     const fixtureParam = request.nextUrl.searchParams.get("__fixture")
     const envFixture = process.env.ACTIVITY_API_FIXTURE || null
@@ -102,8 +92,7 @@ async function handleGet(request: NextRequest) {
         limit: queryParams.limit,
         page: queryParams.page,
         cursor: queryParams.cursor || null,
-        hasImages:
-          typeof queryParams.hasImages === "boolean" ? queryParams.hasImages : null,
+        hasImages: typeof queryParams.hasImages === "boolean" ? queryParams.hasImages : null,
         isPinned: typeof queryParams.isPinned === "boolean" ? queryParams.isPinned : null,
         orderBy: queryParams.orderBy,
       })
@@ -175,7 +164,12 @@ async function handlePost(request: NextRequest) {
     }
 
     if (user.status !== "ACTIVE") {
-      return createErrorResponse(ErrorCode.ACCOUNT_BANNED, "账户状态异常，请联系管理员", undefined, 403)
+      return createErrorResponse(
+        ErrorCode.ACCOUNT_BANNED,
+        "账户状态异常，请联系管理员",
+        undefined,
+        403
+      )
     }
 
     const ipAddress = getClientIP(request) ?? undefined
@@ -197,13 +191,9 @@ async function handlePost(request: NextRequest) {
     const parsed = activityCreateSchema.safeParse(body)
     if (!parsed.success) {
       const issue = parsed.error.issues[0]
-      return createErrorResponse(
-        ErrorCode.VALIDATION_ERROR,
-        issue?.message || "参数验证失败",
-        {
-          field: issue?.path?.join("."),
-        }
-      )
+      return createErrorResponse(ErrorCode.VALIDATION_ERROR, issue?.message || "参数验证失败", {
+        field: issue?.path?.join("."),
+      })
     }
 
     const viewer = toAuthenticatedUser(user)!
@@ -316,12 +306,7 @@ async function handleDelete(request: NextRequest) {
   const activityId = request.nextUrl.searchParams.get("id")?.trim()
 
   if (!activityId) {
-    return createErrorResponse(
-      ErrorCode.VALIDATION_ERROR,
-      "缺少动态ID",
-      { field: "id" },
-      400
-    )
+    return createErrorResponse(ErrorCode.VALIDATION_ERROR, "缺少动态ID", { field: "id" }, 400)
   }
 
   try {
@@ -465,7 +450,9 @@ async function handleDelete(request: NextRequest) {
   }
 }
 
-function toAuthenticatedUser(user: Awaited<ReturnType<typeof getCurrentUser>>): AuthenticatedUser | null {
+function toAuthenticatedUser(
+  user: Awaited<ReturnType<typeof getCurrentUser>>
+): AuthenticatedUser | null {
   if (!user) return null
 
   return {

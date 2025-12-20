@@ -10,29 +10,29 @@
 
 ### P0: 功能验证 (2025-12-02)
 
-| 功能 | 状态 | 备注 |
-|------|------|------|
-| Email Subscription | ✅ | RLS 补丁已添加 |
-| Realtime Hardening | ✅ | 轮询降级已实现 |
-| Security RLS | ✅ | post-images 签名 URL 强制 |
-| Notifications 约束 | ✅ | 恰好一个目标 |
+| 功能               | 状态 | 备注                      |
+| ------------------ | ---- | ------------------------- |
+| Email Subscription | ✅   | RLS 补丁已添加            |
+| Realtime Hardening | ✅   | 轮询降级已实现            |
+| Security RLS       | ✅   | post-images 签名 URL 强制 |
+| Notifications 约束 | ✅   | 恰好一个目标              |
 
 ### P1: Bug 修复 (2025-12-02)
 
-| Bug | 状态 | 修复文件 |
-|-----|------|----------|
-| 社交链接只显示标签 | ✅ | `app/profile/page.tsx` |
-| Activity 点赞无通知 | ✅ | `lib/interactions/like.ts` |
-| Follow 通知验证 | ✅ | `tests/integration/follow-notifications.test.ts` |
+| Bug                 | 状态 | 修复文件                                         |
+| ------------------- | ---- | ------------------------------------------------ |
+| 社交链接只显示标签  | ✅   | `app/profile/page.tsx`                           |
+| Activity 点赞无通知 | ✅   | `lib/interactions/like.ts`                       |
+| Follow 通知验证     | ✅   | `tests/integration/follow-notifications.test.ts` |
 
 ### P2: 测试稳定性 (2025-12-03)
 
-| 问题 | 状态 | 解决方案 |
-|------|------|----------|
-| Node 22 + tinypool 崩溃 | ✅ | pool=threads, singleThread |
-| 内存溢出 | ✅ | 分片执行脚本 |
-| Logger mock 问题 | ✅ | 统一 mock 工厂 |
-| email-auth.test.ts 语法 | ✅ | mockPrisma 修复 |
+| 问题                    | 状态 | 解决方案                   |
+| ----------------------- | ---- | -------------------------- |
+| Node 22 + tinypool 崩溃 | ✅   | pool=threads, singleThread |
+| 内存溢出                | ✅   | 分片执行脚本               |
+| Logger mock 问题        | ✅   | 统一 mock 工厂             |
+| email-auth.test.ts 语法 | ✅   | mockPrisma 修复            |
 
 ## 测试状态
 
@@ -92,12 +92,12 @@ tests/integration/cron-auth.test.ts
 
 ## 技术债务
 
-| 项目 | 优先级 | 状态 |
-|------|--------|------|
-| TODO: 集成外部报警系统 | 低 | 待定 |
-| TODO: CSRF token 验证 | 中 | 待定 |
-| 3 个不稳定测试被排除 | 中 | 待修复 |
-| tests_disabled 认证测试 | 低 | 评估后保留 |
+| 项目                    | 优先级 | 状态       |
+| ----------------------- | ------ | ---------- |
+| TODO: 集成外部报警系统  | 低     | 待定       |
+| TODO: CSRF token 验证   | 中     | 待定       |
+| 3 个不稳定测试被排除    | 中     | 待修复     |
+| tests_disabled 认证测试 | 低     | 评估后保留 |
 
 ## 运行命令
 

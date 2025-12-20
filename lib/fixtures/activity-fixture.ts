@@ -84,9 +84,9 @@ function buildDemoActivity(
     id: overrides.id ?? `demo-activity-${sequence}`,
     authorId: overrides.authorId ?? `demo-author-${sequence}`,
     content: overrides.content,
-    imageUrls: overrides.imageUrls ?? (sequence % 3 === 0 ? [
-      `https://picsum.photos/seed/demo-${sequence}/960/540`,
-    ] : []),
+    imageUrls:
+      overrides.imageUrls ??
+      (sequence % 3 === 0 ? [`https://picsum.photos/seed/demo-${sequence}/960/540`] : []),
     isPinned: overrides.isPinned ?? sequence === 1,
     likesCount: overrides.likesCount ?? sequence * 3,
     commentsCount: overrides.commentsCount ?? Math.max(0, sequence - 4),
@@ -149,7 +149,9 @@ export function getActivityFixture(query: FixtureQuery): FixtureResult {
 
   // 简单的排序模拟
   if (query.orderBy === "trending") {
-    dataset = [...dataset].sort((a, b) => b.likesCount - a.likesCount || b.viewsCount - a.viewsCount)
+    dataset = [...dataset].sort(
+      (a, b) => b.likesCount - a.likesCount || b.viewsCount - a.viewsCount
+    )
   } else {
     dataset = [...dataset].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   }

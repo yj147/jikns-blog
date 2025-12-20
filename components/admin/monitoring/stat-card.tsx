@@ -50,7 +50,9 @@ export const StatCard: React.FC<StatCardProps> = ({
               <p className="text-xs text-gray-500 dark:text-gray-400">{description}</p>
             )}
           </div>
-          <div className={cn("rounded-full bg-gray-100 p-3 dark:bg-gray-800", statusColors[status])}>
+          <div
+            className={cn("rounded-full bg-gray-100 p-3 dark:bg-gray-800", statusColors[status])}
+          >
             <Icon className="h-6 w-6" />
           </div>
         </div>

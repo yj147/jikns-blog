@@ -50,7 +50,9 @@ const postHandler = withApiAuth(async (request: NextRequest, user: User) => {
           })
           if (deletable.length === 0) return 0
 
-          const activeIds = deletable.filter((item) => item.deletedAt === null).map((item) => item.id)
+          const activeIds = deletable
+            .filter((item) => item.deletedAt === null)
+            .map((item) => item.id)
           if (activeIds.length > 0) {
             await adjustTagActivitiesCountForActivities(tx, activeIds, "decrement")
           }

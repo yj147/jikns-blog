@@ -3,15 +3,12 @@ import { NotificationType } from "@/lib/generated/prisma"
 
 export const notificationTypeSchema = z.nativeEnum(NotificationType)
 
-const nullableDateSchema = z.preprocess(
-  (value) => {
-    if (value === null || value === undefined) {
-      return value
-    }
-    return new Date(value as any)
-  },
-  z.date().nullable().optional()
-)
+const nullableDateSchema = z.preprocess((value) => {
+  if (value === null || value === undefined) {
+    return value
+  }
+  return new Date(value as any)
+}, z.date().nullable().optional())
 
 const requiredDateSchema = z.preprocess((value) => new Date(value as any), z.date())
 

@@ -54,6 +54,5 @@ test.describe("Activity feed (real data)", () => {
 
     await expect(page.getByText("没有找到匹配的动态")).toBeVisible()
     await expect(page.getByText(/当前搜索/)).toContainText(SEARCH_TERM)
-
   })
 })

@@ -87,7 +87,7 @@ export function ProfileLikesTab({ userId }: ProfileLikesTabProps) {
       <div className="space-y-6">
         {[...Array(3)].map((_, index) => (
           <Card key={index} className="animate-pulse">
-            <CardContent className="pt-6 space-y-4">
+            <CardContent className="space-y-4 pt-6">
               <div className="bg-muted h-4 w-24 rounded" />
               <div className="bg-muted h-3 w-16 rounded" />
               <div className="bg-muted h-24 w-full rounded" />

@@ -93,10 +93,7 @@ export async function reconcileTagActivitiesCount(): Promise<{
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
   const outputDir = await ensureMonitoringDir()
-  const outputPath = path.join(
-    outputDir,
-    `tag-activities-count-reconciliation-${timestamp}.json`
-  )
+  const outputPath = path.join(outputDir, `tag-activities-count-reconciliation-${timestamp}.json`)
 
   const report = {
     generatedAt: new Date().toISOString(),
@@ -147,6 +144,5 @@ async function main() {
 
 if (process.env.NODE_ENV !== "test") {
   // 避免在测试环境下自动执行，便于单元测试覆盖
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
-  main()
+  void main()
 }

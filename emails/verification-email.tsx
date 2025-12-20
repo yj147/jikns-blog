@@ -1,5 +1,15 @@
 import * as React from "react"
-import { Body, Button, Container, Head, Heading, Html, Link, Preview, Text } from "@react-email/components"
+import {
+  Body,
+  Button,
+  Container,
+  Head,
+  Heading,
+  Html,
+  Link,
+  Preview,
+  Text,
+} from "@react-email/components"
 
 export interface VerificationEmailProps {
   verificationLink: string

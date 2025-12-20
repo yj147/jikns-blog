@@ -8,21 +8,21 @@ import { NotificationList } from "@/components/notifications/notification-list"
 import { NotificationType } from "@/lib/generated/prisma"
 import type { NotificationView } from "@/components/notifications/types"
 
-const useSWRMock = vi.hoisted(() => vi.fn())
-const useSWRInfiniteMock = vi.hoisted(() => vi.fn())
+const swrMock = vi.hoisted(() => vi.fn())
+const swrInfiniteMock = vi.hoisted(() => vi.fn())
 const fetchJsonMock = vi.hoisted(() => vi.fn())
-const useAuthMock = vi.hoisted(() => vi.fn())
+const authMock = vi.hoisted(() => vi.fn())
 const toastMock = vi.hoisted(() => vi.fn())
 const routerPushMock = vi.hoisted(() => vi.fn())
 
 vi.mock("swr", () => ({
   __esModule: true,
-  default: (...args: any[]) => useSWRMock(...args),
+  default: (...args: any[]) => swrMock(...args),
 }))
 
 vi.mock("swr/infinite", () => ({
   __esModule: true,
-  default: (...args: any[]) => useSWRInfiniteMock(...args),
+  default: (...args: any[]) => swrInfiniteMock(...args),
 }))
 
 vi.mock("next/navigation", () => ({
@@ -39,7 +39,7 @@ vi.mock("next/navigation", () => ({
 }))
 
 vi.mock("@/hooks/use-auth", () => ({
-  useAuth: () => useAuthMock(),
+  useAuth: () => authMock(),
 }))
 
 vi.mock("@/components/ui/use-toast", () => ({
@@ -125,11 +125,11 @@ afterAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  useSWRMock.mockReset()
-  useSWRInfiniteMock.mockReset()
+  swrMock.mockReset()
+  swrInfiniteMock.mockReset()
   fetchJsonMock.mockReset()
-  useAuthMock.mockReset()
-  useAuthMock.mockReturnValue({ user: { id: "user-1" }, loading: false, supabase: undefined })
+  authMock.mockReset()
+  authMock.mockReturnValue({ user: { id: "user-1" }, loading: false, supabase: undefined })
   toastMock.mockReset()
   routerPushMock.mockReset()
   MockIntersectionObserver.instances = []
@@ -157,7 +157,9 @@ describe("NotificationItem", () => {
     expect(unreadCard.className).toContain("bg-primary/5")
 
     const { container: readContainer } = render(
-      <NotificationItem notification={createNotification({ id: "r", readAt: "2025-01-02T00:00:00Z" })} />
+      <NotificationItem
+        notification={createNotification({ id: "r", readAt: "2025-01-02T00:00:00Z" })}
+      />
     )
     const readCard = readContainer.querySelector('[data-slot="card"]')!
     expect(readCard.className).not.toContain("bg-primary/5")
@@ -165,7 +167,12 @@ describe("NotificationItem", () => {
 
   it("点击按钮触发已读回调", async () => {
     const onMarkRead = vi.fn()
-    render(<NotificationItem notification={createNotification({ id: "target" })} onMarkRead={onMarkRead} />)
+    render(
+      <NotificationItem
+        notification={createNotification({ id: "target" })}
+        onMarkRead={onMarkRead}
+      />
+    )
 
     await userEvent.click(screen.getByRole("button", { name: "标记已读" }))
 
@@ -203,7 +210,9 @@ describe("NotificationItem", () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2025-01-02T00:00:00Z"))
 
-    render(<NotificationItem notification={createNotification({ createdAt: "2025-01-01T00:00:00Z" })} />)
+    render(
+      <NotificationItem notification={createNotification({ createdAt: "2025-01-01T00:00:00Z" })} />
+    )
 
     expect(screen.getByText(/前/)).toBeInTheDocument()
   })
@@ -231,8 +240,8 @@ describe("NotificationBell", () => {
   }
 
   const renderBell = () => {
-    useAuthMock.mockReturnValue({ user: { id: "user-1" }, loading: false })
-    useSWRMock.mockReturnValue({
+    authMock.mockReturnValue({ user: { id: "user-1" }, loading: false })
+    swrMock.mockReturnValue({
       data: bellData,
       isLoading: false,
       mutate: vi.fn(),
@@ -248,8 +257,8 @@ describe("NotificationBell", () => {
   })
 
   it("无未读时不显示角标", () => {
-    useAuthMock.mockReturnValue({ user: { id: "user-1" }, loading: false })
-    useSWRMock.mockReturnValue({
+    authMock.mockReturnValue({ user: { id: "user-1" }, loading: false })
+    swrMock.mockReturnValue({
       data: { ...bellData, data: { ...bellData.data, unreadCount: 0, filteredUnreadCount: 0 } },
       isLoading: false,
       mutate: vi.fn(),
@@ -266,7 +275,7 @@ describe("NotificationBell", () => {
     const trigger = screen.getByRole("button")
     await userEvent.click(trigger)
 
-    const content = screen.getByText("通知").closest("[data-slot=\"dropdown-menu-content\"]")
+    const content = screen.getByText("通知").closest('[data-slot="dropdown-menu-content"]')
     await waitFor(() => {
       expect(content).toHaveAttribute("data-state", "open")
     })
@@ -286,7 +295,7 @@ describe("NotificationBell", () => {
     renderBell()
 
     await userEvent.click(screen.getByRole("button"))
-    const content = screen.getByText("通知").closest("[data-slot=\"dropdown-menu-content\"]")!
+    const content = screen.getByText("通知").closest('[data-slot="dropdown-menu-content"]')!
     await waitFor(() => expect(content).toHaveAttribute("data-state", "open"))
 
     await userEvent.click(screen.getByText("Alice"))
@@ -312,8 +321,15 @@ describe("NotificationList", () => {
     success: true,
     data: {
       items: [
-        createNotification({ id: "a", actor: { id: "actor-a", name: "Alice", avatarUrl: null, email: null } }),
-        createNotification({ id: "b", type: NotificationType.COMMENT, actor: { id: "actor-b", name: "Bob", avatarUrl: null, email: null } }),
+        createNotification({
+          id: "a",
+          actor: { id: "actor-a", name: "Alice", avatarUrl: null, email: null },
+        }),
+        createNotification({
+          id: "b",
+          type: NotificationType.COMMENT,
+          actor: { id: "actor-b", name: "Bob", avatarUrl: null, email: null },
+        }),
       ],
       pagination: { ...basePagination, hasMore: true, nextCursor: "cursor-2" },
       unreadCount: 2,
@@ -322,7 +338,7 @@ describe("NotificationList", () => {
   }
 
   it("无数据时显示空状态", () => {
-    useSWRInfiniteMock.mockReturnValue({
+    swrInfiniteMock.mockReturnValue({
       data: [
         {
           success: true,
@@ -343,7 +359,7 @@ describe("NotificationList", () => {
   })
 
   it("渲染通知列表", () => {
-    useSWRInfiniteMock.mockReturnValue({
+    swrInfiniteMock.mockReturnValue({
       data: [basePage],
       error: null,
       isLoading: false,
@@ -362,7 +378,7 @@ describe("NotificationList", () => {
   it("切换过滤器时重置列表", async () => {
     const mutate = vi.fn()
     const setSize = vi.fn()
-    useSWRInfiniteMock.mockReturnValue({
+    swrInfiniteMock.mockReturnValue({
       data: [basePage],
       error: null,
       isLoading: false,
@@ -382,7 +398,7 @@ describe("NotificationList", () => {
 
   it("IntersectionObserver 触发加载更多", () => {
     const setSize = vi.fn()
-    useSWRInfiniteMock.mockReturnValue({
+    swrInfiniteMock.mockReturnValue({
       data: [basePage],
       error: null,
       isLoading: false,
@@ -412,7 +428,7 @@ describe("NotificationList", () => {
       mutate: vi.fn(),
     }
 
-    useSWRInfiniteMock.mockImplementation((keyFn) => {
+    swrInfiniteMock.mockImplementation((keyFn) => {
       keyFns.push(keyFn)
       return state
     })
@@ -430,7 +446,7 @@ describe("NotificationList", () => {
 
   it("全部已读按钮调用接口并刷新", async () => {
     const mutate = vi.fn()
-    useSWRInfiniteMock.mockReturnValue({
+    swrInfiniteMock.mockReturnValue({
       data: [
         {
           ...basePage,
@@ -470,7 +486,7 @@ describe("NotificationList", () => {
   })
 
   it("初次加载时展示加载提示", () => {
-    useSWRInfiniteMock.mockReturnValue({
+    swrInfiniteMock.mockReturnValue({
       data: undefined,
       error: null,
       isLoading: true,

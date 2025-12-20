@@ -94,9 +94,9 @@ describe("notification service", () => {
   describe("notify", () => {
     it("throws when actorId is missing", async () => {
       // @ts-expect-error 允许故意传入不合法数据以覆盖异常分支
-      await expect(notify("recipient-1", NotificationType.LIKE, { actorId: undefined })).rejects.toThrow(
-        "actorId is required to create notification"
-      )
+      await expect(
+        notify("recipient-1", NotificationType.LIKE, { actorId: undefined })
+      ).rejects.toThrow("actorId is required to create notification")
       expect(notificationCreate).not.toHaveBeenCalled()
     })
 

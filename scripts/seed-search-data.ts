@@ -13,7 +13,7 @@ async function main() {
         description: `Description for tag ${i + 1}`,
         color: `#${Math.floor(Math.random() * 16777215).toString(16)}`,
         postsCount: 0,
-      }
+      },
     })
   )
   const tags = await Promise.all(tagPromises)
@@ -30,7 +30,7 @@ async function main() {
         published: true,
         publishedAt: new Date(Date.now() - i * 86400000),
         authorId: admin.id,
-      }
+      },
     })
   )
   const posts = await Promise.all(postPromises)
@@ -43,7 +43,7 @@ async function main() {
         content: `Search test activity ${i + 1} with various keywords`,
         authorId: admin.id,
         imageUrls: [],
-      }
+      },
     })
   )
   const activities = await Promise.all(activityPromises)

@@ -2,7 +2,10 @@ import type { NextRequest } from "next/server"
 import { performanceMonitor } from "@/lib/performance-monitor"
 import { generateRequestId } from "@/lib/utils/request-id"
 
-type ApiHandler<R extends Request = NextRequest> = (request: R, ...args: any[]) => Promise<Response> | Response
+type ApiHandler<R extends Request = NextRequest> = (
+  request: R,
+  ...args: any[]
+) => Promise<Response> | Response
 
 const clampSampleRate = (value?: number): number => {
   if (!Number.isFinite(value as number)) return 1
@@ -21,19 +24,16 @@ const resolveTraceStart = (headerValue: string | null): number => {
 
 export function withApiResponseMetrics<
   R extends Request = NextRequest,
-  Handler extends ApiHandler<R> = ApiHandler<R>
->(
-  handler: Handler,
-  options?: { sampleRate?: number }
-): Handler {
+  Handler extends ApiHandler<R> = ApiHandler<R>,
+>(handler: Handler, options?: { sampleRate?: number }): Handler {
   return (async (request: R | undefined, ...args: any[]) => {
     // 在测试或直接调用时可能没有传入 request，对齐 Next.js 行为创建安全的占位对象
     const safeRequest: R =
-      (request ??
-        (new Request("http://localhost/health", {
-          method: "GET",
-          headers: new Headers(),
-        }) as R))
+      request ??
+      (new Request("http://localhost/health", {
+        method: "GET",
+        headers: new Headers(),
+      }) as R)
 
     const headers = safeRequest.headers ?? new Headers()
     const requestId = headers.get("x-request-id") ?? generateRequestId()

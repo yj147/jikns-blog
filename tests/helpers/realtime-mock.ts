@@ -71,9 +71,7 @@ export function createSupabaseRealtimeMock(): SupabaseRealtimeMock {
             })),
           })),
           in: vi.fn(async (_field: string, ids: string[]) => ({
-            data: ids
-              .map((id) => ensureTable(table)[id])
-              .filter(Boolean),
+            data: ids.map((id) => ensureTable(table)[id]).filter(Boolean),
             error: null,
           })),
         }

@@ -154,4 +154,3 @@ describe("Prisma Token Extension - extractScalarString 逻辑", () => {
     })
   })
 })
-

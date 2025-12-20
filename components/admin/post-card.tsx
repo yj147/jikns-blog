@@ -147,35 +147,34 @@ export function PostCard({
   const coverImageUrl = useMemo(
     () =>
       coverSource
-        ? getOptimizedImageUrl(coverSource, { width: 1280, height: 720, quality: 80 }) ??
-          coverSource
+        ? (getOptimizedImageUrl(coverSource, { width: 1280, height: 720, quality: 80 }) ??
+          coverSource)
         : undefined,
     [coverSource]
   )
 
-  const deleteDialog =
-    onDelete ? (
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>确认删除</AlertDialogTitle>
-            <AlertDialogDescription>
-              删除后文章将无法恢复，确定要删除文章「{post.title}」吗？
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isLoading}>取消</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={isLoading}
-            >
-              {isLoading ? "删除中..." : "确认删除"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    ) : null
+  const deleteDialog = onDelete ? (
+    <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>确认删除</AlertDialogTitle>
+          <AlertDialogDescription>
+            删除后文章将无法恢复，确定要删除文章「{post.title}」吗？
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isLoading}>取消</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleDelete}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            disabled={isLoading}
+          >
+            {isLoading ? "删除中..." : "确认删除"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  ) : null
 
   // 公共展示模式
   if (variant === "public") {
@@ -280,7 +279,10 @@ export function PostCard({
     return (
       <>
         <div
-          className={cn("hover:bg-muted/50 flex items-center gap-4 rounded-lg border p-3", className)}
+          className={cn(
+            "hover:bg-muted/50 flex items-center gap-4 rounded-lg border p-3",
+            className
+          )}
         >
           <div className="min-w-0 flex-1">
             <div className="mb-1 flex items-center gap-2">

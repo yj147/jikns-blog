@@ -20,7 +20,9 @@ export async function NavigationServer() {
           <div className="bg-primary text-primary-foreground flex h-8 w-8 items-center justify-center rounded-lg transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:rotate-3">
             <PenTool className="h-4 w-4" />
           </div>
-          <span className="hidden text-xl font-bold transition-transform duration-200 group-hover:scale-105 sm:inline">现代博客</span>
+          <span className="hidden text-xl font-bold transition-transform duration-200 group-hover:scale-105 sm:inline">
+            现代博客
+          </span>
         </Link>
 
         <nav
@@ -35,7 +37,7 @@ export async function NavigationServer() {
                 key={item.href}
                 href={item.href}
                 data-nav-link="true"
-                className="flex items-center gap-2 transition-colors hover:text-primary"
+                className="hover:text-primary flex items-center gap-2 transition-colors"
               >
                 <Icon className="h-4 w-4" />
                 <span>{item.name}</span>
@@ -45,7 +47,7 @@ export async function NavigationServer() {
         </nav>
 
         <div className="ml-auto flex flex-1 items-center justify-end gap-3">
-          <div className="min-w-[200px] flex-1 max-w-xl">
+          <div className="min-w-[200px] max-w-xl flex-1">
             <NavigationSearch className="w-full" />
           </div>
           <NavigationInteractive />

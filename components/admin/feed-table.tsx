@@ -5,7 +5,14 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { formatCompactCount } from "@/lib/utils"
 import type { FeedItem } from "@/types/feed"
 
@@ -26,7 +33,14 @@ interface FeedTableProps {
   isLoading: boolean
 }
 
-function FeedTableComponent({ feeds, selectedIds, onToggleItem, onToggleAll, onOpenDetail, isLoading }: FeedTableProps) {
+function FeedTableComponent({
+  feeds,
+  selectedIds,
+  onToggleItem,
+  onToggleAll,
+  onOpenDetail,
+  isLoading,
+}: FeedTableProps) {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const isAllSelected = feeds.length > 0 && feeds.every((feed) => selectedSet.has(feed.id))
 
@@ -52,7 +66,11 @@ function FeedTableComponent({ feeds, selectedIds, onToggleItem, onToggleAll, onO
         {feeds.map((feed) => {
           const isSelected = selectedSet.has(feed.id)
           return (
-            <TableRow key={feed.id} data-selected={isSelected} className={isSelected ? "bg-muted/40" : undefined}>
+            <TableRow
+              key={feed.id}
+              data-selected={isSelected}
+              className={isSelected ? "bg-muted/40" : undefined}
+            >
               <TableCell>
                 <Checkbox
                   aria-label={`选择动态 ${feed.id}`}
@@ -70,9 +88,11 @@ function FeedTableComponent({ feeds, selectedIds, onToggleItem, onToggleAll, onO
                       <Badge variant="outline">可见</Badge>
                     )}
                   </div>
-                  <p className="line-clamp-2 text-sm text-foreground">{feed.content || "（无正文）"}</p>
+                  <p className="text-foreground line-clamp-2 text-sm">
+                    {feed.content || "（无正文）"}
+                  </p>
                   {feed.imageUrls.length > 0 && (
-                    <p className="text-xs text-muted-foreground">图片 {feed.imageUrls.length} 张</p>
+                    <p className="text-muted-foreground text-xs">图片 {feed.imageUrls.length} 张</p>
                   )}
                 </div>
               </TableCell>
@@ -81,19 +101,23 @@ function FeedTableComponent({ feeds, selectedIds, onToggleItem, onToggleAll, onO
                   <p className="font-medium">
                     {feed.author.name ?? `用户${feed.author.id.substring(0, 6)}`}
                   </p>
-                  <p className="text-xs text-muted-foreground">ID: {feed.authorId}</p>
+                  <p className="text-muted-foreground text-xs">ID: {feed.authorId}</p>
                 </div>
               </TableCell>
               <TableCell>
-                <div className="text-xs text-muted-foreground">
+                <div className="text-muted-foreground text-xs">
                   <p>点赞 · {formatCompactCount(feed.likesCount)}</p>
                   <p>评论 · {formatCompactCount(feed.commentsCount)}</p>
                   <p>浏览 · {formatCompactCount(feed.viewsCount)}</p>
                 </div>
               </TableCell>
               <TableCell>
-                <div className="text-sm font-medium">{dateFormatter.format(new Date(feed.createdAt))}</div>
-                <p className="text-xs text-muted-foreground">更新 {dateFormatter.format(new Date(feed.updatedAt))}</p>
+                <div className="text-sm font-medium">
+                  {dateFormatter.format(new Date(feed.createdAt))}
+                </div>
+                <p className="text-muted-foreground text-xs">
+                  更新 {dateFormatter.format(new Date(feed.updatedAt))}
+                </p>
               </TableCell>
               <TableCell className="text-right">
                 <Button variant="ghost" size="sm" onClick={() => onOpenDetail(feed)}>

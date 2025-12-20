@@ -75,8 +75,7 @@ vi.mock("@/lib/auth/session", async () => {
 })
 vi.mock("@/lib/security", () => securityModule)
 
-const { setCurrentTestUser, resetMocks } =
-  supabaseModule as typeof import("../__mocks__/supabase")
+const { setCurrentTestUser, resetMocks } = supabaseModule as typeof import("../__mocks__/supabase")
 
 describe("认证工具函数测试", () => {
   beforeEach(() => {

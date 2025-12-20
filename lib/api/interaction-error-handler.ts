@@ -36,8 +36,7 @@ export function handleInteractionError(error: unknown, requestId?: string) {
   if (error instanceof InteractionNotAllowedError) {
     const reason = error.reason
     const status =
-      error.statusCode ??
-      (reason === "AUTHOR_INACTIVE" || reason === "ACTOR_INACTIVE" ? 403 : 400)
+      error.statusCode ?? (reason === "AUTHOR_INACTIVE" || reason === "ACTOR_INACTIVE" ? 403 : 400)
     const code = status === 403 ? ErrorCode.FORBIDDEN : ErrorCode.VALIDATION_ERROR
 
     const defaultMessageMap: Record<typeof reason, string> = {

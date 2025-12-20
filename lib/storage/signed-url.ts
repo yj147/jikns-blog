@@ -232,9 +232,7 @@ export async function getSignedUrl(
 /**
  * 为单条动态补充签名媒体地址（图片 + 作者头像）
  */
-export async function signActivityListItem(
-  item: ActivityListItem
-): Promise<ActivityListItem> {
+export async function signActivityListItem(item: ActivityListItem): Promise<ActivityListItem> {
   const [signedImages, signedAvatar] = await Promise.all([
     signActivityImages(item.imageUrls),
     signAvatarUrl(item.author.avatarUrl),

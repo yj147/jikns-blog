@@ -154,9 +154,7 @@ describe("ProfilePostsTab", () => {
     const user = userEvent.setup()
     await user.click(loadMoreButton)
 
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "加载中..." })).toBeDisabled()
-    )
+    await waitFor(() => expect(screen.getByRole("button", { name: "加载中..." })).toBeDisabled())
 
     resolvePage2(jsonResponse(page2))
 

@@ -134,7 +134,13 @@ describe("unified search", () => {
   })
 
   it("prefers newer content via time-weighted rank", async () => {
-    const result = await runUnifiedSearch({ query: "Unified", type: "posts", limit: 2, page: 1, sort: "relevance" })
+    const result = await runUnifiedSearch({
+      query: "Unified",
+      type: "posts",
+      limit: 2,
+      page: 1,
+      sort: "relevance",
+    })
     expect(result.posts.items.length).toBeGreaterThan(1)
     const [first, second] = result.posts.items
     expect(first.publishedAt && second.publishedAt).toBeTruthy()
@@ -170,7 +176,12 @@ describe("unified search", () => {
     spy.mockImplementation((...args: any[]) => originalQueryRaw(...(args as any)))
     spy.mockRejectedValueOnce(new Error("fts activity failure"))
 
-    const result = await runUnifiedSearch({ query: "Unified", type: "activities", limit: 5, page: 1 })
+    const result = await runUnifiedSearch({
+      query: "Unified",
+      type: "activities",
+      limit: 5,
+      page: 1,
+    })
 
     expect(result.activities.items.length).toBeGreaterThan(0)
     expect(spy).toHaveBeenCalled()

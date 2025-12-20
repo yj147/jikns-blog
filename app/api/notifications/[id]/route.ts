@@ -29,10 +29,7 @@ function toResponseUser(user: AuthenticatedUser): Partial<User> {
   }
 }
 
-async function handlePatch(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+async function handlePatch(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const requestId = generateRequestId()
   const ip = getClientIP(request) ?? undefined
   const ua = getClientUserAgent(request) ?? undefined
@@ -48,7 +45,12 @@ async function handlePatch(
 
     if (authError || !user) {
       const errorCode = authError ? mapAuthErrorCode(authError) : ErrorCode.UNAUTHORIZED
-      return createErrorResponse(errorCode, authError?.message || "未登录", undefined, authError?.statusCode)
+      return createErrorResponse(
+        errorCode,
+        authError?.message || "未登录",
+        undefined,
+        authError?.statusCode
+      )
     }
 
     if (!notificationId) {

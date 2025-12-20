@@ -7,7 +7,11 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { createClient } from "@/lib/supabase"
 import { createRetryScheduler } from "@/lib/realtime/retry"
 import { ensureSessionReady, useNetworkStatus, useOnlineCallback } from "@/lib/realtime/connection"
-import type { RealtimeChannel, RealtimePostgresChangesPayload, SupabaseClient } from "@supabase/supabase-js"
+import type {
+  RealtimeChannel,
+  RealtimePostgresChangesPayload,
+  SupabaseClient,
+} from "@supabase/supabase-js"
 import { logger } from "@/lib/utils/logger"
 import type { Database } from "@/types/database"
 import type { Activity, ActivityWithAuthor } from "@/types/activity"
@@ -143,30 +147,33 @@ export function useRealtimeActivities({
     }
   })
 
-  const toActivityWithPayload = useCallback((activity: Activity | null): ActivityWithAuthor | null => {
-    if (!activity) return null
+  const toActivityWithPayload = useCallback(
+    (activity: Activity | null): ActivityWithAuthor | null => {
+      if (!activity) return null
 
-    const payloadAuthor = (activity as any)?.author as ActivityWithAuthor["author"] | undefined
+      const payloadAuthor = (activity as any)?.author as ActivityWithAuthor["author"] | undefined
 
-    return {
-      ...activity,
-      author:
-        payloadAuthor && payloadAuthor.id
-          ? payloadAuthor
-          : {
-              id: activity.authorId,
-              name: payloadAuthor?.name ?? null,
-              avatarUrl: payloadAuthor?.avatarUrl ?? null,
-              role: payloadAuthor?.role ?? "USER",
-            },
-    }
-  }, [])
+      return {
+        ...activity,
+        author:
+          payloadAuthor && payloadAuthor.id
+            ? payloadAuthor
+            : {
+                id: activity.authorId,
+                name: payloadAuthor?.name ?? null,
+                avatarUrl: payloadAuthor?.avatarUrl ?? null,
+                role: payloadAuthor?.role ?? "USER",
+              },
+      }
+    },
+    []
+  )
 
   const needsAuthorHydration = useCallback((activity: ActivityWithAuthor | null) => {
     if (!activity) return false
     const author = activity.author
     if (!author) return true
-    return author.name == null || author.avatarUrl == null
+    return author.name === null || author.avatarUrl === null
   }, [])
 
   const processHydrationQueue = useCallback(async () => {

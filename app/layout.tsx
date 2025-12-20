@@ -33,7 +33,12 @@ export default function RootLayout({
     >
       <body className="bg-background min-h-screen font-sans antialiased">
         <SwrProvider>
-          <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
             <ErrorBoundary>
               <AuthProvider>
                 <AuthStateListener />

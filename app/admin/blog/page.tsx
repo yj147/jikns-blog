@@ -5,7 +5,7 @@ import AdminBlogListClient, { type AdminBlogPostDTO } from "./_components/admin-
 export default async function AdminBlogPage() {
   const result = await getPostsForAdmin({ limit: 50, orderBy: "updatedAt" })
   const posts = result.data.map(serializePost)
-  const errorMessage = result.success ? null : result.error?.message ?? "获取文章列表失败"
+  const errorMessage = result.success ? null : (result.error?.message ?? "获取文章列表失败")
 
   return (
     <section className="space-y-6">

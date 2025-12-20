@@ -205,7 +205,11 @@ function createPrismaMock() {
                 ? item.id === where.id
                 : true
           const matchReadAt =
-            where?.readAt === null ? item.readAt === null : where?.readAt ? item.readAt === where.readAt : true
+            where?.readAt === null
+              ? item.readAt === null
+              : where?.readAt
+                ? item.readAt === where.readAt
+                : true
           return matchRecipient && matchType && matchId && matchReadAt
         })
 

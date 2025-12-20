@@ -82,7 +82,8 @@ const ACTIVITY_BLUEPRINTS: ActivityBlueprint[] = [
   {
     id: "act-feed-lcp-cutover",
     authorEmail: "feed-ops@example.com",
-    content: "首屏 LCP 优化灰度完成，TTI 从 2.4s 降到 1.1s，Hero streaming 进入全量排期。#LCP #Perf",
+    content:
+      "首屏 LCP 优化灰度完成，TTI 从 2.4s 降到 1.1s，Hero streaming 进入全量排期。#LCP #Perf",
     imageUrls: ["https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=1200"],
     isPinned: true,
     viewsCount: 680,
@@ -160,7 +161,8 @@ const ACTIVITY_BLUEPRINTS: ActivityBlueprint[] = [
   {
     id: "act-feed-ux-feedback",
     authorEmail: "feed-guest@example.com",
-    content: "Feedback sliding panel 的加载时序太靠后，建议评论骨架与活动卡片并行预取，避免空白闪烁。",
+    content:
+      "Feedback sliding panel 的加载时序太靠后，建议评论骨架与活动卡片并行预取，避免空白闪烁。",
     imageUrls: [],
     isPinned: false,
     viewsCount: 240,
@@ -178,7 +180,8 @@ const ACTIVITY_BLUEPRINTS: ActivityBlueprint[] = [
   {
     id: "act-feed-admin-digest",
     authorEmail: "admin@example.com",
-    content: "Admin 面板已切回真实数据，活动、评论、举报均来自 feed 场景，可直接截图用于 Phase1 汇报。",
+    content:
+      "Admin 面板已切回真实数据，活动、评论、举报均来自 feed 场景，可直接截图用于 Phase1 汇报。",
     imageUrls: [],
     isPinned: false,
     viewsCount: 300,
@@ -209,7 +212,7 @@ export async function seedFeedScenario(prisma: PrismaClient, context: FeedSeedCo
   const adminUser = await prisma.user.findUniqueOrThrow({ where: { id: context.adminUserId } })
   const defaultUser = await prisma.user.findUniqueOrThrow({ where: { id: context.defaultUserId } })
 
-  const userMap = new Map<string, (typeof adminUser)>()
+  const userMap = new Map<string, typeof adminUser>()
   userMap.set(adminUser.email.toLowerCase(), adminUser)
   userMap.set(defaultUser.email.toLowerCase(), defaultUser)
 
@@ -346,7 +349,9 @@ export async function seedFeedScenario(prisma: PrismaClient, context: FeedSeedCo
   console.log("\n📈 feed 场景统计：")
   console.log(`  - 新增用户: ${FEED_USER_SPECS.length} 个`)
   console.log(`  - 新增标签: ${TAG_SPECS.length} 个`)
-  console.log(`  - 动态: ${activityCount} 条 (含置顶 ${ACTIVITY_BLUEPRINTS.filter((a) => a.isPinned).length} 条)`)
+  console.log(
+    `  - 动态: ${activityCount} 条 (含置顶 ${ACTIVITY_BLUEPRINTS.filter((a) => a.isPinned).length} 条)`
+  )
   console.log(`  - 互动: ${likeCount} 个点赞 / ${commentCount} 条评论`)
   console.log("  - Following 覆盖: feed-reader + user@example.com 已绑定真实关注关系")
   console.log("✅ feed 场景数据就绪，可运行 pnpm build && pnpm start + Playwright 验证活动流")

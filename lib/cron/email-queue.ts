@@ -1,11 +1,7 @@
 import DigestEmail from "@/emails/digest-email"
 import NotificationEmail from "@/emails/notification-email"
 import type { EmailQueue, EmailSubscriber } from "@/lib/generated/prisma"
-import {
-  EmailQueueStatus,
-  EmailSubscriptionStatus,
-  NotificationType,
-} from "@/lib/generated/prisma"
+import { EmailQueueStatus, EmailSubscriptionStatus, NotificationType } from "@/lib/generated/prisma"
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/services/resend"
 import { logger } from "@/lib/utils/logger"

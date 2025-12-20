@@ -46,11 +46,7 @@ const profileSchema = z
       .trim()
       .min(2, "用户名长度至少 2 个字符")
       .max(50, "用户名长度不能超过 50 个字符"),
-    location: z
-      .string()
-      .trim()
-      .max(200, "所在地长度不能超过 200 个字符")
-      .optional(),
+    location: z.string().trim().max(200, "所在地长度不能超过 200 个字符").optional(),
     phone: z
       .string()
       .trim()
@@ -490,11 +486,14 @@ async function uploadAvatarFile(
   uploadForm.append("files", file as File)
 
   try {
-    const uploadResponse = await fetch(buildApiUrl(`/api/upload/images?purpose=${AVATAR_PURPOSE}`), {
-      method: "POST",
-      body: uploadForm,
-      headers: cookieHeader,
-    })
+    const uploadResponse = await fetch(
+      buildApiUrl(`/api/upload/images?purpose=${AVATAR_PURPOSE}`),
+      {
+        method: "POST",
+        body: uploadForm,
+        headers: cookieHeader,
+      }
+    )
 
     uploadJson = await uploadResponse.json()
 
@@ -558,7 +557,9 @@ async function persistAvatarUrl({
   actorUserId,
   uploadedUrl,
   cookieHeader,
-}: PersistAvatarArgs): Promise<ActionSuccess<{ id: string; avatarUrl: string | null }> | ActionFailure> {
+}: PersistAvatarArgs): Promise<
+  ActionSuccess<{ id: string; avatarUrl: string | null }> | ActionFailure
+> {
   if (!uploadedUrl?.trim()) {
     return {
       success: false,
@@ -731,9 +732,7 @@ export async function updateProfile(
 export async function updateNotificationPreferences(
   userId: string,
   preferences: unknown
-): Promise<
-  ActionSuccess<ReturnType<typeof notificationPreferencesSchema.parse>> | ActionFailure
-> {
+): Promise<ActionSuccess<ReturnType<typeof notificationPreferencesSchema.parse>> | ActionFailure> {
   try {
     await enforceOwnership(userId)
 

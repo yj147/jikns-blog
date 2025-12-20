@@ -19,23 +19,23 @@ export default function SuggestedUsersCard({ limit = 3, onFollowChange }: Sugges
   }
 
   if (isLoading) {
-      return (
-          <div className="space-y-4 p-4">
-             {[...Array(limit)].map((_, index) => (
-              <div key={index} className="flex animate-pulse items-center space-x-3">
-                <div className="bg-muted h-10 w-10 rounded-full" />
-                <div className="flex-1 space-y-2">
-                  <div className="bg-muted h-3 w-3/4 rounded" />
-                  <div className="bg-muted h-3 w-1/2 rounded" />
-                </div>
-              </div>
-            ))}
+    return (
+      <div className="space-y-4 p-4">
+        {[...Array(limit)].map((_, index) => (
+          <div key={index} className="flex animate-pulse items-center space-x-3">
+            <div className="bg-muted h-10 w-10 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <div className="bg-muted h-3 w-3/4 rounded" />
+              <div className="bg-muted h-3 w-1/2 rounded" />
+            </div>
           </div>
-      )
+        ))}
+      </div>
+    )
   }
 
   if (isError || suggestedUsers.length === 0) {
-      return null
+    return null
   }
 
   return (
@@ -57,7 +57,7 @@ export default function SuggestedUsersCard({ limit = 3, onFollowChange }: Sugges
                 href={`/profile/${suggestedUser.id}`}
                 className="hover:bg-muted/50 -ml-1.5 flex min-w-0 flex-1 items-center gap-3 rounded-lg p-1.5 transition-colors"
               >
-                <Avatar className="h-10 w-10 ring-2 ring-background group-hover:ring-muted">
+                <Avatar className="ring-background group-hover:ring-muted h-10 w-10 ring-2">
                   <AvatarImage
                     src={suggestedUser.avatarUrl || "/placeholder.svg"}
                     alt={suggestedUser.name}
@@ -66,7 +66,9 @@ export default function SuggestedUsersCard({ limit = 3, onFollowChange }: Sugges
                 </Avatar>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center space-x-1">
-                    <p className="truncate text-sm font-bold text-foreground">{suggestedUser.name}</p>
+                    <p className="text-foreground truncate text-sm font-bold">
+                      {suggestedUser.name}
+                    </p>
                     {suggestedUser.isVerified && (
                       <div
                         className="flex h-3 w-3 items-center justify-center rounded-full bg-blue-500"
@@ -77,7 +79,7 @@ export default function SuggestedUsersCard({ limit = 3, onFollowChange }: Sugges
                     )}
                   </div>
                   {usernameLabel && (
-                    <p className="truncate text-xs text-muted-foreground">{usernameLabel}</p>
+                    <p className="text-muted-foreground truncate text-xs">{usernameLabel}</p>
                   )}
                 </div>
               </Link>
@@ -87,7 +89,7 @@ export default function SuggestedUsersCard({ limit = 3, onFollowChange }: Sugges
                   size="sm"
                   onFollowSuccess={handleFollowChange}
                   onUnfollowSuccess={handleFollowChange}
-                  className="h-8 px-3 rounded-full font-bold"
+                  className="h-8 rounded-full px-3 font-bold"
                 />
               </div>
             </div>

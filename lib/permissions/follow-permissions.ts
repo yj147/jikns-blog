@@ -4,11 +4,7 @@ import { privacySettingsSchema } from "@/types/user-settings"
 
 export type FollowListVisibility = "public" | "followers" | "private"
 
-export type FollowListDenyReason =
-  | "NOT_FOUND"
-  | "PRIVATE"
-  | "FOLLOWERS_ONLY"
-  | "UNAUTHENTICATED"
+export type FollowListDenyReason = "NOT_FOUND" | "PRIVATE" | "FOLLOWERS_ONLY" | "UNAUTHENTICATED"
 
 export interface FollowListAccessResult {
   allowed: boolean

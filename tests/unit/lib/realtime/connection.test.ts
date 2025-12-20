@@ -116,10 +116,9 @@ describe("ensureSessionReady", () => {
     const ready = await ensureSessionReady(null as unknown as SupabaseClient<Database>, "channel-e")
 
     expect(ready).toBe(false)
-    expect(errorSpy).toHaveBeenCalledWith(
-      "Supabase 客户端未初始化，无法进行 Realtime 订阅",
-      { channelName: "channel-e" }
-    )
+    expect(errorSpy).toHaveBeenCalledWith("Supabase 客户端未初始化，无法进行 Realtime 订阅", {
+      channelName: "channel-e",
+    })
   })
 })
 

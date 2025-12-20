@@ -161,9 +161,7 @@ describe("GET /api/users/[userId]/likes", () => {
     expect(body.pagination.page).toBe(2)
     expect(body.pagination.limit).toBe(1)
     expect(body.pagination.hasMore).toBe(true)
-    expect(prisma.like.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ skip: 1, take: 1 })
-    )
+    expect(prisma.like.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 1, take: 1 }))
   })
 })
 

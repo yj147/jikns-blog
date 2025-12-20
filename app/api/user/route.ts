@@ -23,7 +23,10 @@ async function handleGet() {
     } = await supabase.auth.getUser()
 
     if (userError || !authUser) {
-      return NextResponse.json({ error: { code: "UNAUTHORIZED", message: "未授权访问" } }, { status: 401 })
+      return NextResponse.json(
+        { error: { code: "UNAUTHORIZED", message: "未授权访问" } },
+        { status: 401 }
+      )
     }
 
     // 优先同步 Supabase 数据到数据库，保证 name/avatar 最新
@@ -43,14 +46,14 @@ async function handleGet() {
         select: {
           id: true,
           email: true,
-        name: true,
-        avatarUrl: true,
-        coverImage: true,
-        bio: true,
-        socialLinks: true,
-        location: true,
-        phone: true,
-        notificationPreferences: true,
+          name: true,
+          avatarUrl: true,
+          coverImage: true,
+          bio: true,
+          socialLinks: true,
+          location: true,
+          phone: true,
+          notificationPreferences: true,
           privacySettings: true,
           role: true,
           status: true,
@@ -69,7 +72,11 @@ async function handleGet() {
 
     const metadata = authUser.user_metadata || {}
     const fallbackName =
-      metadata.full_name || metadata.name || metadata.user_name || authUser.email?.split("@")[0] || null
+      metadata.full_name ||
+      metadata.name ||
+      metadata.user_name ||
+      authUser.email?.split("@")[0] ||
+      null
     const fallbackAvatar = metadata.avatar_url || metadata.picture || null
 
     const normalizedNotificationPreferences = notificationPreferencesSchema.parse(

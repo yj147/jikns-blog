@@ -35,7 +35,9 @@ export default function AdminSettingsPage() {
       setLoading(true)
       setError(null)
       try {
-        const response = await fetchGet<{ data?: { settings?: Record<string, unknown> } }>("/api/admin/settings")
+        const response = await fetchGet<{ data?: { settings?: Record<string, unknown> } }>(
+          "/api/admin/settings"
+        )
         const payload = (response as any)?.data ?? response
         const settings = (payload?.settings ?? {}) as Record<string, unknown>
 
@@ -72,7 +74,10 @@ export default function AdminSettingsPage() {
       const response = await fetchPost("/api/admin/settings", { key, value })
       const payload = response as any
       if (payload?.success === false) {
-        throw new FetchError(payload?.error?.message ?? "保存失败", payload?.error?.statusCode ?? 400)
+        throw new FetchError(
+          payload?.error?.message ?? "保存失败",
+          payload?.error?.statusCode ?? 400
+        )
       }
       toast({ title: successMessage })
     } catch (err) {
@@ -112,7 +117,7 @@ export default function AdminSettingsPage() {
       {loading ? (
         <SettingsSkeleton />
       ) : error ? (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-sm text-destructive">
+        <div className="border-destructive/40 bg-destructive/5 text-destructive rounded-lg border p-6 text-sm">
           {error}
         </div>
       ) : (
@@ -138,7 +143,9 @@ export default function AdminSettingsPage() {
                 <Textarea
                   id="seo-description"
                   value={seo.description}
-                  onChange={(event) => setSeo((prev) => ({ ...prev, description: event.target.value }))}
+                  onChange={(event) =>
+                    setSeo((prev) => ({ ...prev, description: event.target.value }))
+                  }
                   className="min-h-[100px]"
                   placeholder="简要描述站点用途，80-160 字符为宜"
                 />

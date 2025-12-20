@@ -172,7 +172,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
   const canShowEmail = isOwnProfile || privacySettings.showEmail
   const resolvedEmailLink =
     canShowEmail && (socialLinks.email || targetUser.email)
-      ? socialLinks.email ?? `mailto:${targetUser.email}`
+      ? (socialLinks.email ?? `mailto:${targetUser.email}`)
       : undefined
 
   const getDisplayText = (href: string) =>
@@ -250,10 +250,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
               <CardContent className="pt-8">
                 <div className="flex flex-col items-start space-y-4 md:flex-row md:items-center md:space-x-6 md:space-y-0">
                   <Avatar className="h-24 w-24 md:h-32 md:w-32">
-                    <AvatarImage
-                      src={targetAvatarUrl || "/placeholder.svg"}
-                      alt={displayName}
-                    />
+                    <AvatarImage src={targetAvatarUrl || "/placeholder.svg"} alt={displayName} />
                     <AvatarFallback className="text-2xl">
                       {displayName[0].toUpperCase()}
                     </AvatarFallback>

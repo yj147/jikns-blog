@@ -42,7 +42,9 @@ function sanitizeQuery(query: string): string {
   }
 
   if (BANNED_QUERY_PATTERN.test(trimmed)) {
-    throw new SearchValidationError("搜索关键词包含非法字符", { pattern: BANNED_QUERY_PATTERN.source })
+    throw new SearchValidationError("搜索关键词包含非法字符", {
+      pattern: BANNED_QUERY_PATTERN.source,
+    })
   }
 
   return trimmed
@@ -112,7 +114,11 @@ function buildRankClause(
   return { rankSelect, orderByClause }
 }
 
-async function withFallback<T>(main: () => Promise<T>, fallback: () => Promise<T>, context: string): Promise<T> {
+async function withFallback<T>(
+  main: () => Promise<T>,
+  fallback: () => Promise<T>,
+  context: string
+): Promise<T> {
   try {
     return await main()
   } catch (error) {
@@ -123,7 +129,11 @@ async function withFallback<T>(main: () => Promise<T>, fallback: () => Promise<T
   }
 }
 
-function toBucket<T>(data: { total: number; items: T[] }, page: number, limit: number): SearchResultBucket<T> {
+function toBucket<T>(
+  data: { total: number; items: T[] },
+  page: number,
+  limit: number
+): SearchResultBucket<T> {
   const hasMore = data.total > page * limit
   return {
     items: data.items,
@@ -370,7 +380,12 @@ async function searchActivities(
 ): Promise<{ total: number; items: SearchActivityHit[] }> {
   const tsQuery = buildTsQuery(query, "simple")
   const timestampColumn = `a."createdAt"`
-  const { rankSelect, orderByClause } = buildRankClause("a.search_vector", tsQuery, timestampColumn, sort)
+  const { rankSelect, orderByClause } = buildRankClause(
+    "a.search_vector",
+    tsQuery,
+    timestampColumn,
+    sort
+  )
 
   const ftsSearch = async () => {
     const rowsQuery = Prisma.sql`
@@ -452,7 +467,12 @@ async function searchUsers(
   // 用户名/邮箱包含中文和特殊字符（如邮箱符号），使用 simple 配置避免词干导致匹配缺失
   const tsQuery = buildTsQuery(query, "simple")
   const timestampColumn = `COALESCE(u."lastLoginAt", u."createdAt")`
-  const { rankSelect, orderByClause } = buildRankClause("u.search_vector", tsQuery, timestampColumn, sort)
+  const { rankSelect, orderByClause } = buildRankClause(
+    "u.search_vector",
+    tsQuery,
+    timestampColumn,
+    sort
+  )
 
   const ftsSearch = async () => {
     const rowsQuery = Prisma.sql`
@@ -536,7 +556,12 @@ async function searchTags(
   // 标签名称多语言，使用 simple 配置提高命中率
   const tsQuery = buildTsQuery(query, "simple")
   const timestampColumn = `t."createdAt"`
-  const { rankSelect, orderByClause } = buildRankClause("t.search_vector", tsQuery, timestampColumn, sort)
+  const { rankSelect, orderByClause } = buildRankClause(
+    "t.search_vector",
+    tsQuery,
+    timestampColumn,
+    sort
+  )
 
   const ftsSearch = async () => {
     const rowsQuery = Prisma.sql`
@@ -653,7 +678,11 @@ export async function unifiedSearch(params: UnifiedSearchParams): Promise<Unifie
       normalized.page,
       normalized.limit
     ),
-    users: toBucket({ total: usersCount, items: signedUserItems }, normalized.page, normalized.limit),
+    users: toBucket(
+      { total: usersCount, items: signedUserItems },
+      normalized.page,
+      normalized.limit
+    ),
     tags: toBucket({ total: tagsCount, items: tags.items }, normalized.page, normalized.limit),
   }
 

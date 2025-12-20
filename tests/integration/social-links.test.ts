@@ -4,7 +4,7 @@ import { realPrisma, disconnectRealDb } from "./setup-real-db"
 import { TEST_USERS } from "../helpers/test-data"
 import { resetMocks, setCurrentTestUser } from "../__mocks__/supabase"
 
-type UpdateSocialLinks = typeof import("@/app/actions/settings")["updateSocialLinks"]
+type UpdateSocialLinks = (typeof import("@/app/actions/settings"))["updateSocialLinks"]
 
 const auditLogMock = { logEvent: vi.fn().mockResolvedValue(undefined) }
 

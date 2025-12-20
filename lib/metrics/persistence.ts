@@ -149,8 +149,8 @@ export async function queryMetrics(
     return {
       count,
       sum,
-      min: count > 0 ? result._min?.value ?? 0 : 0,
-      max: count > 0 ? result._max?.value ?? 0 : 0,
+      min: count > 0 ? (result._min?.value ?? 0) : 0,
+      max: count > 0 ? (result._max?.value ?? 0) : 0,
     }
   } catch (error) {
     logger.warn("数据库性能指标聚合查询失败，使用空结果回退", {

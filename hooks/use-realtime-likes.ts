@@ -4,9 +4,18 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import type { RealtimeChannel, RealtimePostgresChangesPayload, SupabaseClient } from "@supabase/supabase-js"
+import type {
+  RealtimeChannel,
+  RealtimePostgresChangesPayload,
+  SupabaseClient,
+} from "@supabase/supabase-js"
 import { createClient } from "@/lib/supabase"
-import { createRetryScheduler, ensureSessionReady, useNetworkStatus, useOnlineCallback } from "@/lib/realtime"
+import {
+  createRetryScheduler,
+  ensureSessionReady,
+  useNetworkStatus,
+  useOnlineCallback,
+} from "@/lib/realtime"
 import type { Database } from "@/types/database"
 import { logger } from "@/lib/utils/logger"
 
@@ -119,10 +128,13 @@ export function useRealtimeLikes({
     }
 
     void safePoll()
-    pollTimerRef.current = setInterval(() => {
-      if (!mountedRef.current || !isOnline) return
-      void safePoll()
-    }, Math.max(1000, pollInterval))
+    pollTimerRef.current = setInterval(
+      () => {
+        if (!mountedRef.current || !isOnline) return
+        void safePoll()
+      },
+      Math.max(1000, pollInterval)
+    )
   }, [isOnline, pollInterval])
 
   const teardownChannel = useCallback(() => {
@@ -172,7 +184,9 @@ export function useRealtimeLikes({
           supabaseRef.current = createClient()
         } catch (err) {
           const normalized = err instanceof Error ? err : new Error("创建 Supabase 客户端失败")
-          logger.error("创建 Supabase 客户端失败，启用点赞轮询降级", { message: normalized.message })
+          logger.error("创建 Supabase 客户端失败，启用点赞轮询降级", {
+            message: normalized.message,
+          })
           setError(normalized)
           startPolling()
           return

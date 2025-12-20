@@ -58,10 +58,7 @@ async function handleGet(
         where,
         skip,
         take: limit,
-        orderBy: [
-          { publishedAt: "desc" },
-          { createdAt: "desc" },
-        ],
+        orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
         select: {
           id: true,
           title: true,
@@ -137,9 +134,8 @@ async function handleGet(
       readTimeMinutes: calculateReadingMinutes(wordsCountMap.get(post.id) ?? 0),
       tags: post.tags
         .map((relation) => relation.tag)
-        .filter(
-          (tag): tag is { id: string; name: string; slug: string } =>
-            Boolean(tag?.id && tag?.name)
+        .filter((tag): tag is { id: string; name: string; slug: string } =>
+          Boolean(tag?.id && tag?.name)
         ),
       _count: post._count,
     }))

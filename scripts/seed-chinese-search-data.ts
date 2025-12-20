@@ -21,7 +21,7 @@ async function main() {
         description: tag.description,
         color: `#${Math.floor(Math.random() * 16777215).toString(16)}`,
         postsCount: 0,
-      }
+      },
     })
   )
   const tags = await Promise.all(tagPromises)
@@ -31,28 +31,33 @@ async function main() {
   const chinesePosts = [
     {
       title: "深入理解 React Hooks 原理",
-      content: "React Hooks 是 React 16.8 引入的新特性，它允许我们在函数组件中使用状态和其他 React 特性。本文将深入探讨 Hooks 的实现原理和最佳实践。",
-      excerpt: "探索 React Hooks 的核心原理和使用技巧"
+      content:
+        "React Hooks 是 React 16.8 引入的新特性，它允许我们在函数组件中使用状态和其他 React 特性。本文将深入探讨 Hooks 的实现原理和最佳实践。",
+      excerpt: "探索 React Hooks 的核心原理和使用技巧",
     },
     {
       title: "Node.js 性能优化实战指南",
-      content: "本文介绍 Node.js 应用性能优化的各种技巧，包括事件循环优化、内存管理、数据库查询优化等实战经验。",
-      excerpt: "提升 Node.js 应用性能的最佳实践"
+      content:
+        "本文介绍 Node.js 应用性能优化的各种技巧，包括事件循环优化、内存管理、数据库查询优化等实战经验。",
+      excerpt: "提升 Node.js 应用性能的最佳实践",
     },
     {
       title: "PostgreSQL 全文搜索深度解析",
-      content: "PostgreSQL 提供了强大的全文搜索功能，支持中文分词、相关度排序等高级特性。本文详细介绍 FTS 的配置和优化技巧。",
-      excerpt: "掌握 PostgreSQL 全文搜索的核心技术"
+      content:
+        "PostgreSQL 提供了强大的全文搜索功能，支持中文分词、相关度排序等高级特性。本文详细介绍 FTS 的配置和优化技巧。",
+      excerpt: "掌握 PostgreSQL 全文搜索的核心技术",
     },
     {
       title: "微服务架构设计模式",
-      content: "微服务架构已成为大型应用的主流设计模式。本文讨论服务拆分、通信机制、数据一致性等关键问题。",
-      excerpt: "微服务架构的设计原则和实践经验"
+      content:
+        "微服务架构已成为大型应用的主流设计模式。本文讨论服务拆分、通信机制、数据一致性等关键问题。",
+      excerpt: "微服务架构的设计原则和实践经验",
     },
     {
       title: "TypeScript 高级类型系统",
-      content: "TypeScript 的类型系统非常强大，支持泛型、联合类型、条件类型等高级特性。本文深入讲解类型系统的使用技巧。",
-      excerpt: "掌握 TypeScript 类型系统的核心概念"
+      content:
+        "TypeScript 的类型系统非常强大，支持泛型、联合类型、条件类型等高级特性。本文深入讲解类型系统的使用技巧。",
+      excerpt: "掌握 TypeScript 类型系统的核心概念",
     },
   ]
 
@@ -66,7 +71,7 @@ async function main() {
         published: true,
         publishedAt: new Date(Date.now() - i * 86400000),
         authorId: admin.id,
-      }
+      },
     })
   )
   const posts = await Promise.all(postPromises)
@@ -87,14 +92,16 @@ async function main() {
         content,
         authorId: admin.id,
         imageUrls: [],
-      }
+      },
     })
   )
   const activities = await Promise.all(activityPromises)
   console.log(`✅ 创建了 ${activities.length} 条中文动态`)
 
   console.log(`\n📊 中文搜索测试数据创建完成`)
-  console.log(`测试关键词：React, Node, PostgreSQL, 微服务, TypeScript, 前端, 后端, 数据库, 人工智能, 云计算`)
+  console.log(
+    `测试关键词：React, Node, PostgreSQL, 微服务, TypeScript, 前端, 后端, 数据库, 人工智能, 云计算`
+  )
 }
 
 main()

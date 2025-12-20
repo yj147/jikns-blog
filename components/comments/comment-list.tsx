@@ -3,7 +3,10 @@
 import React, { useCallback, useState } from "react"
 
 import CommentItem from "@/components/comments/comment-item"
-import { useCommentsData, type CommentsApiResponse } from "@/components/comments/hooks/use-comments-data"
+import {
+  useCommentsData,
+  type CommentsApiResponse,
+} from "@/components/comments/hooks/use-comments-data"
 import { useReplyManager } from "@/components/comments/hooks/use-reply-manager"
 import CommentForm, { CommentFormSuccessContext } from "@/components/comments/comment-form"
 import { Button } from "@/components/ui/button"
@@ -109,9 +112,7 @@ const CommentList: React.FC<CommentListProps> = ({
         if (!currentPages) {
           return currentPages
         }
-        const safePages = currentPages.filter(
-          (page): page is CommentsApiResponse => Boolean(page)
-        )
+        const safePages = currentPages.filter((page): page is CommentsApiResponse => Boolean(page))
         return safePages.map((page, index) => {
           if (index !== 0) return page
           const next = bumpPaginationTotal(page, delta)
@@ -172,7 +173,15 @@ const CommentList: React.FC<CommentListProps> = ({
       setReplyingTo(null)
       onCommentAdded?.()
     },
-    [resetList, invalidate, isShowing, loadRepliesForComment, resetReplies, onCommentAdded, bumpTotal]
+    [
+      resetList,
+      invalidate,
+      isShowing,
+      loadRepliesForComment,
+      resetReplies,
+      onCommentAdded,
+      bumpTotal,
+    ]
   )
 
   const handleReplyToggle = useCallback(
@@ -331,7 +340,7 @@ const CommentList: React.FC<CommentListProps> = ({
   if (error) {
     return (
       <div className={className} data-testid="error-state">
-        <p className="text-sm text-status-error">加载评论失败，请稍后重试。</p>
+        <p className="text-status-error text-sm">加载评论失败，请稍后重试。</p>
         <Button variant="outline" size="sm" className="mt-2" onClick={() => mutate()}>
           重试
         </Button>
@@ -343,7 +352,7 @@ const CommentList: React.FC<CommentListProps> = ({
     <div className={`space-y-4 ${className}`}>
       {showTitle && <h2 className="mb-6 text-2xl font-bold">评论 ({totalComments})</h2>}
 
-      {isEmpty && <p className="text-sm text-muted-foreground">暂无评论，快来抢沙发吧！</p>}
+      {isEmpty && <p className="text-muted-foreground text-sm">暂无评论，快来抢沙发吧！</p>}
 
       {comments.map((comment) => (
         <CommentItem

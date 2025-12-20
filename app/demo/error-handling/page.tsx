@@ -343,7 +343,12 @@ function ErrorHandlingDemo() {
                   <div className="text-muted-foreground flex items-center space-x-2 text-xs">
                     <span>可恢复: {currentError.recoverable ? "是" : "否"}</span>
                     <span>可重试: {currentError.retryable ? "是" : "否"}</span>
-                    <span>时间: {new Date(currentError.timestamp).toLocaleTimeString("zh-CN", { hour12: false })}</span>
+                    <span>
+                      时间:{" "}
+                      {new Date(currentError.timestamp).toLocaleTimeString("zh-CN", {
+                        hour12: false,
+                      })}
+                    </span>
                   </div>
                 </div>
               </CardContent>

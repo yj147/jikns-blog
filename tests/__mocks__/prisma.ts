@@ -383,7 +383,9 @@ const mockLikeOperations = {
       likes = likes.filter((like) =>
         where.OR.some((condition: any) => {
           if (condition.activity?.is) {
-            return Boolean(like.activity) && like.activity?.deletedAt === condition.activity.is.deletedAt
+            return (
+              Boolean(like.activity) && like.activity?.deletedAt === condition.activity.is.deletedAt
+            )
           }
           if (condition.post?.is) {
             return Boolean(like.post) && like.post?.published === condition.post.is.published
@@ -427,7 +429,9 @@ const mockLikeOperations = {
       likes = likes.filter((like) =>
         where.OR.some((condition: any) => {
           if (condition.activity?.is) {
-            return Boolean(like.activity) && like.activity?.deletedAt === condition.activity.is.deletedAt
+            return (
+              Boolean(like.activity) && like.activity?.deletedAt === condition.activity.is.deletedAt
+            )
           }
           if (condition.post?.is) {
             return Boolean(like.post) && like.post?.published === condition.post.is.published
@@ -589,7 +593,9 @@ const mockEmailSubscriberOperations = {
   }),
 
   create: createMockPrismaMethod(async ({ data }: { data: any }) => {
-    const exists = [...mockDatabase.emailSubscribers.values()].find((item) => item.email === data.email)
+    const exists = [...mockDatabase.emailSubscribers.values()].find(
+      (item) => item.email === data.email
+    )
     if (exists) {
       throw new Error("Unique constraint failed on the fields: (`email`)")
     }

@@ -21,7 +21,7 @@ const ActivityCardActions = dynamic(
   () => import("./activity/activity-card-actions").then((mod) => mod.ActivityCardActions),
   {
     ssr: false,
-    loading: () => <div className="mt-2 h-8 w-full bg-muted/30 animate-pulse rounded" />,
+    loading: () => <div className="bg-muted/30 mt-2 h-8 w-full animate-pulse rounded" />,
   }
 )
 
@@ -75,9 +75,9 @@ function ActivityCardComponent(props: ActivityCardProps) {
   const isPinned = activity.isPinned ?? false
 
   return (
-    <article className="bg-background px-4 py-3 transition-colors hover:bg-muted/30 sm:px-6">
+    <article className="bg-background hover:bg-muted/30 px-4 py-3 transition-colors sm:px-6">
       {isPinned && (
-        <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <div className="text-muted-foreground mb-2 flex items-center gap-1.5 text-xs font-medium">
           <Pin className="h-3 w-3 fill-current" />
           <span>置顶动态</span>
         </div>
@@ -98,7 +98,7 @@ function ActivityCardComponent(props: ActivityCardProps) {
             <div className="flex items-center gap-1 text-[15px]">
               <Link
                 href={`/profile/${activity.author.id ?? "#"}`}
-                className="font-bold text-foreground hover:underline"
+                className="text-foreground font-bold hover:underline"
               >
                 {authorName}
               </Link>
@@ -113,11 +113,13 @@ function ActivityCardComponent(props: ActivityCardProps) {
               )}
               {authorUsername && <span className="text-muted-foreground">{authorUsername}</span>}
               <span className="text-muted-foreground">·</span>
-              <span className="cursor-pointer text-muted-foreground hover:underline">{timestampLabel}</span>
+              <span className="text-muted-foreground cursor-pointer hover:underline">
+                {timestampLabel}
+              </span>
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="-mr-2 h-8 w-8 text-muted-foreground">
+                <Button variant="ghost" size="icon" className="text-muted-foreground -mr-2 h-8 w-8">
                   <MoreHorizontal className="h-4 w-4" />
                   <span className="sr-only">更多</span>
                 </Button>
@@ -125,7 +127,9 @@ function ActivityCardComponent(props: ActivityCardProps) {
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem
                   onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/activity/${activity.id}`)
+                    navigator.clipboard.writeText(
+                      `${window.location.origin}/activity/${activity.id}`
+                    )
                   }}
                 >
                   <Link2 className="mr-2 h-4 w-4" />
@@ -142,10 +146,7 @@ function ActivityCardComponent(props: ActivityCardProps) {
                 )}
 
                 {canDelete && onDelete && (
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onClick={() => onDelete(activity)}
-                  >
+                  <DropdownMenuItem variant="destructive" onClick={() => onDelete(activity)}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     删除
                   </DropdownMenuItem>
@@ -164,18 +165,20 @@ function ActivityCardComponent(props: ActivityCardProps) {
             </DropdownMenu>
           </div>
 
-          <div className="mt-1 whitespace-pre-wrap break-words text-[15px] leading-relaxed text-foreground">
+          <div className="text-foreground mt-1 whitespace-pre-wrap break-words text-[15px] leading-relaxed">
             {activity.content}
           </div>
 
           {images.length > 0 && (
-            <div className={`mt-3 grid gap-2 ${images.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+            <div
+              className={`mt-3 grid gap-2 ${images.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}
+            >
               {images.map((image, index) => {
                 const shouldPrioritize = priority && index === 0
                 return (
                   <div
                     key={index}
-                    className="overflow-hidden rounded-xl border border-border/50 bg-muted/20"
+                    className="border-border/50 bg-muted/20 overflow-hidden rounded-xl border"
                   >
                     <Image
                       src={
@@ -184,14 +187,14 @@ function ActivityCardComponent(props: ActivityCardProps) {
                           height: images.length === 1 ? 720 : 600,
                           quality: 75,
                           format: "webp",
-                        }) ?? image ?? "/placeholder.svg"
+                        }) ??
+                        image ??
+                        "/placeholder.svg"
                       }
                       alt={`动态图片 ${index + 1}`}
                       width={800}
                       height={600}
-                      sizes={
-                        images.length === 1 ? "100vw" : "(max-width: 768px) 50vw, 400px"
-                      }
+                      sizes={images.length === 1 ? "100vw" : "(max-width: 768px) 50vw, 400px"}
                       className="h-auto w-full cursor-pointer object-cover transition-opacity hover:opacity-90"
                       loading={shouldPrioritize ? "eager" : "lazy"}
                       priority={shouldPrioritize}

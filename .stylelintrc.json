@@ -1,11 +1,7 @@
 {
   "extends": ["stylelint-config-standard"],
   "plugins": ["./configs/stylelint/no-dangerous-global-reset.mjs"],
-  "ignoreFiles": [
-    "**/node_modules/**",
-    "coverage/**",
-    "perf-results/**"
-  ],
+  "ignoreFiles": ["**/node_modules/**", "coverage/**", "perf-results/**"],
   "rules": {
     "import-notation": null,
     "alpha-value-notation": null,
@@ -13,7 +9,16 @@
     "at-rule-no-unknown": [
       true,
       {
-        "ignoreAtRules": ["tailwind", "apply", "layer", "theme", "custom-variant", "config", "variants", "responsive"]
+        "ignoreAtRules": [
+          "tailwind",
+          "apply",
+          "layer",
+          "theme",
+          "custom-variant",
+          "config",
+          "variants",
+          "responsive"
+        ]
       }
     ],
     "selector-disallowed-list": [

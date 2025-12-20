@@ -185,7 +185,9 @@ function mapPostLike(
   const tags =
     post.tags
       ?.map((relation) => relation.tag)
-      .filter((tag): tag is { id: string; name: string; slug: string; color: string | null } => !!tag)
+      .filter(
+        (tag): tag is { id: string; name: string; slug: string; color: string | null } => !!tag
+      )
       .map((tag) => ({
         id: tag.id,
         name: tag.name,
@@ -257,10 +259,7 @@ async function handleGet(
 
     const where = {
       authorId: userId,
-      OR: [
-        { activity: { is: { deletedAt: null } } },
-        { post: { is: { published: true } } },
-      ],
+      OR: [{ activity: { is: { deletedAt: null } } }, { post: { is: { published: true } } }],
     }
 
     const [likes, total] = await Promise.all([
@@ -269,8 +268,8 @@ async function handleGet(
         skip,
         take: limit,
         orderBy: { createdAt: "desc" },
-      include: likeInclude,
-    }),
+        include: likeInclude,
+      }),
       prisma.like.count({ where }),
     ])
 
@@ -309,7 +308,9 @@ async function handleGet(
         if (like.post) {
           return mapPostLike(like.post, like.createdAt, {
             cover: signedCoverMap.get(like.post.id) ?? null,
-            avatar: like.post.author?.id ? signedAvatarMap.get(like.post.author.id) ?? null : null,
+            avatar: like.post.author?.id
+              ? (signedAvatarMap.get(like.post.author.id) ?? null)
+              : null,
           })
         }
         return null

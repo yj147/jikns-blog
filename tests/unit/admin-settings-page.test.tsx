@@ -12,7 +12,8 @@ const { fetchGetMock, fetchPostMock, toastMock } = vi.hoisted(() => ({
 }))
 
 vi.mock("@/lib/api/fetch-json", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/api/fetch-json")>("@/lib/api/fetch-json")
+  const actual =
+    await vi.importActual<typeof import("@/lib/api/fetch-json")>("@/lib/api/fetch-json")
   return {
     ...actual,
     fetchGet: fetchGetMock,
@@ -113,7 +114,9 @@ describe("AdminSettingsPage", () => {
     await user.click(switchElement)
 
     await waitFor(() => {
-      expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: "保存失败", variant: "destructive" }))
+      expect(toastMock).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "保存失败", variant: "destructive" })
+      )
     })
     expect(switchElement).toBeChecked()
   })

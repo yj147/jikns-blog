@@ -275,7 +275,7 @@ test.describe("用户设置页 - E2E", () => {
 
     // 找到"公开邮箱"开关并切换
     const emailSwitch = page
-      .locator('div', { hasText: /公开邮箱/ })
+      .locator("div", { hasText: /公开邮箱/ })
       .locator('button[role="switch"]')
       .first()
 
@@ -311,7 +311,7 @@ test.describe("用户设置页 - E2E", () => {
 
     // 找到"点赞通知"开关并切换
     const likeSwitch = page
-      .locator('div', { hasText: /点赞通知/ })
+      .locator("div", { hasText: /点赞通知/ })
       .locator('button[role="switch"]')
       .first()
 
@@ -429,7 +429,10 @@ test.describe("用户设置页 - Fuzzing 与安全测试", () => {
       await expect
         .poll(
           async () => {
-            const user = await prisma.user.findUnique({ where: { id: testUserId }, select: { name: true } })
+            const user = await prisma.user.findUnique({
+              where: { id: testUserId },
+              select: { name: true },
+            })
             return user?.name
           },
           { timeout: 15000 }
@@ -440,7 +443,10 @@ test.describe("用户设置页 - Fuzzing 与安全测试", () => {
       await nameInput.fill(maxName)
       await page.getByRole("button", { name: "保存个人资料" }).click()
       await page.waitForTimeout(500)
-      const updated = await prisma.user.findUnique({ where: { id: testUserId }, select: { name: true } })
+      const updated = await prisma.user.findUnique({
+        where: { id: testUserId },
+        select: { name: true },
+      })
       expect(updated?.name).toBe(maxName)
 
       await expectNoConsoleErrors(page)
@@ -464,7 +470,10 @@ test.describe("用户设置页 - Fuzzing 与安全测试", () => {
       await page.getByRole("button", { name: "保存个人资料" }).click()
       await page.waitForTimeout(500)
 
-      const saved = await prisma.user.findUnique({ where: { id: testUserId }, select: { bio: true } })
+      const saved = await prisma.user.findUnique({
+        where: { id: testUserId },
+        select: { bio: true },
+      })
       expect(saved?.bio?.length).toBe(500)
 
       await bioInput.clear()
@@ -492,7 +501,10 @@ test.describe("用户设置页 - Fuzzing 与安全测试", () => {
       await page.getByRole("button", { name: "保存个人资料" }).click()
       await page.waitForTimeout(500)
 
-      const saved = await prisma.user.findUnique({ where: { id: testUserId }, select: { location: true } })
+      const saved = await prisma.user.findUnique({
+        where: { id: testUserId },
+        select: { location: true },
+      })
       expect(saved?.location?.length).toBeLessThanOrEqual(200)
 
       await locationInput.clear()
@@ -521,7 +533,10 @@ test.describe("用户设置页 - Fuzzing 与安全测试", () => {
         await page.waitForTimeout(500)
       }
 
-      const saved = await prisma.user.findUnique({ where: { id: testUserId }, select: { phone: true } })
+      const saved = await prisma.user.findUnique({
+        where: { id: testUserId },
+        select: { phone: true },
+      })
       expect(saved?.phone).toBe(phones[phones.length - 1])
       await expectNoConsoleErrors(page)
     } catch (error) {
@@ -547,7 +562,10 @@ test.describe("用户设置页 - Fuzzing 与安全测试", () => {
       await expect
         .poll(
           async () => {
-            const user = await prisma.user.findUnique({ where: { id: testUserId }, select: { name: true } })
+            const user = await prisma.user.findUnique({
+              where: { id: testUserId },
+              select: { name: true },
+            })
             return user?.name
           },
           { timeout: 15000 }
@@ -576,7 +594,10 @@ test.describe("用户设置页 - Fuzzing 与安全测试", () => {
       await expect
         .poll(
           async () => {
-            const user = await prisma.user.findUnique({ where: { id: testUserId }, select: { bio: true } })
+            const user = await prisma.user.findUnique({
+              where: { id: testUserId },
+              select: { bio: true },
+            })
             return user?.bio
           },
           { timeout: 15000 }
@@ -660,7 +681,10 @@ test.describe("用户设置页 - Fuzzing 与安全测试", () => {
       await expect
         .poll(
           async () => {
-            const user = await prisma.user.findUnique({ where: { id: testUserId }, select: { name: true } })
+            const user = await prisma.user.findUnique({
+              where: { id: testUserId },
+              select: { name: true },
+            })
             return user?.name
           },
           { timeout: 15000 }
@@ -689,7 +713,10 @@ test.describe("用户设置页 - Fuzzing 与安全测试", () => {
       await expect
         .poll(
           async () => {
-            const user = await prisma.user.findUnique({ where: { id: testUserId }, select: { bio: true } })
+            const user = await prisma.user.findUnique({
+              where: { id: testUserId },
+              select: { bio: true },
+            })
             return user?.bio
           },
           { timeout: 15000 }
@@ -719,7 +746,10 @@ test.describe("用户设置页 - Fuzzing 与安全测试", () => {
       await expect
         .poll(
           async () => {
-            const user = await prisma.user.findUnique({ where: { id: testUserId }, select: { phone: true } })
+            const user = await prisma.user.findUnique({
+              where: { id: testUserId },
+              select: { phone: true },
+            })
             return user?.phone
           },
           { timeout: 15000 }
@@ -757,7 +787,10 @@ test.describe("用户设置页 - Fuzzing 与安全测试", () => {
       await expect
         .poll(
           async () => {
-            const user = await prisma.user.findUnique({ where: { id: testUserId }, select: { name: true } })
+            const user = await prisma.user.findUnique({
+              where: { id: testUserId },
+              select: { name: true },
+            })
             return user?.name
           },
           { timeout: 15000 }
@@ -863,7 +896,10 @@ test.describe("用户设置页 - 补充边界测试", () => {
     await page.waitForLoadState("networkidle")
 
     // 验证头像区域存在
-    const avatarSection = page.locator("div").filter({ hasText: /选择头像/ }).first()
+    const avatarSection = page
+      .locator("div")
+      .filter({ hasText: /选择头像/ })
+      .first()
     await expect(avatarSection).toBeVisible()
 
     // 验证"选择头像"按钮存在

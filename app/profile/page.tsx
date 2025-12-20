@@ -106,10 +106,7 @@ async function getProfileCounts(userId: string): Promise<ProfileCounts> {
 async function getRecentPosts(userId: string, take = 5): Promise<ProfilePostSummary[]> {
   const posts = await prisma.post.findMany({
     where: { authorId: userId },
-    orderBy: [
-      { publishedAt: "desc" },
-      { createdAt: "desc" },
-    ],
+    orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
     take,
     select: {
       id: true,
@@ -253,13 +250,12 @@ export default async function ProfilePage() {
   }[]
   return (
     <div className="bg-background min-h-screen">
-
       <div className="container mx-auto px-4 py-12 lg:py-16">
-        <div className="grid gap-8 lg:gap-12 lg:grid-cols-4">
+        <div className="grid gap-8 lg:grid-cols-4 lg:gap-12">
           {/* Profile Header */}
           <div className="lg:col-span-4">
             <Card className="overflow-hidden">
-              <div className="relative h-40 w-full bg-muted md:h-52">
+              <div className="bg-muted relative h-40 w-full md:h-52">
                 {user.coverImage ? (
                   <Image
                     src={user.coverImage}
@@ -275,7 +271,7 @@ export default async function ProfilePage() {
               <CardContent className="pt-6 md:pt-8">
                 <div className="flex flex-col items-start space-y-4 md:flex-row md:items-center md:space-x-6 md:space-y-0">
                   <div className="relative -mt-16 h-24 w-24 shrink-0 md:-mt-20 md:h-32 md:w-32">
-                    <Avatar className="h-full w-full border-4 border-background ring-4 ring-background shadow-lg">
+                    <Avatar className="border-background ring-background h-full w-full border-4 shadow-lg ring-4">
                       <AvatarImage src={user.avatarUrl || "/placeholder.svg"} alt={displayName} />
                       <AvatarFallback className="text-2xl">
                         {displayName.charAt(0).toUpperCase()}
@@ -401,7 +397,11 @@ export default async function ProfilePage() {
                       <CardHeader>
                         <div className="mb-2 flex flex-wrap gap-2">
                           {post.tags.map((tag) => (
-                            <Badge key={`${post.id}-${tag}`} variant="secondary" className="text-xs">
+                            <Badge
+                              key={`${post.id}-${tag}`}
+                              variant="secondary"
+                              className="text-xs"
+                            >
                               {tag}
                             </Badge>
                           ))}
@@ -503,27 +503,27 @@ export default async function ProfilePage() {
                   <CardTitle className="text-lg">活动统计</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground text-sm">本月发布</span>
-                        <span className="font-semibold">{quickStats.monthlyPosts} 篇</span>
-                      </div>
-                      <Separator />
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground text-sm">总阅读量</span>
-                        <span className="font-semibold">{quickStats.totalViews}</span>
-                      </div>
-                      <Separator />
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground text-sm">获得点赞</span>
-                        <span className="font-semibold">{quickStats.totalLikes}</span>
-                      </div>
-                      <Separator />
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground text-sm">评论互动</span>
-                        <span className="font-semibold">{quickStats.totalComments}</span>
-                      </div>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground text-sm">本月发布</span>
+                      <span className="font-semibold">{quickStats.monthlyPosts} 篇</span>
                     </div>
+                    <Separator />
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground text-sm">总阅读量</span>
+                      <span className="font-semibold">{quickStats.totalViews}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground text-sm">获得点赞</span>
+                      <span className="font-semibold">{quickStats.totalLikes}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground text-sm">评论互动</span>
+                      <span className="font-semibold">{quickStats.totalComments}</span>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
 

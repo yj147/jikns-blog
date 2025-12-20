@@ -160,7 +160,6 @@ export default function EditPostPage() {
   if (error) {
     return (
       <div className="bg-background min-h-screen">
-
         <div className="container mx-auto px-4 py-8">
           <div className="mb-8 flex items-center gap-4">
             <Button variant="ghost" size="sm" asChild>
@@ -184,7 +183,6 @@ export default function EditPostPage() {
   if (isLoading || !initialData) {
     return (
       <div className="bg-background min-h-screen">
-
         <div className="container mx-auto px-4 py-8">
           <div className="mb-8 flex items-center gap-4">
             <Button variant="ghost" size="sm" asChild>
@@ -207,7 +205,6 @@ export default function EditPostPage() {
 
   return (
     <div className="bg-background min-h-screen">
-
       <div className="container mx-auto px-4 py-8">
         {/* 头部导航 */}
         <div className="mb-8">

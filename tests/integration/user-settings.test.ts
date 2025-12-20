@@ -4,9 +4,10 @@ import { realPrisma, disconnectRealDb } from "./setup-real-db"
 import { TEST_USERS } from "../helpers/test-data"
 import { setCurrentTestUser, resetMocks } from "../__mocks__/supabase"
 
-type UpdateProfile = typeof import("@/app/actions/settings")["updateProfile"]
-type UpdateNotificationPreferences = typeof import("@/app/actions/settings")["updateNotificationPreferences"]
-type UpdatePrivacySettings = typeof import("@/app/actions/settings")["updatePrivacySettings"]
+type UpdateProfile = (typeof import("@/app/actions/settings"))["updateProfile"]
+type UpdateNotificationPreferences =
+  (typeof import("@/app/actions/settings"))["updateNotificationPreferences"]
+type UpdatePrivacySettings = (typeof import("@/app/actions/settings"))["updatePrivacySettings"]
 
 vi.doUnmock("@/lib/prisma")
 vi.mock("@/lib/prisma", () => ({

@@ -71,21 +71,22 @@ function ClientUserMenu({ user }: { user: any }) {
 
   const authMetadata = user.authUser?.metadata || {}
   const displayName =
-    user.name ||
-    authMetadata.full_name ||
-    authMetadata.name ||
-    authMetadata.user_name ||
-    user.email
+    user.name || authMetadata.full_name || authMetadata.name || authMetadata.user_name || user.email
   // 完全使用数据库的 avatarUrl，不再 fallback 到 Auth metadata
   const avatarUrl = user.avatarUrl || undefined
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="relative h-8 w-8 rounded-full transition-transform duration-200 hover:-translate-y-0.5">
+        <Button
+          variant="ghost"
+          className="relative h-8 w-8 rounded-full transition-transform duration-200 hover:-translate-y-0.5"
+        >
           <Avatar className="h-8 w-8">
             <AvatarImage src={avatarUrl} alt={displayName || "User"} />
-            <AvatarFallback className="text-sm">{displayName?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
+            <AvatarFallback className="text-sm">
+              {displayName?.charAt(0).toUpperCase() || "U"}
+            </AvatarFallback>
           </Avatar>
         </Button>
       </DropdownMenuTrigger>

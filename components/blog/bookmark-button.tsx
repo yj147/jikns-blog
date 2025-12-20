@@ -18,6 +18,7 @@ import { useInteractionErrorToast } from "@/hooks/use-interaction-error-toast"
 interface BookmarkButtonProps {
   postId: string
   initialCount?: number
+  initialIsBookmarked?: boolean
   className?: string
   variant?: "default" | "outline" | "ghost"
   size?: "default" | "sm" | "lg" | "icon"
@@ -27,6 +28,7 @@ interface BookmarkButtonProps {
 export function BookmarkButton({
   postId,
   initialCount = 0,
+  initialIsBookmarked,
   className,
   variant = "outline",
   size = "sm",
@@ -69,11 +71,12 @@ export function BookmarkButton({
   )
 
   const { status, isLoading, isToggling, toggle } = useInteractionToggle({
-    initialIsActive: false,
+    initialIsActive: initialIsBookmarked ?? false,
     initialCount,
     fetcher: fetchBookmarkStatus,
     toggler: toggleBookmarkRequest,
-    shouldFetchOnMount: true,
+    shouldFetchOnMount: initialIsBookmarked === undefined,
+    externalIsActive: initialIsBookmarked,
     externalCount: initialCount,
     onFetchError: handleFetchError,
     onToggleError: handleToggleError,

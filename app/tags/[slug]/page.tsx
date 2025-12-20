@@ -107,7 +107,6 @@ export default async function TagDetailPage({ params, searchParams }: TagDetailP
 
   return (
     <div className="bg-background min-h-screen">
-
       <div className="container mx-auto px-4 py-12">
         {/* 返回按钮 */}
         <div className="mb-8">

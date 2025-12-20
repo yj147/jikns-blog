@@ -35,7 +35,6 @@ beforeEach(() => {
   postAggregateMock = vi.fn()
   likeCountMock = vi.fn()
   commentCountMock = vi.fn()
-
   ;(prisma.post as any).count = postCountMock
   ;(prisma.post as any).aggregate = postAggregateMock
   ;(prisma.like as any).count = likeCountMock

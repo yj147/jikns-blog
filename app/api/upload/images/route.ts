@@ -137,13 +137,11 @@ async function handlePost(request: NextRequest) {
         const path = buildUploadPath(uploadPurpose, activeUser.id, fileName)
 
         // 上传到 Supabase Storage
-        const { error } = await supabase.storage
-          .from(uploadConfig.bucketName)
-          .upload(path, file, {
-            cacheControl: "3600",
-            upsert: false,
-            contentType: file.type,
-          })
+        const { error } = await supabase.storage.from(uploadConfig.bucketName).upload(path, file, {
+          cacheControl: "3600",
+          upsert: false,
+          contentType: file.type,
+        })
 
         if (error) {
           logger.error(`文件上传失败 ${file.name}:`, error as Error)

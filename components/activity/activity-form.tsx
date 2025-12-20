@@ -217,161 +217,170 @@ export function ActivityForm({
     <div className="w-full">
       <form onSubmit={handleSubmit(onSubmit)}>
         <div className="flex gap-4">
-            {/* 用户头像 */}
-            <div className="shrink-0">
-                <Avatar className="h-10 w-10">
-                    <AvatarImage src={user?.avatarUrl || "/placeholder.svg"} alt={user?.name || "用户"} />
-                    <AvatarFallback>{user?.name?.[0] || "U"}</AvatarFallback>
-                </Avatar>
-            </div>
+          {/* 用户头像 */}
+          <div className="shrink-0">
+            <Avatar className="h-10 w-10">
+              <AvatarImage src={user?.avatarUrl || "/placeholder.svg"} alt={user?.name || "用户"} />
+              <AvatarFallback>{user?.name?.[0] || "U"}</AvatarFallback>
+            </Avatar>
+          </div>
 
-            <div className="flex-1 min-w-0">
-                {/* 文本输入区 */}
-                <Textarea
-                    {...register("content")}
-                    placeholder={placeholder}
-                    className="min-h-[100px] w-full resize-none border-none bg-transparent p-0 text-lg placeholder:text-muted-foreground focus-visible:ring-0 leading-relaxed"
-                    maxLength={5000}
-                    autoFocus
-                />
+          <div className="min-w-0 flex-1">
+            {/* 文本输入区 */}
+            <Textarea
+              {...register("content")}
+              placeholder={placeholder}
+              className="placeholder:text-muted-foreground min-h-[100px] w-full resize-none border-none bg-transparent p-0 text-lg leading-relaxed focus-visible:ring-0"
+              maxLength={5000}
+              autoFocus
+            />
 
-                {errors.content && <p className="text-sm text-red-500 mt-2">{errors.content.message}</p>}
+            {errors.content && (
+              <p className="mt-2 text-sm text-red-500">{errors.content.message}</p>
+            )}
 
-                {/* 图片预览区 */}
-                {(images.length > 0 || previewImages.length > 0) && (
-                    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                        {/* 已上传的图片 */}
-                        {images.map((url, index) => (
-                            <div key={`uploaded-${index}`} className="group relative aspect-square">
-                                <Image
-                                    src={
-                                    getOptimizedImageUrl(url, {
-                                        width: 600,
-                                        height: 600,
-                                        quality: 80,
-                                        format: "webp",
-                                    }) ?? url
-                                    }
-                                    alt={`图片 ${index + 1}`}
-                                    fill
-                                    className="rounded-xl object-cover border border-border/50"
-                                    sizes="200px"
-                                    loading={index === 0 ? "eager" : "lazy"}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => removeImage(index, false)}
-                                    className="absolute right-1 top-1 rounded-full bg-black/60 p-1 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/80"
-                                >
-                                    <X className="h-3.5 w-3.5 text-white" />
-                                </button>
-                            </div>
-                        ))}
+            {/* 图片预览区 */}
+            {(images.length > 0 || previewImages.length > 0) && (
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {/* 已上传的图片 */}
+                {images.map((url, index) => (
+                  <div key={`uploaded-${index}`} className="group relative aspect-square">
+                    <Image
+                      src={
+                        getOptimizedImageUrl(url, {
+                          width: 600,
+                          height: 600,
+                          quality: 80,
+                          format: "webp",
+                        }) ?? url
+                      }
+                      alt={`图片 ${index + 1}`}
+                      fill
+                      className="border-border/50 rounded-xl border object-cover"
+                      sizes="200px"
+                      loading={index === 0 ? "eager" : "lazy"}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeImage(index, false)}
+                      className="absolute right-1 top-1 rounded-full bg-black/60 p-1 opacity-0 transition-opacity hover:bg-black/80 group-hover:opacity-100"
+                    >
+                      <X className="h-3.5 w-3.5 text-white" />
+                    </button>
+                  </div>
+                ))}
 
-                        {/* 待上传的图片 */}
-                        {previewImages.map((file, index) => {
-                            const previewUrl = previewImageUrls[index]
-                            if (!previewUrl) return null
-                            return (
-                            <div key={`preview-${index}`} className="group relative aspect-square">
-                                <Image
-                                    src={previewUrl}
-                                    alt={`预览 ${index + 1}`}
-                                    fill
-                                    className="rounded-xl object-cover border border-border/50 opacity-80"
-                                    sizes="200px"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => removeImage(index, true)}
-                                    className="absolute right-1 top-1 rounded-full bg-black/60 p-1 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/80"
-                                >
-                                    <X className="h-3.5 w-3.5 text-white" />
-                                </button>
-                            </div>
-                            )
-                        })}
+                {/* 待上传的图片 */}
+                {previewImages.map((file, index) => {
+                  const previewUrl = previewImageUrls[index]
+                  if (!previewUrl) return null
+                  return (
+                    <div key={`preview-${index}`} className="group relative aspect-square">
+                      <Image
+                        src={previewUrl}
+                        alt={`预览 ${index + 1}`}
+                        fill
+                        className="border-border/50 rounded-xl border object-cover opacity-80"
+                        sizes="200px"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(index, true)}
+                        className="absolute right-1 top-1 rounded-full bg-black/60 p-1 opacity-0 transition-opacity hover:bg-black/80 group-hover:opacity-100"
+                      >
+                        <X className="h-3.5 w-3.5 text-white" />
+                      </button>
                     </div>
+                  )
+                })}
+              </div>
+            )}
+
+            <div className="border-border mt-3 flex items-center justify-between border-t pt-3">
+              <div className="-ml-2 flex items-center gap-1">
+                {/* 图片上传按钮 */}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="text-primary hover:bg-primary/10 rounded-full"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={images.length + previewImages.length >= maxImages}
+                >
+                  <ImageIcon className="h-5 w-5" />
+                </Button>
+
+                {/* 表情按钮 */}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="text-primary hover:bg-primary/10 rounded-full"
+                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                >
+                  <Smile className="h-5 w-5" />
+                </Button>
+
+                {/* 置顶选项 (Compact) */}
+                {canShowPinOption && (
+                  <div className="ml-2 flex items-center gap-2">
+                    <Switch
+                      id="pin"
+                      checked={isPinned}
+                      onCheckedChange={(checked) => setValue("isPinned", checked)}
+                    />
+                    <Label htmlFor="pin" className="text-muted-foreground cursor-pointer text-xs">
+                      置顶
+                    </Label>
+                  </div>
                 )}
-                
-                <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
-                    <div className="flex items-center gap-1 -ml-2">
-                        {/* 图片上传按钮 */}
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="text-primary rounded-full hover:bg-primary/10"
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={images.length + previewImages.length >= maxImages}
-                        >
-                            <ImageIcon className="h-5 w-5" />
-                        </Button>
+              </div>
 
-                        {/* 表情按钮 */}
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="text-primary rounded-full hover:bg-primary/10"
-                            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                        >
-                            <Smile className="h-5 w-5" />
-                        </Button>
+              <div className="flex items-center gap-3">
+                {/* 字符计数 */}
+                {charCount > 0 && (
+                  <span
+                    className={`text-xs ${charCount > 4900 ? "text-red-500" : "text-muted-foreground"}`}
+                  >
+                    {charCount}/5000
+                  </span>
+                )}
 
-                        {/* 置顶选项 (Compact) */}
-                        {canShowPinOption && (
-                            <div className="flex items-center gap-2 ml-2">
-                                <Switch
-                                    id="pin"
-                                    checked={isPinned}
-                                    onCheckedChange={(checked) => setValue("isPinned", checked)}
-                                />
-                                <Label htmlFor="pin" className="text-xs text-muted-foreground cursor-pointer">
-                                    置顶
-                                </Label>
-                            </div>
-                        )}
-                    </div>
+                {/* 取消按钮 */}
+                {onCancel && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground hover:text-foreground rounded-full"
+                    onClick={onCancel}
+                    disabled={isLoading || isUploading}
+                  >
+                    取消
+                  </Button>
+                )}
 
-                    <div className="flex items-center gap-3">
-                        {/* 字符计数 */}
-                        {charCount > 0 && (
-                             <span className={`text-xs ${charCount > 4900 ? "text-red-500" : "text-muted-foreground"}`}>
-                                {charCount}/5000
-                            </span>
-                        )}
-
-                        {/* 取消按钮 */}
-                        {onCancel && (
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="rounded-full text-muted-foreground hover:text-foreground"
-                                onClick={onCancel}
-                                disabled={isLoading || isUploading}
-                            >
-                                取消
-                            </Button>
-                        )}
-
-                        {/* 发布按钮 */}
-                        <Button type="submit" size="sm" disabled={isSubmitDisabled} className="rounded-full font-bold px-5">
-                            {isLoading || isUploading ? (
-                                <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                {isUploading ? "上传" : "发布"}
-                                </>
-                            ) : mode === "edit" ? (
-                                "更新"
-                            ) : (
-                                "发布"
-                            )}
-                        </Button>
-                    </div>
-                </div>
+                {/* 发布按钮 */}
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={isSubmitDisabled}
+                  className="rounded-full px-5 font-bold"
+                >
+                  {isLoading || isUploading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {isUploading ? "上传" : "发布"}
+                    </>
+                  ) : mode === "edit" ? (
+                    "更新"
+                  ) : (
+                    "发布"
+                  )}
+                </Button>
+              </div>
             </div>
+          </div>
         </div>
       </form>
 

@@ -59,8 +59,7 @@ async function handleGet(request: NextRequest) {
       })
     }
 
-    const page =
-      cursorPage ?? (Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1)
+    const page = cursorPage ?? (Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1)
 
     const rawLimit = searchParams.get("limit")
     let limit = DEFAULT_LIMIT

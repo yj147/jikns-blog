@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { processEmailQueue } from "@/lib/cron/email-queue"
-import {
-  EmailQueueStatus,
-  EmailSubscriptionStatus,
-  NotificationType,
-} from "@/lib/generated/prisma"
+import { EmailQueueStatus, EmailSubscriptionStatus, NotificationType } from "@/lib/generated/prisma"
 import * as resendService from "@/lib/services/resend"
 import { prisma, resetPrismaMocks } from "@/tests/__mocks__/prisma"
 

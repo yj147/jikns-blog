@@ -23,7 +23,9 @@ interface NotificationsPageProps {
 
 export default async function NotificationsPage(props: NotificationsPageProps) {
   const searchParams = (await props.searchParams) || {}
-  const initialType = parseFilter(typeof searchParams.type === "string" ? searchParams.type : undefined)
+  const initialType = parseFilter(
+    typeof searchParams.type === "string" ? searchParams.type : undefined
+  )
 
   const user = await getCurrentUser()
   if (!user) {

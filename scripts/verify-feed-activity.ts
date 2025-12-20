@@ -34,7 +34,7 @@ async function main() {
       imageUrl: activity.imageUrls[0],
       pinned: activity.isPinned,
       createdAt: activity.createdAt.toISOString(),
-    })),
+    }))
   )
 
   console.info("\n[pinned activities]")
@@ -43,7 +43,7 @@ async function main() {
       id: activity.id,
       createdAt: activity.createdAt.toISOString(),
       preview: activity.content.slice(0, 60),
-    })),
+    }))
   )
 
   console.info("\n[activity_tags sample]")
@@ -51,7 +51,7 @@ async function main() {
     tagLinks.map((link) => ({
       activityId: link.activityId,
       tag: `${link.tag.name} (${link.tag.slug})`,
-    })),
+    }))
   )
 }
 

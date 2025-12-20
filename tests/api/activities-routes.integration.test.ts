@@ -70,10 +70,16 @@ describe("Activity API integration", () => {
     DELETE = routeModule.DELETE
 
     adminUser = await realPrisma.user.findUniqueOrThrow({ where: { email: "admin@example.com" } })
-    writerUser = await realPrisma.user.findUniqueOrThrow({ where: { email: "feed-writer@example.com" } })
-    readerUser = await realPrisma.user.findUniqueOrThrow({ where: { email: "feed-reader@example.com" } })
+    writerUser = await realPrisma.user.findUniqueOrThrow({
+      where: { email: "feed-writer@example.com" },
+    })
+    readerUser = await realPrisma.user.findUniqueOrThrow({
+      where: { email: "feed-reader@example.com" },
+    })
     opsUser = await realPrisma.user.findUniqueOrThrow({ where: { email: "feed-ops@example.com" } })
-    analystUser = await realPrisma.user.findUniqueOrThrow({ where: { email: "feed-analyst@example.com" } })
+    analystUser = await realPrisma.user.findUniqueOrThrow({
+      where: { email: "feed-analyst@example.com" },
+    })
 
     process.env.ACTIVITY_API_FIXTURE = "disabled"
   })

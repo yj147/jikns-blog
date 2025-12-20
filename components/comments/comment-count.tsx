@@ -9,6 +9,7 @@ interface CommentCountProps {
   targetId: string
   initialCount?: number
   className?: string
+  shouldFetch?: boolean
 }
 
 /**
@@ -19,8 +20,14 @@ export default function CommentCount({
   targetId,
   initialCount = 0,
   className,
+  shouldFetch = true,
 }: CommentCountProps) {
-  const { totalComments } = useCommentsData({ targetType, targetId, initialCount })
+  const { totalComments } = useCommentsData({
+    targetType,
+    targetId,
+    initialCount,
+    enabled: shouldFetch,
+  })
 
   return <span className={className}>{formatNumber(totalComments)}</span>
 }

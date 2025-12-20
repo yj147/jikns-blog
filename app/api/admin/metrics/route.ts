@@ -87,12 +87,8 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     logger.error("获取性能指标失败", { requestId }, error as Error)
-    return createErrorResponse(
-      ErrorCode.INTERNAL_ERROR,
-      "获取性能指标失败",
-      { requestId },
-      500,
-      { requestId }
-    )
+    return createErrorResponse(ErrorCode.INTERNAL_ERROR, "获取性能指标失败", { requestId }, 500, {
+      requestId,
+    })
   }
 }

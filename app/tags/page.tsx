@@ -120,7 +120,6 @@ export default async function TagsPage({ searchParams }: TagsPageProps) {
 
   return (
     <div className="bg-background min-h-screen">
-
       <div className="container mx-auto px-4 py-12">
         {/* 页面头部 */}
         <div className="mb-12 text-center">

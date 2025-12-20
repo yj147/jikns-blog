@@ -8,7 +8,14 @@ import { Loader2, Mail } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 
 const subscribeSchema = z.object({
@@ -56,13 +63,13 @@ export default function SubscribeForm() {
   const { isSubmitting } = form.formState
 
   return (
-    <div className="rounded-xl border border-border/60 bg-card p-4 shadow-sm sm:p-6">
+    <div className="border-border/60 bg-card rounded-xl border p-4 shadow-sm sm:p-6">
       <div className="mb-4 flex items-start gap-3">
-        <div className="mt-0.5 rounded-md bg-primary/10 p-2 text-primary">
+        <div className="bg-primary/10 text-primary mt-0.5 rounded-md p-2">
           <Mail className="h-5 w-5" />
         </div>
         <div>
-          <p className="text-base font-semibold leading-6 text-card-foreground">订阅最新文章</p>
+          <p className="text-card-foreground text-base font-semibold leading-6">订阅最新文章</p>
           <p className="text-muted-foreground text-sm leading-6">
             留下邮箱，第一时间收到新文章和精选内容。随时可退订。
           </p>

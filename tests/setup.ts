@@ -90,6 +90,12 @@ vi.mock("@/lib/supabase", async () => {
   }
 })
 
+// 确保每个测试前重置 supabase mock 状态（解决 isolate: false 导致的状态污染）
+beforeEach(async () => {
+  const { resetMocks } = await import("./__mocks__/supabase")
+  resetMocks()
+})
+
 // 设置标准化测试环境变量
 beforeAll(() => {
   setupTestEnv()

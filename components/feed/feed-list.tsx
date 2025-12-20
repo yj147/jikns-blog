@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react"
 import { ActivityCard } from "@/components/activity-card"
 import { CommentList } from "@/components/activity/comment-list"
 import { LazyActivityCard } from "@/components/feed/lazy-activity-card"
-import { Virtuoso } from "@/components/common/virtual-list"
+import { Virtuoso, type ListProps } from "@/components/common/virtual-list"
 import { Button } from "@/components/ui/button"
 import type { User as DatabaseUser } from "@/lib/generated/prisma"
 import { cn } from "@/lib/utils"
@@ -74,7 +74,7 @@ export function FeedList({
         <div
           id={`activity-${activity.id}`}
           className={cn(
-            "bg-background transition-colors hover:bg-muted/5 border-b border-border",
+            "bg-background hover:bg-muted/5 border-border border-b transition-colors",
             isHighlighted && "bg-primary/5",
             isRealtimeItem && "animate-in fade-in slide-in-from-top-4 duration-500",
             index === activities.length - 1 && "last:border-b-0"
@@ -105,7 +105,7 @@ export function FeedList({
             <div className="px-4 pb-4">
               <CommentList
                 activityId={activity.id}
-                className="mt-2 border-l-2 border-border pl-4"
+                className="border-border mt-2 border-l-2 pl-4"
                 showComposer={Boolean(user)}
                 onCommentAdded={onCommentsChange}
                 onCommentDeleted={onCommentsChange}
@@ -131,13 +131,13 @@ export function FeedList({
 
   if (isLoading && !hasDisplayActivities) {
     return (
-      <div className="min-h-[50vh] divide-y divide-border">
+      <div className="divide-border min-h-[50vh] divide-y">
         {[...Array(5)].map((_, i) => (
-          <div key={i} className="p-4 flex gap-4 animate-pulse">
-            <div className="h-10 w-10 rounded-full bg-muted" />
+          <div key={i} className="flex animate-pulse gap-4 p-4">
+            <div className="bg-muted h-10 w-10 rounded-full" />
             <div className="flex-1 space-y-3">
-              <div className="h-4 w-1/3 bg-muted rounded" />
-              <div className="h-16 w-full bg-muted rounded" />
+              <div className="bg-muted h-4 w-1/3 rounded" />
+              <div className="bg-muted h-16 w-full rounded" />
             </div>
           </div>
         ))}
@@ -148,7 +148,7 @@ export function FeedList({
   if (!hasDisplayActivities) {
     return (
       <div className="py-20 text-center">
-        <div className="text-4xl mb-4">📭</div>
+        <div className="mb-4 text-4xl">📭</div>
         <h3 className="text-lg font-semibold">暂无动态</h3>
         <p className="text-muted-foreground mt-2">
           {activeTab === "following" ? "你关注的人还没有发布任何内容" : "去发布第一条动态吧！"}
@@ -167,18 +167,21 @@ export function FeedList({
         computeItemKey={(_index: number, activity: ActivityWithAuthor) => activity.id}
         increaseViewportBy={{ top: 200, bottom: 400 }}
         components={{
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          List: forwardRef<HTMLDivElement, any>(({ className, ...props }, ref) => (
-            <div
-              {...props}
-              ref={ref}
-              className={cn("divide-y divide-border min-h-[50vh]", className)}
-            />
-          )),
+          List: forwardRef<HTMLDivElement, ListProps & { className?: string }>(
+            function FeedListContainer({ className, ...props }, ref) {
+              return (
+                <div
+                  {...props}
+                  ref={ref}
+                  className={cn("divide-border min-h-[50vh] divide-y", className)}
+                />
+              )
+            }
+          ),
         }}
       />
       {hasMore && baseActivitiesCount > 0 && (
-        <div className="py-8 flex justify-center border-t border-border">
+        <div className="border-border flex justify-center border-t py-8">
           <Button variant="outline" onClick={onLoadMore} disabled={isLoading}>
             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             加载更多

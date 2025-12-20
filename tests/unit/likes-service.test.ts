@@ -6,7 +6,10 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { prisma } from "@/lib/prisma"
 import { Prisma, UserStatus, Role } from "@/lib/generated/prisma"
-import { InteractionNotAllowedError, InteractionTargetNotFoundError } from "@/lib/interactions/errors"
+import {
+  InteractionNotAllowedError,
+  InteractionTargetNotFoundError,
+} from "@/lib/interactions/errors"
 import {
   toggleLike,
   getLikeStatus,

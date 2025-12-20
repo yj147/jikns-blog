@@ -37,7 +37,9 @@ function runVitest(extraArgs) {
 
 // 显式传入测试文件时，为避免跨文件 mock 污染，逐文件串行执行
 if (hasExplicitFiles && !isWatch) {
-  const baseArgs = args.filter((arg) => arg.startsWith("-") || arg === "run" || arg === "--reporter=basic")
+  const baseArgs = args.filter(
+    (arg) => arg.startsWith("-") || arg === "run" || arg === "--reporter=basic"
+  )
   for (const file of positionalArgs) {
     const code = runVitest([...baseArgs, file])
     if (code !== 0) {

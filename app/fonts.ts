@@ -2,11 +2,13 @@ import localFont from "next/font/local"
 import { Manrope } from "next/font/google"
 
 export const geistSans = localFont({
-  src: [{
-    path: "../public/fonts/geist/Geist-Variable.woff2",
-    weight: "100 900",
-    style: "normal",
-  }],
+  src: [
+    {
+      path: "../public/fonts/geist/Geist-Variable.woff2",
+      weight: "100 900",
+      style: "normal",
+    },
+  ],
   variable: "--font-geist-sans",
   display: "swap",
 })

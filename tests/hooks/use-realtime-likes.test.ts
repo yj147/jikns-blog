@@ -51,7 +51,13 @@ function createSupabaseStub() {
     removeChannel: vi.fn(),
     auth: {
       getSession: vi.fn().mockResolvedValue({
-        data: { session: { access_token: "token", user: { id: "u1" }, expires_at: Date.now() / 1000 + 3600 } },
+        data: {
+          session: {
+            access_token: "token",
+            user: { id: "u1" },
+            expires_at: Date.now() / 1000 + 3600,
+          },
+        },
         error: null,
       }),
     },
@@ -119,7 +125,13 @@ describe("useRealtimeLikes", () => {
       removeChannel: vi.fn(),
       auth: {
         getSession: vi.fn().mockResolvedValue({
-          data: { session: { access_token: "token", user: { id: "u1" }, expires_at: Date.now() / 1000 + 3600 } },
+          data: {
+            session: {
+              access_token: "token",
+              user: { id: "u1" },
+              expires_at: Date.now() / 1000 + 3600,
+            },
+          },
           error: null,
         }),
       },
@@ -219,7 +231,12 @@ describe("useRealtimeLikes", () => {
 
     const pollFetcher = vi.fn().mockResolvedValue(undefined)
     const { result } = renderHook(() =>
-      useRealtimeLikes({ targetType: "post", targetId: "post-non-error", pollFetcher, pollInterval: 300 })
+      useRealtimeLikes({
+        targetType: "post",
+        targetId: "post-non-error",
+        pollFetcher,
+        pollInterval: 300,
+      })
     )
 
     await waitFor(() => expect(result.current.connectionState).toBe("polling"))
@@ -239,7 +256,12 @@ describe("useRealtimeLikes", () => {
     createClientMock.mockReturnValue(supabase as any)
 
     const { result } = renderHook(() =>
-      useRealtimeLikes({ targetType: "post", targetId: "post-4", pollFetcher: undefined, pollInterval: 200 })
+      useRealtimeLikes({
+        targetType: "post",
+        targetId: "post-4",
+        pollFetcher: undefined,
+        pollInterval: 200,
+      })
     )
 
     await waitFor(() => expect(result.current.connectionState).toBe("error"))
@@ -280,7 +302,12 @@ describe("useRealtimeLikes", () => {
     retrySpy.mockReturnValue(scheduler as any)
 
     const { result } = renderHook(() =>
-      useRealtimeLikes({ targetType: "activity", targetId: "activity-2", pollFetcher, pollInterval: 200 })
+      useRealtimeLikes({
+        targetType: "activity",
+        targetId: "activity-2",
+        pollFetcher,
+        pollInterval: 200,
+      })
     )
 
     await waitFor(() => expect(result.current.isPollingFallback).toBe(true))
@@ -522,7 +549,12 @@ describe("useRealtimeLikes", () => {
     createClientMock.mockReturnValue(supabase as any)
 
     const { result } = renderHook(() =>
-      useRealtimeLikes({ targetType: "post", targetId: "post-polling", pollFetcher, pollInterval: 1000 })
+      useRealtimeLikes({
+        targetType: "post",
+        targetId: "post-polling",
+        pollFetcher,
+        pollInterval: 1000,
+      })
     )
 
     await waitFor(() => expect(supabase.channel).toHaveBeenCalled())

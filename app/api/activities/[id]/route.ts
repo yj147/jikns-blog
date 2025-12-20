@@ -3,11 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import type { AuthenticatedUser } from "@/lib/auth/session"
 import { activityUpdateSchema, type ActivityWithAuthor } from "@/types/activity"
-import {
-  createSuccessResponse,
-  createErrorResponse,
-  ErrorCode,
-} from "@/lib/api/unified-response"
+import { createSuccessResponse, createErrorResponse, ErrorCode } from "@/lib/api/unified-response"
 import { handleApiError } from "@/lib/api/error-handler"
 import { ActivityPermissions } from "@/lib/permissions/activity-permissions"
 import { rateLimitCheckForAction } from "@/lib/rate-limit/activity-limits"
@@ -16,7 +12,9 @@ import { extractActivityHashtags, syncActivityTags } from "@/lib/services/activi
 import { signAvatarUrl, signActivityImages } from "@/lib/storage/signed-url"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
-function toAuthenticatedUser(user: Awaited<ReturnType<typeof getCurrentUser>>): AuthenticatedUser | null {
+function toAuthenticatedUser(
+  user: Awaited<ReturnType<typeof getCurrentUser>>
+): AuthenticatedUser | null {
   if (!user) return null
   return {
     id: user.id,
@@ -31,10 +29,7 @@ function toAuthenticatedUser(user: Awaited<ReturnType<typeof getCurrentUser>>): 
 const DEFAULT_RATE_LIMIT_MESSAGE = "请求过于频繁，请稍后再试"
 
 // GET /api/activities/[id] - 获取单条动态
-async function handleGet(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+async function handleGet(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
     const currentUser = await getCurrentUser()
@@ -102,10 +97,7 @@ async function handleGet(
 }
 
 // PUT /api/activities/[id] - 更新动态
-async function handlePut(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+async function handlePut(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const ipAddress = getClientIP(request) ?? undefined
 
   try {
@@ -281,10 +273,7 @@ async function handlePut(
 }
 
 // DELETE /api/activities/[id] - 删除动态
-async function handleDelete(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+async function handleDelete(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const ipAddress = getClientIP(request) ?? undefined
 
   try {

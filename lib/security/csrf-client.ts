@@ -130,7 +130,10 @@ export function getCsrfHeaders(token?: string): HeadersInit {
 /**
  * 带 CSRF 令牌的 fetch 包装
  */
-export async function secureFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+export async function secureFetch(
+  input: RequestInfo | URL,
+  init: RequestInit = {}
+): Promise<Response> {
   const token = await ensureCsrfToken()
 
   return fetch(input, {

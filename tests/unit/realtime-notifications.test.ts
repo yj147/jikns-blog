@@ -50,9 +50,8 @@ const createRetrySchedulerMock = vi.mocked(
 )
 
 function createChannelMock() {
-  let postgresHandler:
-    | ((payload: RealtimePostgresChangesPayload<NotificationRow>) => void)
-    | null = null
+  let postgresHandler: ((payload: RealtimePostgresChangesPayload<NotificationRow>) => void) | null =
+    null
   let broadcastHandler: ((payload: { event: string; payload: NotificationRow }) => void) | null =
     null
   let statusHandler: ((status: string) => void) | null = null
@@ -539,9 +538,15 @@ describe("useRealtimeNotifications", () => {
     expect(calls).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: "follow-1", targetUrl: "/profile/actor-follow" }),
-        expect.objectContaining({ id: "comment-activity", targetUrl: "/feed?highlight=activity-1" }),
+        expect.objectContaining({
+          id: "comment-activity",
+          targetUrl: "/feed?highlight=activity-1",
+        }),
         expect.objectContaining({ id: "comment-post", targetUrl: "/blog/slug-1#comments" }),
-        expect.objectContaining({ id: "like-activity", targetUrl: "/feed?highlight=activity-like" }),
+        expect.objectContaining({
+          id: "like-activity",
+          targetUrl: "/feed?highlight=activity-like",
+        }),
         expect.objectContaining({ id: "system-1", targetUrl: null }),
       ])
     )

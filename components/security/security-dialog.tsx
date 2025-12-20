@@ -125,14 +125,14 @@ export function SecurityDialog({
   const getSeverityIcon = () => {
     switch (severity) {
       case "critical":
-        return <ShieldAlert className="h-5 w-5 text-status-error" />
+        return <ShieldAlert className="text-status-error h-5 w-5" />
       case "high":
-        return <ShieldAlert className="h-5 w-5 text-status-error" />
+        return <ShieldAlert className="text-status-error h-5 w-5" />
       case "medium":
-        return <AlertTriangle className="h-5 w-5 text-status-warning" />
+        return <AlertTriangle className="text-status-warning h-5 w-5" />
       case "low":
       default:
-        return <Shield className="h-5 w-5 text-status-info" />
+        return <Shield className="text-status-info h-5 w-5" />
     }
   }
 
@@ -392,7 +392,7 @@ export function SecurityDialog({
                 )}
               />
               {confirmationInput && confirmationInput !== confirmationText && (
-                <p className="text-sm text-status-error">输入不匹配，请重新输入</p>
+                <p className="text-status-error text-sm">输入不匹配，请重新输入</p>
               )}
             </div>
           )}

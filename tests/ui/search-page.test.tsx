@@ -138,7 +138,8 @@ describe("SearchPageClient", () => {
     let resolveFetch: (() => void) | null = null
     fetchMock.mockReturnValue(
       new Promise((resolve) => {
-        resolveFetch = () => resolve(mockJsonResponse({ success: true, data: emptyResult("loading") }))
+        resolveFetch = () =>
+          resolve(mockJsonResponse({ success: true, data: emptyResult("loading") }))
       })
     )
 

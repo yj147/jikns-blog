@@ -16,8 +16,8 @@ const PostForm = dynamic<PostFormProps>(
     ssr: false,
     loading: () => (
       <div className="space-y-4">
-        <div className="h-10 w-48 animate-pulse rounded-md bg-muted" />
-        <div className="h-[520px] w-full animate-pulse rounded-xl bg-muted" />
+        <div className="bg-muted h-10 w-48 animate-pulse rounded-md" />
+        <div className="bg-muted h-[520px] w-full animate-pulse rounded-xl" />
       </div>
     ),
   }

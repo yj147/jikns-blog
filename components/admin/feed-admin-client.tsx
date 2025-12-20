@@ -2,11 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import useSWR, { mutate as globalMutate } from "swr"
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@/components/ui/alert"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,8 +23,23 @@ import type { ApiResponse } from "@/lib/api-guards"
 import { fetchJson, FetchError } from "@/lib/api/fetch-json"
 import { useFeedFilters } from "@/hooks/useFeedFilters"
 import { useAuth } from "@/hooks/use-auth"
-import type { AdminFeedActionInput, FeedActionResult, FeedItem, FeedListResponse } from "@/types/feed"
-import { Eye, EyeOff, ListChecks, Loader2, Pin, PinOff, RefreshCw, ShieldAlert, Trash2 } from "lucide-react"
+import type {
+  AdminFeedActionInput,
+  FeedActionResult,
+  FeedItem,
+  FeedListResponse,
+} from "@/types/feed"
+import {
+  Eye,
+  EyeOff,
+  ListChecks,
+  Loader2,
+  Pin,
+  PinOff,
+  RefreshCw,
+  ShieldAlert,
+  Trash2,
+} from "lucide-react"
 
 const LIST_ENDPOINT = "/api/admin/feeds"
 const BATCH_ENDPOINT = "/api/admin/feeds/batch"
@@ -37,7 +48,15 @@ const fetchFeeds = (url: string) => fetchJson<ApiResponse<FeedListResponse>>(url
 
 type FeedBatchAction = AdminFeedActionInput["action"]
 
-const ACTION_CONFIG: Record<FeedBatchAction, { label: string; description: string; icon: typeof Trash2; variant: "destructive" | "outline" | "secondary" }> = {
+const ACTION_CONFIG: Record<
+  FeedBatchAction,
+  {
+    label: string
+    description: string
+    icon: typeof Trash2
+    variant: "destructive" | "outline" | "secondary"
+  }
+> = {
   delete: {
     label: "删除",
     description: "删除后不可恢复，请谨慎操作。",
@@ -107,19 +126,24 @@ export default function FeedAdminClient() {
   }, [filters.includeDeleted, isAdmin, setIncludeDeleted])
 
   const revalidateActivities = () =>
-    globalMutate(
-      (key) => typeof key === "string" && key.startsWith("/api/activities"),
-      undefined,
-      { revalidate: true }
-    )
+    globalMutate((key) => typeof key === "string" && key.startsWith("/api/activities"), undefined, {
+      revalidate: true,
+    })
 
-  const endpoint = useMemo(() => (queryString ? `${LIST_ENDPOINT}?${queryString}` : LIST_ENDPOINT), [queryString])
+  const endpoint = useMemo(
+    () => (queryString ? `${LIST_ENDPOINT}?${queryString}` : LIST_ENDPOINT),
+    [queryString]
+  )
 
-  const { data, error, isLoading, isValidating, mutate } = useSWR<ApiResponse<FeedListResponse>>(endpoint, fetchFeeds, {
-    keepPreviousData: true,
-    revalidateOnFocus: true,
-    revalidateOnReconnect: true,
-  })
+  const { data, error, isLoading, isValidating, mutate } = useSWR<ApiResponse<FeedListResponse>>(
+    endpoint,
+    fetchFeeds,
+    {
+      keepPreviousData: true,
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true,
+    }
+  )
 
   const payload = extractData<FeedListResponse>(data)
   const feeds = payload?.feeds ?? EMPTY_FEEDS
@@ -141,7 +165,9 @@ export default function FeedAdminClient() {
   }, [feeds])
 
   const handleToggleItem = (feedId: string) => {
-    setSelectedIds((prev) => (prev.includes(feedId) ? prev.filter((id) => id !== feedId) : [...prev, feedId]))
+    setSelectedIds((prev) =>
+      prev.includes(feedId) ? prev.filter((id) => id !== feedId) : [...prev, feedId]
+    )
   }
 
   const handleToggleAll = () => {
@@ -261,7 +287,7 @@ export default function FeedAdminClient() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {isValidating && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          {isValidating && <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />}
           <Button variant="outline" size="sm" onClick={() => mutate()} disabled={isValidating}>
             <RefreshCw className="mr-1 h-4 w-4" />
             刷新
@@ -273,7 +299,9 @@ export default function FeedAdminClient() {
         <Alert>
           <ShieldAlert className="h-4 w-4" />
           <AlertTitle>权限限制</AlertTitle>
-          <AlertDescription>您当前仅能管理自己发布的动态，系统已自动隐藏其他作者的数据。</AlertDescription>
+          <AlertDescription>
+            您当前仅能管理自己发布的动态，系统已自动隐藏其他作者的数据。
+          </AlertDescription>
         </Alert>
       )}
 
@@ -306,7 +334,7 @@ export default function FeedAdminClient() {
         <Alert>
           <AlertTitle>已选择 {selectedCount} 条动态</AlertTitle>
           <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm text-muted-foreground">
+            <span className="text-muted-foreground text-sm">
               批量操作前请再次确认，删除操作不可恢复。
             </span>
             <Button variant="secondary" size="sm" onClick={() => setSelectedIds([])}>
@@ -316,8 +344,8 @@ export default function FeedAdminClient() {
         </Alert>
       )}
 
-      <section className="rounded-xl border bg-card shadow-sm">
-        <div className="flex flex-wrap items-center gap-3 border-b px-4 py-3 text-sm text-muted-foreground">
+      <section className="bg-card rounded-xl border shadow-sm">
+        <div className="text-muted-foreground flex flex-wrap items-center gap-3 border-b px-4 py-3 text-sm">
           <div className="flex items-center gap-2">
             <ListChecks className="h-4 w-4" />
             <span>共 {pagination.totalCount} 条记录</span>
@@ -342,7 +370,7 @@ export default function FeedAdminClient() {
             })}
           </div>
           {isSubmitting && (
-            <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+            <div className="text-muted-foreground flex items-center gap-1 text-xs font-medium">
               <Loader2 className="h-3 w-3 animate-spin" />
               批量操作执行中...
             </div>
@@ -360,7 +388,7 @@ export default function FeedAdminClient() {
           />
 
           {!listLoading && feeds.length === 0 && !hasError && (
-            <div className="py-10 text-center text-sm text-muted-foreground">
+            <div className="text-muted-foreground py-10 text-center text-sm">
               <p className="mb-3 font-medium">暂无符合条件的动态</p>
               <div className="flex justify-center gap-2">
                 <Button variant="outline" size="sm" onClick={() => mutate()}>
@@ -378,7 +406,7 @@ export default function FeedAdminClient() {
         </div>
 
         <Separator />
-        <footer className="flex flex-col gap-3 px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+        <footer className="text-muted-foreground flex flex-col gap-3 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
           <div>
             第 {pagination.currentPage} / {pagination.totalPages} 页
           </div>
@@ -403,7 +431,10 @@ export default function FeedAdminClient() {
         </footer>
       </section>
 
-      <AlertDialog open={pendingAction !== null} onOpenChange={(open) => !open && !isSubmitting && setPendingAction(null)}>
+      <AlertDialog
+        open={pendingAction !== null}
+        onOpenChange={(open) => !open && !isSubmitting && setPendingAction(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>

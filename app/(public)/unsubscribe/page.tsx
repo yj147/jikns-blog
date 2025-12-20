@@ -51,9 +51,9 @@ function UnsubscribePageContent() {
     state.status === "success" ? (
       <CheckCircle2 className="h-8 w-8 text-green-600" />
     ) : state.status === "loading" ? (
-      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <Loader2 className="text-primary h-8 w-8 animate-spin" />
     ) : (
-      <XCircle className="h-8 w-8 text-destructive" />
+      <XCircle className="text-destructive h-8 w-8" />
     )
 
   return (
@@ -64,7 +64,7 @@ function UnsubscribePageContent() {
             {icon}
             退订邮件
           </CardTitle>
-          <CardDescription className="text-base text-muted-foreground">
+          <CardDescription className="text-muted-foreground text-base">
             {state.status === "loading"
               ? "正在处理你的退订请求..."
               : state.message || "正在处理你的请求"}
@@ -72,7 +72,7 @@ function UnsubscribePageContent() {
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {state.status === "success" ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               你可以随时在站内重新订阅。如果误点，请再次提交订阅表单即可恢复。
             </p>
           ) : null}
@@ -96,13 +96,15 @@ function UnsubscribePageFallback() {
       <Card className="w-full">
         <CardHeader className="space-y-3">
           <CardTitle className="flex items-center gap-3 text-2xl font-semibold">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <Loader2 className="text-primary h-8 w-8 animate-spin" />
             退订邮件
           </CardTitle>
-          <CardDescription className="text-base text-muted-foreground">正在加载页面...</CardDescription>
+          <CardDescription className="text-muted-foreground text-base">
+            正在加载页面...
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">正在准备退订信息，请稍候。</p>
+          <p className="text-muted-foreground text-sm">正在准备退订信息，请稍候。</p>
           <div className="flex flex-wrap gap-3">
             <Button variant="secondary" disabled>
               返回首页

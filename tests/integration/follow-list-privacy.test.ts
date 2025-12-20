@@ -5,11 +5,7 @@
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest"
 import { NextRequest } from "next/server"
-import {
-  realPrisma,
-  cleanupTestData,
-  disconnectRealDb,
-} from "./setup-real-db"
+import { realPrisma, cleanupTestData, disconnectRealDb } from "./setup-real-db"
 
 vi.unmock("@/lib/prisma")
 
@@ -134,7 +130,9 @@ describe("follow list privacy (real db)", () => {
     mockedGetOptionalViewer.mockResolvedValueOnce(null as any)
 
     const request = new NextRequest(`http://localhost:3000/api/users/${publicUserId}/followers`)
-    const response = await getFollowers(request, { params: Promise.resolve({ userId: publicUserId }) })
+    const response = await getFollowers(request, {
+      params: Promise.resolve({ userId: publicUserId }),
+    })
     const body = await response.json()
 
     expect(response.status).toBe(200)
@@ -189,7 +187,9 @@ describe("follow list privacy (real db)", () => {
     } as any)
 
     const request = new NextRequest(`http://localhost:3000/api/users/${privateUserId}/followers`)
-    const response = await getFollowers(request, { params: Promise.resolve({ userId: privateUserId }) })
+    const response = await getFollowers(request, {
+      params: Promise.resolve({ userId: privateUserId }),
+    })
 
     expect(response.status).toBe(200)
   })
@@ -202,7 +202,9 @@ describe("follow list privacy (real db)", () => {
     } as any)
 
     const request = new NextRequest(`http://localhost:3000/api/users/${privateUserId}/followers`)
-    const response = await getFollowers(request, { params: Promise.resolve({ userId: privateUserId }) })
+    const response = await getFollowers(request, {
+      params: Promise.resolve({ userId: privateUserId }),
+    })
 
     expect(response.status).toBe(200)
   })
@@ -211,7 +213,9 @@ describe("follow list privacy (real db)", () => {
     mockedGetOptionalViewer.mockResolvedValueOnce(null as any)
 
     const request = new NextRequest(`http://localhost:3000/api/users/${privateUserId}/followers`)
-    const response = await getFollowers(request, { params: Promise.resolve({ userId: privateUserId }) })
+    const response = await getFollowers(request, {
+      params: Promise.resolve({ userId: privateUserId }),
+    })
     const body = await response.json()
 
     expect(response.status).toBe(403)

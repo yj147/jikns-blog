@@ -9,7 +9,14 @@ import { getAllSettings, setSetting, type Json } from "@/lib/services/system-set
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 const jsonSchema: z.ZodType<Json> = z.lazy(() =>
-  z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(jsonSchema), z.record(jsonSchema)])
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(jsonSchema),
+    z.record(jsonSchema),
+  ])
 )
 
 const settingSchema = z.object({

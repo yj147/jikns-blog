@@ -158,10 +158,14 @@ export function NotificationBell() {
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative transition-transform duration-200 hover:-translate-y-0.5">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative transition-transform duration-200 hover:-translate-y-0.5"
+        >
           <Bell className="h-4 w-4" />
           {unreadCount > 0 ? (
-            <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-semibold text-destructive-foreground">
+            <span className="bg-destructive text-destructive-foreground absolute -right-1 -top-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[11px] font-semibold">
               {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           ) : null}
@@ -185,7 +189,7 @@ export function NotificationBell() {
         <DropdownMenuSeparator />
         <div className="max-h-[420px] space-y-2 overflow-y-auto px-3 py-3">
           {isLoading ? (
-            <div className="flex items-center justify-center gap-2 py-6 text-muted-foreground text-sm">
+            <div className="text-muted-foreground flex items-center justify-center gap-2 py-6 text-sm">
               <Loader2 className="h-4 w-4 animate-spin" />
               <span>加载中...</span>
             </div>

@@ -5,7 +5,7 @@ import { resetMocks, setCurrentTestUser } from "../__mocks__/supabase"
 import { createServiceRoleClient } from "@/lib/supabase"
 import { cookies } from "next/headers"
 
-type UpdateAvatar = typeof import("@/app/actions/settings")["updateAvatar"]
+type UpdateAvatar = (typeof import("@/app/actions/settings"))["updateAvatar"]
 
 const auditLogMock = { logEvent: vi.fn().mockResolvedValue(undefined) }
 

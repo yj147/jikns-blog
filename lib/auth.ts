@@ -97,7 +97,9 @@ const getAuthenticatedUserImpl = async () => {
   }
 }
 
-export const getAuthenticatedUser = isTestEnv ? getAuthenticatedUserImpl : cache(getAuthenticatedUserImpl)
+export const getAuthenticatedUser = isTestEnv
+  ? getAuthenticatedUserImpl
+  : cache(getAuthenticatedUserImpl)
 
 /**
  * 获取当前用户会话（兼容性保留）

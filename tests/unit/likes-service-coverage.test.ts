@@ -70,7 +70,7 @@ vi.mock("@/lib/prisma", () => ({
 const asAny = (v: any) => v as any
 
 let likesService: typeof import("@/lib/interactions/likes")
-let prisma: typeof import("@/lib/prisma")["prisma"]
+let prisma: (typeof import("@/lib/prisma"))["prisma"]
 let toggleLike: typeof import("@/lib/interactions/likes").toggleLike
 let setLike: typeof import("@/lib/interactions/likes").setLike
 let ensureLiked: typeof import("@/lib/interactions/likes").ensureLiked
@@ -88,7 +88,7 @@ describe("likes service coverage sweep", () => {
     role: Role.USER,
     status: UserStatus.ACTIVE,
     name: "u",
-  avatarUrl: null,
+    avatarUrl: null,
   }
 
   beforeEach(async () => {
@@ -98,7 +98,6 @@ describe("likes service coverage sweep", () => {
     const prismaModule = await import("@/lib/prisma")
     prisma = prismaModule.prisma
     likesService = await import("@/lib/interactions/likes")
-
     ;({
       toggleLike,
       setLike,
@@ -130,9 +129,7 @@ describe("likes service coverage sweep", () => {
     const status = await getLikeStatus("post", "p1", "user-1")
     expect(status).toEqual({ isLiked: true, count: 2 })
 
-    vi.mocked(prisma.activity.findMany).mockResolvedValue([
-      { id: "a1", likesCount: 3 },
-    ] as any)
+    vi.mocked(prisma.activity.findMany).mockResolvedValue([{ id: "a1", likesCount: 3 }] as any)
     vi.mocked(prisma.like.groupBy).mockResolvedValue([{ postId: "p1", _count: { _all: 4 } }] as any)
     vi.mocked(prisma.like.findMany).mockResolvedValue([{ activityId: "a1" }] as any)
 
@@ -311,13 +308,8 @@ describe("likes service coverage sweep", () => {
   })
 
   it("getBatchLikeStatus covers post path with user likes", async () => {
-    vi.mocked(prisma.like.groupBy).mockResolvedValue([
-      { postId: "p1", _count: { _all: 3 } },
-    ] as any)
-    vi.mocked(prisma.like.findMany).mockResolvedValue([
-      { postId: "p1" },
-      { postId: "p2" },
-    ] as any)
+    vi.mocked(prisma.like.groupBy).mockResolvedValue([{ postId: "p1", _count: { _all: 3 } }] as any)
+    vi.mocked(prisma.like.findMany).mockResolvedValue([{ postId: "p1" }, { postId: "p2" }] as any)
 
     const res = await getBatchLikeStatus("post", ["p1", "p2"], "user-1")
     expect(res.get("p1")?.count).toBe(3)

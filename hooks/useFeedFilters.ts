@@ -55,27 +55,41 @@ export function useFeedFilters(options?: UseFeedFiltersOptions) {
 
   const setFilters = useCallback(
     (updater: Partial<FeedFiltersValue> | ((prev: FeedFiltersValue) => FeedFiltersValue)) => {
-      setFiltersState((prev) => (typeof updater === "function" ? updater(prev) : { ...prev, ...updater }))
+      setFiltersState((prev) =>
+        typeof updater === "function" ? updater(prev) : { ...prev, ...updater }
+      )
       setPageState(1)
     },
     []
   )
 
-  const setSearch = useCallback((value: string) => {
-    setFilters((prev) => ({ ...prev, search: value.slice(0, 100) }))
-  }, [setFilters])
+  const setSearch = useCallback(
+    (value: string) => {
+      setFilters((prev) => ({ ...prev, search: value.slice(0, 100) }))
+    },
+    [setFilters]
+  )
 
-  const setAuthorId = useCallback((value: string) => {
-    setFilters((prev) => ({ ...prev, authorId: value.trim() }))
-  }, [setFilters])
+  const setAuthorId = useCallback(
+    (value: string) => {
+      setFilters((prev) => ({ ...prev, authorId: value.trim() }))
+    },
+    [setFilters]
+  )
 
-  const setPinned = useCallback((value: PinnedFilter) => {
-    setFilters((prev) => ({ ...prev, pinned: value }))
-  }, [setFilters])
+  const setPinned = useCallback(
+    (value: PinnedFilter) => {
+      setFilters((prev) => ({ ...prev, pinned: value }))
+    },
+    [setFilters]
+  )
 
-  const setIncludeDeleted = useCallback((value: boolean) => {
-    setFilters((prev) => ({ ...prev, includeDeleted: value }))
-  }, [setFilters])
+  const setIncludeDeleted = useCallback(
+    (value: boolean) => {
+      setFilters((prev) => ({ ...prev, includeDeleted: value }))
+    },
+    [setFilters]
+  )
 
   const setDateRange = useCallback(
     (from: string | null, to: string | null) => {

@@ -23,7 +23,9 @@ type MockUser = {
   status: "ACTIVE" | "BANNED"
 }
 
-const createAuthState = (overrides?: Partial<{ user: MockUser | null; loading: boolean; signOut: () => Promise<void> }>) => {
+const createAuthState = (
+  overrides?: Partial<{ user: MockUser | null; loading: boolean; signOut: () => Promise<void> }>
+) => {
   return {
     user: overrides?.user ?? null,
     session: null,

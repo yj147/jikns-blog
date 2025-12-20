@@ -144,19 +144,16 @@ export function useRealtimeNotifications({
     }
   }, [])
 
-  const stopPolling = useCallback(
-    (skipStateUpdate = false) => {
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current)
-        pollTimerRef.current = null
-      }
-      isPollingRef.current = false
-      if (!skipStateUpdate) {
-        setIsPollingFallback(false)
-      }
-    },
-    []
-  )
+  const stopPolling = useCallback((skipStateUpdate = false) => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current)
+      pollTimerRef.current = null
+    }
+    isPollingRef.current = false
+    if (!skipStateUpdate) {
+      setIsPollingFallback(false)
+    }
+  }, [])
 
   const pollNotifications = useCallback(async () => {
     if (!enabled || !userId || !isOnline || refreshInFlightRef.current) return
@@ -434,8 +431,7 @@ export function useRealtimeNotifications({
         logger.debug("收到新通知", { notificationId: normalized.id, source })
 
         try {
-          const hydrated =
-            (await hydrateNotification(normalized.id)) ?? withFallback(normalized)
+          const hydrated = (await hydrateNotification(normalized.id)) ?? withFallback(normalized)
           rememberDelivered(hydrated.id)
           onInsertRef.current?.(hydrated)
         } catch (err) {

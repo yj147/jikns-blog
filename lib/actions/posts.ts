@@ -79,7 +79,9 @@ async function signPostCoverImage(coverImage: string | null): Promise<string | n
   return createSignedUrlIfNeeded(coverImage, POST_IMAGE_SIGN_EXPIRES_IN, "post-images")
 }
 
-async function signPostContent(content: string | null | undefined): Promise<string | null | undefined> {
+async function signPostContent(
+  content: string | null | undefined
+): Promise<string | null | undefined> {
   if (!content) return content ?? null
 
   const storageUrlPattern =

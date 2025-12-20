@@ -30,7 +30,7 @@ describe("calculateReadingMinutes", () => {
     const htmlOnly = '<div><img src="x" alt="desc" /></div>'
     expect(calculateReadingMinutes(htmlOnly)).toBe(1)
 
-    const htmlWithText = '<p>你好 <strong>world</strong></p>'
+    const htmlWithText = "<p>你好 <strong>world</strong></p>"
     expect(calculateReadingMinutes(htmlWithText)).toBe(1)
   })
 

@@ -7,7 +7,11 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { createClient } from "@/lib/supabase"
 import { createRetryScheduler } from "@/lib/realtime/retry"
 import { ensureSessionReady, useNetworkStatus, useOnlineCallback } from "@/lib/realtime/connection"
-import type { RealtimeChannel, RealtimePostgresChangesPayload, SupabaseClient } from "@supabase/supabase-js"
+import type {
+  RealtimeChannel,
+  RealtimePostgresChangesPayload,
+  SupabaseClient,
+} from "@supabase/supabase-js"
 import type { Database } from "@/types/database"
 import type { CommentRealtimePayload, CommentTargetType } from "@/types/comments"
 import { logger } from "@/lib/utils/logger"

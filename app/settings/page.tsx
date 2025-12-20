@@ -59,11 +59,7 @@ const COVER_ACCEPT = COVER_ALLOWED_TYPES.join(",")
 const MAX_COVER_SIZE = 8 * 1024 * 1024
 
 const profileFormSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(2, "用户名至少需要 2 个字符")
-    .max(50, "用户名不能超过 50 个字符"),
+  name: z.string().trim().min(2, "用户名至少需要 2 个字符").max(50, "用户名不能超过 50 个字符"),
   location: z.string().trim().max(200, "所在地不能超过200个字符").optional(),
   phone: z
     .string()
@@ -292,9 +288,7 @@ export default function SettingsPage() {
         // 显示成功提示
         toast({
           title: authMetadataUpdated ? "头像已更新" : "头像已更新 (部分同步延迟)",
-          description: authMetadataUpdated
-            ? undefined
-            : "如果部分页面未显示新头像，请刷新页面",
+          description: authMetadataUpdated ? undefined : "如果部分页面未显示新头像，请刷新页面",
         })
       } else {
         setUploadError(result.error)
@@ -346,10 +340,7 @@ export default function SettingsPage() {
         setCoverPreviewUrl(null)
         setCoverUploadError(null)
 
-        await Promise.all([
-          refreshUser(),
-          new Promise((resolve) => setTimeout(resolve, 100)),
-        ])
+        await Promise.all([refreshUser(), new Promise((resolve) => setTimeout(resolve, 100))])
         router.refresh()
         toast({ title: "封面已更新" })
       } else {
@@ -378,10 +369,7 @@ export default function SettingsPage() {
         setCurrentCoverUrl(null)
         setCoverPreviewUrl(null)
         setCoverUploadError(null)
-        await Promise.all([
-          refreshUser(),
-          new Promise((resolve) => setTimeout(resolve, 100)),
-        ])
+        await Promise.all([refreshUser(), new Promise((resolve) => setTimeout(resolve, 100))])
         router.refresh()
         toast({ title: "封面已移除" })
       } else {
@@ -406,10 +394,7 @@ export default function SettingsPage() {
 
       if (result.success) {
         toast({ title: "个人资料已保存" })
-        await Promise.all([
-          refreshUser(),
-          new Promise((resolve) => setTimeout(resolve, 100)),
-        ])
+        await Promise.all([refreshUser(), new Promise((resolve) => setTimeout(resolve, 100))])
         router.refresh()
         profileForm.reset({
           name: result.data.name ?? "",
@@ -469,10 +454,7 @@ export default function SettingsPage() {
         toast({ title: "通知偏好已保存" })
 
         // 刷新客户端user对象和服务端路由缓存
-        await Promise.all([
-          refreshUser(),
-          new Promise((resolve) => setTimeout(resolve, 100)),
-        ])
+        await Promise.all([refreshUser(), new Promise((resolve) => setTimeout(resolve, 100))])
         router.refresh()
 
         // 用最新数据重置表单
@@ -547,68 +529,70 @@ export default function SettingsPage() {
               <CardTitle>个人资料</CardTitle>
               <CardDescription>更新所在地、联系方式与个人简介</CardDescription>
             </CardHeader>
-              <CardContent>
-                <Form {...profileForm}>
-                  <form onSubmit={handleProfileSubmit} className="space-y-4">
-                    <div className="flex flex-col gap-3 rounded-lg border p-4">
-                      <div className="relative h-36 w-full overflow-hidden rounded-md bg-muted md:h-44">
-                        {coverPreviewUrl || currentCoverUrl ? (
-                          <Image
-                            src={coverPreviewUrl || currentCoverUrl || "/placeholder.svg"}
-                            alt="封面预览"
-                            fill
-                            sizes="(min-width: 768px) 640px, 100vw"
-                            className="object-cover"
-                          />
-                        ) : (
-                          <div className="h-full w-full bg-gradient-to-r from-sky-500/60 via-indigo-500/60 to-purple-500/60" />
-                        )}
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-3">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => coverInputRef.current?.click()}
-                          disabled={uploadingCover}
-                        >
-                          {uploadingCover ? "上传中..." : "选择封面图"}
-                        </Button>
-                        {currentCoverUrl && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            onClick={handleCoverDelete}
-                            disabled={uploadingCover}
-                          >
-                            移除封面图
-                          </Button>
-                        )}
-                        <input
-                          ref={coverInputRef}
-                          type="file"
-                          accept={COVER_ACCEPT}
-                          className="hidden"
-                          onChange={handleCoverSelect}
+            <CardContent>
+              <Form {...profileForm}>
+                <form onSubmit={handleProfileSubmit} className="space-y-4">
+                  <div className="flex flex-col gap-3 rounded-lg border p-4">
+                    <div className="bg-muted relative h-36 w-full overflow-hidden rounded-md md:h-44">
+                      {coverPreviewUrl || currentCoverUrl ? (
+                        <Image
+                          src={coverPreviewUrl || currentCoverUrl || "/placeholder.svg"}
+                          alt="封面预览"
+                          fill
+                          sizes="(min-width: 768px) 640px, 100vw"
+                          className="object-cover"
                         />
-                        {uploadingCover && (
-                          <span className="text-muted-foreground flex items-center gap-2 text-sm">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            上传中...
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-muted-foreground text-sm">
-                        推荐 1500x500，支持 JPG/PNG/WebP，≤8MB。
-                      </p>
-                      {coverUploadError && <p className="text-destructive text-sm">{coverUploadError}</p>}
+                      ) : (
+                        <div className="h-full w-full bg-gradient-to-r from-sky-500/60 via-indigo-500/60 to-purple-500/60" />
+                      )}
                     </div>
 
-                    <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center">
-                      <Avatar className="h-16 w-16">
-                        <AvatarImage
-                          src={previewUrl || currentAvatarUrl || undefined}
-                          alt={user.name || user.email || "头像"}
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => coverInputRef.current?.click()}
+                        disabled={uploadingCover}
+                      >
+                        {uploadingCover ? "上传中..." : "选择封面图"}
+                      </Button>
+                      {currentCoverUrl && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={handleCoverDelete}
+                          disabled={uploadingCover}
+                        >
+                          移除封面图
+                        </Button>
+                      )}
+                      <input
+                        ref={coverInputRef}
+                        type="file"
+                        accept={COVER_ACCEPT}
+                        className="hidden"
+                        onChange={handleCoverSelect}
+                      />
+                      {uploadingCover && (
+                        <span className="text-muted-foreground flex items-center gap-2 text-sm">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          上传中...
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-muted-foreground text-sm">
+                      推荐 1500x500，支持 JPG/PNG/WebP，≤8MB。
+                    </p>
+                    {coverUploadError && (
+                      <p className="text-destructive text-sm">{coverUploadError}</p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center">
+                    <Avatar className="h-16 w-16">
+                      <AvatarImage
+                        src={previewUrl || currentAvatarUrl || undefined}
+                        alt={user.name || user.email || "头像"}
                       />
                       <AvatarFallback>
                         {(user.name || user.email || "U").charAt(0).toUpperCase()}
@@ -756,7 +740,9 @@ export default function SettingsPage() {
                         <FormItem className="flex items-center justify-between rounded-lg border p-3">
                           <div>
                             <Label>公开邮箱</Label>
-                            <p className="text-muted-foreground text-sm">在个人资料中展示邮箱地址</p>
+                            <p className="text-muted-foreground text-sm">
+                              在个人资料中展示邮箱地址
+                            </p>
                           </div>
                           <FormControl>
                             <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -788,7 +774,9 @@ export default function SettingsPage() {
                         <FormItem className="flex items-center justify-between rounded-lg border p-3">
                           <div>
                             <Label>公开所在地</Label>
-                            <p className="text-muted-foreground text-sm">在个人资料中显示你的所在地</p>
+                            <p className="text-muted-foreground text-sm">
+                              在个人资料中显示你的所在地
+                            </p>
                           </div>
                           <FormControl>
                             <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -881,7 +869,9 @@ export default function SettingsPage() {
                                 const val = e.target.value
                                 // 仅允许 http/https，其他协议立即提示，避免提交到后端
                                 if (val && !/^https?:\/\//i.test(val)) {
-                                  e.target.setCustomValidity("仅支持 http:// 或 https:// 开头的链接")
+                                  e.target.setCustomValidity(
+                                    "仅支持 http:// 或 https:// 开头的链接"
+                                  )
                                 } else {
                                   e.target.setCustomValidity("")
                                 }

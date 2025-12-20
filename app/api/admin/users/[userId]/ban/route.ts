@@ -10,12 +10,7 @@ import { AuthError } from "@/lib/error-handling/auth-error"
 import { mergeSupabaseUserMetadata } from "@/lib/auth/supabase-metadata"
 import { createServiceRoleClient } from "@/lib/supabase"
 import { apiLogger } from "@/lib/utils/logger"
-import {
-  auditLogger,
-  AuditEventType,
-  getClientIP,
-  getClientUserAgent,
-} from "@/lib/audit-log"
+import { auditLogger, AuditEventType, getClientIP, getClientUserAgent } from "@/lib/audit-log"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 type AdminUser = PolicyUserMap["admin"]

@@ -4,11 +4,11 @@ import { Sparkles, ArrowRight } from "lucide-react"
 
 export function HeroSection() {
   return (
-    <div className="relative overflow-hidden rounded-xl border border-border bg-gradient-to-br from-primary/5 to-primary/10 px-6 py-8 sm:px-10 sm:py-12">
+    <div className="border-border from-primary/5 to-primary/10 relative overflow-hidden rounded-xl border bg-gradient-to-br px-6 py-8 sm:px-10 sm:py-12">
       <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-2">
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl flex items-center gap-2">
-            <Sparkles className="h-6 w-6 text-primary" />
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
+            <Sparkles className="text-primary h-6 w-6" />
             欢迎来到现代博客
           </h1>
           <p className="text-muted-foreground max-w-[600px] text-base">

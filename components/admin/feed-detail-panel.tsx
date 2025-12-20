@@ -3,7 +3,13 @@
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { formatCompactCount } from "@/lib/utils"
 import type { FeedItem } from "@/types/feed"
 
@@ -44,15 +50,15 @@ export function FeedDetailPanel({ feed, open, onOpenChange }: FeedDetailPanelPro
         <ScrollArea className="h-full px-6 py-4">
           <div className="space-y-4">
             <section className="space-y-2">
-              <h4 className="text-sm font-medium text-muted-foreground">内容</h4>
-              <p className="whitespace-pre-line rounded-lg border bg-muted/40 p-3 text-sm leading-relaxed">
+              <h4 className="text-muted-foreground text-sm font-medium">内容</h4>
+              <p className="bg-muted/40 whitespace-pre-line rounded-lg border p-3 text-sm leading-relaxed">
                 {feed.content || "（无正文）"}
               </p>
             </section>
 
             {feed.imageUrls.length > 0 && (
               <section className="space-y-2">
-                <h4 className="text-sm font-medium text-muted-foreground">图片</h4>
+                <h4 className="text-muted-foreground text-sm font-medium">图片</h4>
                 <div className="grid grid-cols-2 gap-3">
                   {feed.imageUrls.map((url) => (
                     <div key={url} className="overflow-hidden rounded-md border">
@@ -86,7 +92,7 @@ export function FeedDetailPanel({ feed, open, onOpenChange }: FeedDetailPanelPro
 
             <Separator />
 
-            <section className="space-y-2 text-xs text-muted-foreground">
+            <section className="text-muted-foreground space-y-2 text-xs">
               <p>作者 ID：{feed.authorId}</p>
               <p>创建时间：{dateFormatter.format(new Date(feed.createdAt))}</p>
               <p>更新时间：{dateFormatter.format(new Date(feed.updatedAt))}</p>

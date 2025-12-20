@@ -37,13 +37,16 @@ function AvatarImage({
 }: OptimizedAvatarImageProps) {
   const isDataUrl = typeof src === "string" && src.startsWith("data:")
   const resolvedSrc =
-    (isDataUrl ? src : getOptimizedImageUrl(src, { width: 128, height: 128, quality, format: "webp" })) ||
+    (isDataUrl
+      ? src
+      : getOptimizedImageUrl(src, { width: 128, height: 128, quality, format: "webp" })) ||
     src ||
     "/placeholder.svg"
 
   const isSvg = typeof resolvedSrc === "string" && /svg(\?|$)/i.test(resolvedSrc)
   // 检测本地 Supabase Storage URL，需要禁用 Next.js 优化
-  const isLocalSupabase = typeof resolvedSrc === "string" &&
+  const isLocalSupabase =
+    typeof resolvedSrc === "string" &&
     (resolvedSrc.includes("127.0.0.1:54321") || resolvedSrc.includes("localhost:54321"))
   const shouldUnoptimize = (unoptimized ?? isSvg) || isDataUrl || isLocalSupabase
 

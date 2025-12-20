@@ -11,10 +11,7 @@ export function verifyCronSecret(request: NextRequest): NextResponse | null {
       hasAuthHeader: Boolean(request.headers.get("authorization")),
     })
 
-    return NextResponse.json(
-      { error: "Cron secret is not configured" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Cron secret is not configured" }, { status: 500 })
   }
 
   const authHeader = request.headers.get("authorization")

@@ -44,11 +44,15 @@ describe("system settings service", () => {
       "site.general": { name: "Blog" },
       "registration.toggle": { enabled: true },
     })
-    expect(prisma.systemSetting.findMany).toHaveBeenCalledWith({ select: { key: true, value: true } })
+    expect(prisma.systemSetting.findMany).toHaveBeenCalledWith({
+      select: { key: true, value: true },
+    })
   })
 
   it("getSetting 应该返回指定键或 null", async () => {
-    vi.mocked(prisma.systemSetting.findUnique).mockResolvedValueOnce({ value: { title: "Home" } } as any)
+    vi.mocked(prisma.systemSetting.findUnique).mockResolvedValueOnce({
+      value: { title: "Home" },
+    } as any)
 
     const value = await getSetting<{ title: string }>("seo.meta")
     expect(value?.title).toBe("Home")

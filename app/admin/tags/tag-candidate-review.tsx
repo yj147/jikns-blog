@@ -80,7 +80,7 @@ export function TagCandidateReview({
   const safeCurrentPage = pagination.page ?? 1
   const safeTotalPages =
     pagination.totalPages ??
-    (pagination.total != null
+    (pagination.total !== null
       ? Math.max(1, Math.ceil(pagination.total / (pagination.limit || 1)))
       : 1)
 
@@ -219,7 +219,7 @@ export function TagCandidateReview({
       const basePage = pagination.page ?? 1
       const maxPages =
         pagination.totalPages ??
-        (pagination.total != null
+        (pagination.total !== null
           ? Math.max(1, Math.ceil(pagination.total / (pagination.limit || 1)))
           : 1)
       const nextPage = direction === "prev" ? basePage - 1 : basePage + 1
@@ -339,7 +339,11 @@ export function TagCandidateReview({
                           <TableCell className="text-right">
                             <Badge variant="secondary">{candidate.occurrences}</Badge>
                           </TableCell>
-                          <TableCell>{new Date(candidate.lastSeenAt).toLocaleString("zh-CN", { hour12: false })}</TableCell>
+                          <TableCell>
+                            {new Date(candidate.lastSeenAt).toLocaleString("zh-CN", {
+                              hour12: false,
+                            })}
+                          </TableCell>
                           <TableCell className="text-right">
                             <Button
                               size="sm"

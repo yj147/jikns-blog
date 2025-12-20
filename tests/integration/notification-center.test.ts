@@ -66,7 +66,11 @@ describe("通知中心 API", () => {
     return record
   }
 
-  async function createNotification(type: NotificationType, offsetMs = 0, targetRecipientId = recipientId) {
+  async function createNotification(
+    type: NotificationType,
+    offsetMs = 0,
+    targetRecipientId = recipientId
+  ) {
     const record = await realPrisma.notification.create({
       data: {
         id: randomUUID(),
@@ -193,8 +197,12 @@ describe("通知中心 API", () => {
     const id2 = await createNotification(NotificationType.COMMENT, 5)
 
     const [first, second] = await Promise.all([
-      batchMarkRead(createMockRequest("PATCH", "/api/notifications", { body: { ids: [id1, id2] } })),
-      batchMarkRead(createMockRequest("PATCH", "/api/notifications", { body: { ids: [id1, id2] } })),
+      batchMarkRead(
+        createMockRequest("PATCH", "/api/notifications", { body: { ids: [id1, id2] } })
+      ),
+      batchMarkRead(
+        createMockRequest("PATCH", "/api/notifications", { body: { ids: [id1, id2] } })
+      ),
     ])
 
     const firstPayload = await first.json()

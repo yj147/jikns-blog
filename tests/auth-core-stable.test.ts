@@ -11,6 +11,7 @@ const mockPrismaUser = {
   findUnique: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  upsert: vi.fn(),
 }
 
 const mockSupabaseAuth = {
@@ -156,8 +157,7 @@ describe("核心认证功能稳定性测试", () => {
         status: "ACTIVE" as const,
       }
 
-      mockPrismaUser.findUnique.mockResolvedValue(null)
-      mockPrismaUser.create.mockResolvedValue(newUserData)
+      mockPrismaUser.upsert.mockResolvedValue(newUserData)
 
       const { syncUserFromAuth } = await import("@/lib/auth")
       const result = await syncUserFromAuth({
@@ -169,21 +169,22 @@ describe("核心认证功能稳定性测试", () => {
       })
 
       expect(result).toBeDefined()
-      expect(mockPrismaUser.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          id: newUserData.id,
-          email: newUserData.email,
-          name: newUserData.name,
-        }),
-      })
+      expect(mockPrismaUser.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: newUserData.id },
+          create: expect.objectContaining({
+            id: newUserData.id,
+            email: newUserData.email,
+          }),
+        })
+      )
     })
 
     it("应该正确更新现有用户（仅更新 lastLoginAt，已有 name 不覆盖）", async () => {
       const existingUser = TEST_USERS.user
       const updatedUser = { ...existingUser, lastLoginAt: new Date() }
 
-      mockPrismaUser.findUnique.mockResolvedValue(existingUser)
-      mockPrismaUser.update.mockResolvedValue(updatedUser)
+      mockPrismaUser.upsert.mockResolvedValue(updatedUser)
 
       const { syncUserFromAuth } = await import("@/lib/auth")
       const result = await syncUserFromAuth({
@@ -194,13 +195,15 @@ describe("核心认证功能稳定性测试", () => {
         },
       })
 
-      // 业务逻辑：已有 name 不会被 Auth 数据覆盖，仅更新 lastLoginAt
-      expect(mockPrismaUser.update).toHaveBeenCalledWith({
-        where: { id: existingUser.id },
-        data: expect.objectContaining({
-          lastLoginAt: expect.any(Date),
-        }),
-      })
+      expect(result).toBeDefined()
+      expect(mockPrismaUser.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: existingUser.id },
+          update: expect.objectContaining({
+            lastLoginAt: expect.any(Date),
+          }),
+        })
+      )
     })
   })
 

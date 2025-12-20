@@ -7,8 +7,8 @@ async function main() {
   // 先登录
   await page.goto("http://localhost:3999/login/email")
   await page.waitForLoadState("networkidle")
-  await page.fill('input#email', "user@example.com")
-  await page.fill('input#password', "user123456")
+  await page.fill("input#email", "user@example.com")
+  await page.fill("input#password", "user123456")
   await page.click('button[type="submit"]')
 
   // 等待登录完成
@@ -41,14 +41,22 @@ async function main() {
   const html = await page.content()
   if (html.includes("超过") || html.includes("500字符")) {
     console.log("Found error message related to 500")
-    const errorText = await page.locator("text=/超过|500/").first().textContent().catch(() => null)
+    const errorText = await page
+      .locator("text=/超过|500/")
+      .first()
+      .textContent()
+      .catch(() => null)
     console.log("Error text:", errorText)
   } else {
     console.log("No error message found in HTML")
   }
 
   // 检查表单错误
-  const formMessage = await page.locator('[data-slot="form-message"]').first().textContent().catch(() => null)
+  const formMessage = await page
+    .locator('[data-slot="form-message"]')
+    .first()
+    .textContent()
+    .catch(() => null)
   console.log("Form message:", formMessage)
 
   // 截图

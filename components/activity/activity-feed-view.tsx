@@ -201,11 +201,7 @@ export function ActivityFeedView({
 
       {isLoading && <ActivitySkeletonList />}
 
-      <ActivityLoadMoreSection
-        hasMore={hasMore}
-        isLoading={isLoading}
-        loadMore={loadMore}
-      />
+      <ActivityLoadMoreSection hasMore={hasMore} isLoading={isLoading} loadMore={loadMore} />
 
       <ActivityEmptyState
         shouldShow={shouldShowEmpty}

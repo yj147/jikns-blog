@@ -1,4 +1,4 @@
-import { prisma } from '../lib/prisma'
+import { prisma } from "../lib/prisma"
 
 async function main() {
   const users = await prisma.user.findMany({
@@ -13,7 +13,7 @@ async function main() {
     take: 5,
   })
 
-  console.log('=== 用户隐私设置检查 ===')
+  console.log("=== 用户隐私设置检查 ===")
   for (const user of users) {
     console.log(`\n用户: ${user.name || user.email}`)
     console.log(`  location: ${user.location}`)

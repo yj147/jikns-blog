@@ -111,16 +111,16 @@ function TestOAuthPageContent() {
   const StatusIcon = ({ status }: { status: "pending" | "success" | "error" }) => {
     switch (status) {
       case "success":
-        return <CheckCircle className="h-5 w-5 text-status-success" />
+        return <CheckCircle className="text-status-success h-5 w-5" />
       case "error":
-        return <XCircle className="h-5 w-5 text-status-error" />
+        return <XCircle className="text-status-error h-5 w-5" />
       default:
-        return <AlertCircle className="h-5 w-5 text-status-warning" />
+        return <AlertCircle className="text-status-warning h-5 w-5" />
     }
   }
 
   return (
-    <div className="min-h-screen bg-background p-4">
+    <div className="bg-background min-h-screen p-4">
       <div className="mx-auto max-w-2xl space-y-6">
         {/* 页面标题 */}
         <div className="text-center">
@@ -154,7 +154,7 @@ function TestOAuthPageContent() {
           <CardContent className="space-y-4">
             {/* 错误信息 */}
             {error && (
-              <div className="rounded-md border border-status-error/30 bg-status-error/10 p-3 text-sm text-status-error">
+              <div className="border-status-error/30 bg-status-error/10 text-status-error rounded-md border p-3 text-sm">
                 <strong>错误：</strong> {error}
               </div>
             )}
@@ -162,9 +162,9 @@ function TestOAuthPageContent() {
             {/* 用户信息 */}
             {session ? (
               <div className="space-y-3">
-                <div className="rounded-md border border-status-success/30 bg-status-success/10 p-4">
-                  <h3 className="font-medium text-status-success">登录成功！</h3>
-                  <div className="mt-2 text-sm text-status-success/80">
+                <div className="border-status-success/30 bg-status-success/10 rounded-md border p-4">
+                  <h3 className="text-status-success font-medium">登录成功！</h3>
+                  <div className="text-status-success/80 mt-2 text-sm">
                     <p>
                       <strong>用户 ID:</strong> {session.user.id}
                     </p>

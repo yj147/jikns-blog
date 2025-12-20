@@ -186,11 +186,9 @@ const searchTokenExtension = Prisma.defineExtension({
         return query(args)
       },
       createMany({ args, query }) {
-        applyTokensToInput(
-          args.data as MutableData | MutableData[] | undefined,
-          applyTagTokens,
-          { forceAll: true }
-        )
+        applyTokensToInput(args.data as MutableData | MutableData[] | undefined, applyTagTokens, {
+          forceAll: true,
+        })
         return query(args)
       },
       update({ args, query }) {
@@ -198,11 +196,9 @@ const searchTokenExtension = Prisma.defineExtension({
         return query(args)
       },
       updateMany({ args, query }) {
-        applyTokensToInput(
-          args.data as MutableData | MutableData[] | undefined,
-          applyTagTokens,
-          { forceAll: false }
-        )
+        applyTokensToInput(args.data as MutableData | MutableData[] | undefined, applyTagTokens, {
+          forceAll: false,
+        })
         return query(args)
       },
       upsert({ args, query }) {
@@ -217,11 +213,9 @@ const searchTokenExtension = Prisma.defineExtension({
         return query(args)
       },
       createMany({ args, query }) {
-        applyTokensToInput(
-          args.data as MutableData | MutableData[] | undefined,
-          applyUserTokens,
-          { forceAll: true }
-        )
+        applyTokensToInput(args.data as MutableData | MutableData[] | undefined, applyUserTokens, {
+          forceAll: true,
+        })
         return query(args)
       },
       update({ args, query }) {
@@ -229,11 +223,9 @@ const searchTokenExtension = Prisma.defineExtension({
         return query(args)
       },
       updateMany({ args, query }) {
-        applyTokensToInput(
-          args.data as MutableData | MutableData[] | undefined,
-          applyUserTokens,
-          { forceAll: false }
-        )
+        applyTokensToInput(args.data as MutableData | MutableData[] | undefined, applyUserTokens, {
+          forceAll: false,
+        })
         return query(args)
       },
       upsert({ args, query }) {
@@ -246,14 +238,14 @@ const searchTokenExtension = Prisma.defineExtension({
 })
 
 function createPrismaClient(): PrismaClient {
-  return (new PrismaClient({
+  return new PrismaClient({
     log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
     datasources: {
       db: {
         url: process.env.DATABASE_URL,
       },
     },
-  }).$extends(searchTokenExtension)) as PrismaClient
+  }).$extends(searchTokenExtension) as PrismaClient
 }
 
 const prismaInstance: ExtendedPrismaClient = globalForPrisma.prisma ?? createPrismaClient()

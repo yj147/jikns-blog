@@ -58,12 +58,7 @@ describe("users RLS whitelist (public columns only)", () => {
     await realPrisma.user.deleteMany({
       where: {
         id: {
-          in: [
-            publicUser.id,
-            adminUser.id,
-            "rls-public-user-001",
-            "rls-admin-user-001",
-          ],
+          in: [publicUser.id, adminUser.id, "rls-public-user-001", "rls-admin-user-001"],
         },
       },
     })
@@ -122,12 +117,7 @@ describe("users RLS whitelist (public columns only)", () => {
     expect(allowed.rows[0]).not.toHaveProperty("email")
 
     await expect(
-      queryAs(
-        "anon",
-        null,
-        `SELECT email FROM public.users WHERE id = $1`,
-        [publicUser.id]
-      )
+      queryAs("anon", null, `SELECT email FROM public.users WHERE id = $1`, [publicUser.id])
     ).rejects.toThrow(/permission denied|privilege/i)
   })
 

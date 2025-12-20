@@ -8,19 +8,51 @@ code in this repository.
 ## 项目结构与模块组织
 
 - `app/` Next.js App 路由、布局、API 路由；`components/` 共享 UI 与功能组件。
-- `lib/` 工具方法；`hooks/` 自定义 React hooks；`types/` TypeScript 类型；`styles/` 全局样式。
+- `lib/` 工具方法；`hooks/` 自定义 React hooks；`types/`
+  TypeScript 类型；`styles/` 全局样式。
 - `prisma/` schema 与种子数据；`supabase/` 本地栈、配置、迁移。
-- `tests/` 单元/集成/组件测试；`tests/e2e/` Playwright 用例；`tests_disabled/` 隔离用例。
+- `tests/` 单元/集成/组件测试；`tests/e2e/` Playwright 用例；`tests_disabled/`
+  隔离用例。
 - 路径别名：统一使用 `@/…`（例如 `@/components/...`、`@/lib/...`）。
+
+## 核心架构
+
+### 分层结构
+
+```
+app/api/          → REST 端点（认证、CRUD、webhook）
+lib/actions/      → Server Actions（业务入口，Zod 校验，限流）
+lib/services/     → 业务逻辑（通知、邮件、关注）
+lib/repos/        → 数据访问层（封装 Prisma 查询）
+lib/interactions/ → 点赞/评论/收藏等交互逻辑
+prisma/           → Schema 定义，Prisma Client 位于 lib/generated/prisma
+```
+
+### 多态约束（Comment/Like）
+
+Comment 和 Like 模型通过数据库 CHECK 约束实现 XOR 多态：`postId` 与 `activityId`
+最多一个非空。查询时需根据目标类型选择正确字段。
+
+### 全文搜索架构
+
+- 各模型（Post/Activity/Tag/User）含 `*Tokens` 字段存分词结果，`search_vector`
+  为 PostgreSQL `tsvector`
+- `lib/prisma.ts` 的 Prisma extension 在写入时自动调用 `nodejieba` 分词
+- 搜索仓储位于 `lib/repos/search/`，使用 `ts_rank` + 时间衰减排序
 
 ## 构建、测试与开发命令
 
-- `pnpm dev` 本地运行 Next.js（参见 `playwright.config.ts` 的 `baseURL`）。
+- `pnpm dev` 本地运行 Next.js（端口 3999）。
 - `pnpm build` / `pnpm start` 构建与生产服务。
-- `pnpm lint:check` 运行 ESLint；`pnpm format:check` 运行 Prettier；`pnpm type-check` 运行 TypeScript 检查。
-- `pnpm test` 运行 Vitest；`pnpm test:watch` 监听模式；`pnpm test:e2e` 运行 Playwright。
+- `pnpm lint:check` 运行 ESLint；`pnpm format:check`
+  运行 Prettier；`pnpm type-check` 运行 TypeScript 检查。
+- `pnpm test` 运行 Vitest；`pnpm test:watch` 监听模式；`pnpm test:e2e`
+  运行 Playwright。
+- **单文件测试**：`pnpm vitest run tests/unit/foo.test.ts` 或
+  `pnpm vitest watch tests/unit/foo.test.ts`。
 - `pnpm test:coverage` 或 `pnpm test:all` 生成覆盖率报告（见 `coverage/`）。
-- `pnpm quality:check` Lint + 类型检查 + 格式化 + 关键测试（pre-push 使用该集合）。
+- `pnpm quality:check`
+  Lint + 类型检查 + 格式化 + 关键测试（pre-push 使用该集合）。
 - 数据库：`pnpm db:migrate`、`pnpm db:push`、`pnpm db:seed`、`pnpm db:generate`。
 - Supabase 本地开发：`pnpm supabase:start` / `pnpm supabase:stop`。
 
@@ -29,31 +61,34 @@ code in this repository.
 - Prettier：2 空格、宽度 100、双引号、无分号、尾随逗号（见 `.prettierrc`）。
 - Tailwind：通过 `prettier-plugin-tailwindcss` 强制类顺序。
 - ESLint：扩展 `next/core-web-vitals`；偏好 `const`，禁止 `var`，使用 `eqeqeq`。
-- 文件命名：kebab-case（如 `blog-post-card.tsx`）；组件导出使用 PascalCase；hooks 以 `use...` 开头。
-- CSS 额外规范：遵循 `docs/css-guidelines.md`，
-  禁止在 `@layer base` 或 `*` 选择器中添加 outline/ring/border 的全局 reset，
-  焦点样式必须在组件级实现，Tailwind 原子类禁止写入 `globals.css`。
+- 文件命名：kebab-case（如
+  `blog-post-card.tsx`）；组件导出使用 PascalCase；hooks 以 `use...` 开头。
+- CSS 额外规范：遵循 `docs/css-guidelines.md`，禁止在 `@layer base` 或 `*`
+  选择器中添加 outline/ring/border 的全局 reset，焦点样式必须在组件级实现，Tailwind 原子类禁止写入
+  `globals.css`。
 
 ## 测试规范
 
 - 单元/集成：Vitest + Testing Library（`environment: jsdom`）。
 - E2E：位于 `tests/e2e/`（运行前启动 `pnpm dev`）。
-- 覆盖率目标（Vitest）：lines ≥ 85%，branches ≥ 70%（见 `vitest.config.ts`）。
+- 覆盖率目标（Vitest）：statements/branches/functions/lines 均 ≥ 90%（见
+  `vitest.config.ts`）。
 - 命名：`tests/**` 下使用 `*.test.{ts,tsx}` 或 `*.spec.{ts,tsx}`。
 - 快速/完整执行：`pnpm test:critical`；完整：`pnpm test:ci` 或 `pnpm test:all`。
 
 ## 提交与 Pull Request 规范
 
-- 使用 Conventional Commits（例如 `feat: add post editor`、`fix(auth): handle token refresh`）。
-- PR 必须包含：摘要、关联 issue、UI 截图、测试计划；
-  如变更 `prisma/` 或 `supabase/`，需包含迁移说明。
-- 在本地确保 `pnpm quality:fix`（或 `quality:check`）通过；
-  Husky 在提交/推送时运行检查。
+- 使用 Conventional Commits（例如
+  `feat: add post editor`、`fix(auth): handle token refresh`）。
+- PR 必须包含：摘要、关联 issue、UI 截图、测试计划；如变更 `prisma/` 或
+  `supabase/`，需包含迁移说明。
+- 在本地确保 `pnpm quality:fix`（或
+  `quality:check`）通过；Husky 在提交/推送时运行检查。
 
 ## 安全与配置建议
 
 - 将 `.env.example` 复制为 `.env.local`；切勿提交任何密钥。
-- 参见 `OAuth-Config-Guide.md` 与 `scripts/` 完成认证配置与检查。
+- 参见 `scripts/` 完成认证配置与检查。
 - 生产代码避免使用 `console.log`；优先结构化错误与安全日志。
 
 ---
@@ -106,30 +141,35 @@ code in this repository.
 
 在开始分析或实现前，必须先问：
 
-1. "这是个真问题还是臆想出来的？" — 拒绝过度设计  
-2. "有更简单的方法吗？" — 永远寻找最简方案  
-3. "会破坏什么吗？" — 向后兼容是铁律  
+1. "这是个真问题还是臆想出来的？" — 拒绝过度设计
+2. "有更简单的方法吗？" — 永远寻找最简方案
+3. "会破坏什么吗？" — 向后兼容是铁律
 
 ### Linus式五层思考法
 
-**第一层：数据结构分析**  
+**第一层：数据结构分析**
+
 - 核心数据是什么？关系如何？谁拥有/修改？是否有不必要的复制或转换？
 
-**第二层：特殊情况识别**  
-- 找出所有 if/else 分支。  
-- 哪些是真业务逻辑？哪些是糟糕设计的补丁？  
+**第二层：特殊情况识别**
+
+- 找出所有 if/else 分支。
+- 哪些是真业务逻辑？哪些是糟糕设计的补丁？
 - 能否通过数据结构重新设计消除分支？
 
-**第三层：复杂度审查**  
-- 功能本质一句话说清。  
+**第三层：复杂度审查**
+
+- 功能本质一句话说清。
 - 用了多少概念解决？能否减半？再减半？
 
-**第四层：破坏性分析**  
-- 列出潜在受影响的现有功能/依赖。  
+**第四层：破坏性分析**
+
+- 列出潜在受影响的现有功能/依赖。
 - 设计零破坏性升级路径。
 
-**第五层：实用性验证**  
-- 生产中真实存在吗？影响面多大？  
+**第五层：实用性验证**
+
+- 生产中真实存在吗？影响面多大？
 - 方案复杂度与问题严重性匹配吗？
 
 ### 决策输出模式（默认）
@@ -169,12 +209,12 @@ code in this repository.
 "数据结构错了，应该是..."
 ```
 
-
 ## 执行与边界
 
 - 与本仓库既定规范对齐：
   - 仅用 pnpm；遵守 `CLAUDE.md` 构建/测试/质量命令
-  - 目录与命名：`app/`、`components/`、`lib/`、`hooks/`、`types/`、`styles/`；`@/` 别名
+  - 目录与命名：`app/`、`components/`、`lib/`、`hooks/`、`types/`、`styles/`；`@/`
+    别名
   - 测试：Vitest + Testing Library；E2E：Playwright；覆盖率门槛按仓库设置
 - 数据库与迁移：严格 Schema First（Prisma + Supabase CLI 工作流）
 - 兼容性：禁止破坏对外 API、环境变量、事件与用户可见行为
@@ -205,7 +245,8 @@ code in this repository.
 ### 5. 本地开发优先原则 (Local Development First)
 
 - 日常开发必须在 Supabase CLI 本地环境完成。
-- 结构变更：本地完成 → `supabase db diff -f migration_name` 生成迁移 → 版本控制。
+- 结构变更：本地完成 → `supabase db diff -f migration_name`
+  生成迁移 → 版本控制。
 
 ---
 
@@ -236,10 +277,11 @@ code in this repository.
 - 任务结束优先更新已有文档，而不是新建“总结文档”。
 
 > **例外（长任务状态管理）**  
-> 为了跨会话推进复杂任务，允许在仓库内创建/更新少量**状态文件**，如：  
-> - `tests.json`：记录测试清单与通过情况  
+> 为了跨会话推进复杂任务，允许在仓库内创建/更新少量**状态文件**，如：
+>
+> - `tests.json`：记录测试清单与通过情况
 > - `progress.txt`：记录最近进展与下一步  
-> 但禁止创建与任务无关的“额外总结/重复文档”。
+>   但禁止创建与任务无关的“额外总结/重复文档”。
 
 ---
 
@@ -273,7 +315,7 @@ code in this repository.
 
 ## 核心执行原则（再次强调）
 
-1. 只做被要求的事情，不多不少。  
-2. 默认优先**编辑**现有文件，而不是新建。  
-3. 中文交流，英文只用于代码/术语。  
-4. 保持最小复杂度与零破坏性。  
+1. 只做被要求的事情，不多不少。
+2. 默认优先**编辑**现有文件，而不是新建。
+3. 中文交流，英文只用于代码/术语。
+4. 保持最小复杂度与零破坏性。

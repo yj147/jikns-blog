@@ -13,11 +13,7 @@ export interface DigestEmailProps {
   appName?: string
 }
 
-export function DigestEmail({
-  posts,
-  unsubscribeLink,
-  appName = "Jikns Blog",
-}: DigestEmailProps) {
+export function DigestEmail({ posts, unsubscribeLink, appName = "Jikns Blog" }: DigestEmailProps) {
   return (
     <Html>
       <Head />

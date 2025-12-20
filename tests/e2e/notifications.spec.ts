@@ -277,9 +277,9 @@ test.describe("通知系统 - E2E", () => {
 
     await expect(page.getByText("加载更多...")).toBeVisible({ timeout: 5000 })
 
-    await expect.poll(async () => await unreadButtons.count(), { timeout: 10000 }).toBeGreaterThan(
-      initialCount
-    )
+    await expect
+      .poll(async () => await unreadButtons.count(), { timeout: 10000 })
+      .toBeGreaterThan(initialCount)
   })
 
   // ============ N11: 网络失败恢复 ============
@@ -359,7 +359,11 @@ test.describe("通知系统 - E2E", () => {
 
     const likePost = await createPublishedPost(testUserId, "e2e-like-target")
     const commentPost = await createPublishedPost(testUserId, "e2e-comment-target")
-    const comment = await createCommentForPost(commentPost.id, actorUserId, `E2E 评论内容 ${Date.now()}`)
+    const comment = await createCommentForPost(
+      commentPost.id,
+      actorUserId,
+      `E2E 评论内容 ${Date.now()}`
+    )
 
     createdPostIds.push(likePost.id, commentPost.id)
     createdCommentIds.push(comment.id)
@@ -402,13 +406,19 @@ test.describe("通知系统 - E2E", () => {
       await page.goto("/notifications")
       await page.waitForLoadState("networkidle")
 
-      const likeCard = page.locator('[data-slot="card"]').filter({ hasText: likePost.title }).first()
+      const likeCard = page
+        .locator('[data-slot="card"]')
+        .filter({ hasText: likePost.title })
+        .first()
       await likeCard.click()
       await expect(page).toHaveURL(new RegExp(`/blog/${likePost.slug}`))
 
       await page.goto("/notifications")
 
-      const commentCard = page.locator('[data-slot="card"]').filter({ hasText: commentPost.title }).first()
+      const commentCard = page
+        .locator('[data-slot="card"]')
+        .filter({ hasText: commentPost.title })
+        .first()
       await commentCard.click()
       await expect(page).toHaveURL(new RegExp(`/blog/${commentPost.slug}`))
 
@@ -484,7 +494,9 @@ test.describe("通知系统 - E2E", () => {
       const followCard = page.locator('[data-slot="card"]').filter({ hasText: "关注了你" }).first()
       await expect(followCard).toBeVisible({ timeout: 15000 })
     } finally {
-      await prisma.follow.deleteMany({ where: { followerId: actorUserId, followingId: testUserId } })
+      await prisma.follow.deleteMany({
+        where: { followerId: actorUserId, followingId: testUserId },
+      })
       await prisma.notification.deleteMany({
         where: { recipientId: testUserId, type: NotificationType.FOLLOW },
       })
@@ -812,9 +824,7 @@ test.describe("通知系统 - E2E", () => {
         await page.reload()
         await page.waitForLoadState("networkidle")
 
-        await expect
-          .poll(async () => await cards.count(), { timeout: 12000 })
-          .toBe(initial + 1)
+        await expect.poll(async () => await cards.count(), { timeout: 12000 }).toBe(initial + 1)
         await expectNoConsoleErrors(page)
 
         await prisma.notification.delete({ where: { id: created.id } })
@@ -865,8 +875,10 @@ function resolveNotificationTarget(
   overrides: TargetOverride = {}
 ): { postId: string | null; activityId: string | null; followerId: string | null } {
   if (overrides.postId) return { postId: overrides.postId, activityId: null, followerId: null }
-  if (overrides.activityId) return { postId: null, activityId: overrides.activityId, followerId: null }
-  if (overrides.followerId) return { postId: null, activityId: null, followerId: overrides.followerId }
+  if (overrides.activityId)
+    return { postId: null, activityId: overrides.activityId, followerId: null }
+  if (overrides.followerId)
+    return { postId: null, activityId: null, followerId: overrides.followerId }
 
   if (type === NotificationType.FOLLOW) {
     return { postId: null, activityId: null, followerId: overrides.recipientId ?? actorUserId }

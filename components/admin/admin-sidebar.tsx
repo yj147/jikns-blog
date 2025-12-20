@@ -16,7 +16,14 @@ import {
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
@@ -58,7 +65,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col">
       <div className="border-b px-6 py-6">
-        <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+        <p className="text-muted-foreground text-xs font-medium uppercase tracking-widest">
           Control Center
         </p>
         <h2 className="mt-2 text-2xl font-semibold">管理后台</h2>
@@ -92,11 +99,9 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         })}
       </nav>
 
-      <div className="border-t px-6 py-6 text-xs leading-relaxed text-muted-foreground">
-        <p className="font-semibold text-foreground">运维准则</p>
-        <p className="mt-2">
-          优先发现瓶颈、记录决策，保持后台高可用且可追踪。
-        </p>
+      <div className="text-muted-foreground border-t px-6 py-6 text-xs leading-relaxed">
+        <p className="text-foreground font-semibold">运维准则</p>
+        <p className="mt-2">优先发现瓶颈、记录决策，保持后台高可用且可追踪。</p>
       </div>
     </div>
   )
@@ -107,10 +112,10 @@ export default function AdminSidebar() {
 
   return (
     <>
-      <div className="border-b bg-background px-4 py-4 md:hidden">
+      <div className="bg-background border-b px-4 py-4 md:hidden">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs font-medium uppercase text-muted-foreground">Admin</p>
+            <p className="text-muted-foreground text-xs font-medium uppercase">Admin</p>
             <p className="text-lg font-semibold">控制面板</p>
           </div>
           <Sheet open={open} onOpenChange={setOpen}>
@@ -132,7 +137,7 @@ export default function AdminSidebar() {
 
       <aside
         className={cn(
-          "hidden border-r bg-muted/20 md:sticky md:top-0 md:flex md:h-screen md:flex-col md:shrink-0 md:self-start",
+          "bg-muted/20 hidden border-r md:sticky md:top-0 md:flex md:h-screen md:shrink-0 md:flex-col md:self-start",
           DESKTOP_WIDTH_CLASS
         )}
       >

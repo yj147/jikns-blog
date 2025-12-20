@@ -42,10 +42,7 @@ async function cleanupArtifacts() {
 
   await realPrisma.comment.deleteMany({
     where: {
-      OR: [
-        { authorId: { in: userIds } },
-        { postId: { in: postIds } },
-      ],
+      OR: [{ authorId: { in: userIds } }, { postId: { in: postIds } }],
     },
   })
 

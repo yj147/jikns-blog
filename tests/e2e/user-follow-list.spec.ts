@@ -158,7 +158,12 @@ test.describe("关注列表页 - E2E", () => {
 
     // 如果有互相关注的用户，应该显示徽章
     // 注意：这取决于测试数据
-    if (await mutualBadge.first().isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (
+      await mutualBadge
+        .first()
+        .isVisible({ timeout: 3000 })
+        .catch(() => false)
+    ) {
       await expect(mutualBadge.first()).toBeVisible()
     }
   })

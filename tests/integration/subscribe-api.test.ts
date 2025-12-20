@@ -105,10 +105,9 @@ describe("Subscribe API", () => {
       status: EmailSubscriptionStatus.VERIFIED,
     } as any)
 
-    const req = new NextRequest(
-      "http://localhost:3000/api/subscribe/verify?token=test-token",
-      { method: "GET" }
-    )
+    const req = new NextRequest("http://localhost:3000/api/subscribe/verify?token=test-token", {
+      method: "GET",
+    })
 
     const res = await verifyHandler(req)
     const data = await res.json()
@@ -124,10 +123,9 @@ describe("Subscribe API", () => {
       status: EmailSubscriptionStatus.UNSUBSCRIBED,
     } as any)
 
-    const req = new NextRequest(
-      "http://localhost:3000/api/subscribe/unsubscribe?token=bye-token",
-      { method: "GET" }
-    )
+    const req = new NextRequest("http://localhost:3000/api/subscribe/unsubscribe?token=bye-token", {
+      method: "GET",
+    })
 
     const res = await unsubscribeHandler(req)
     const data = await res.json()

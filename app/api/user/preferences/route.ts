@@ -72,7 +72,9 @@ async function handlePut(request: NextRequest) {
     return NextResponse.json({ data: updated.notificationPreferences, message: "通知偏好已更新" })
   } catch (err) {
     logger.error("更新通知偏好失败", { userId: user.id }, err)
-    return err instanceof ZodError ? formatValidationError(err) : NextResponse.json({ error: "更新通知偏好失败" }, { status: 500 })
+    return err instanceof ZodError
+      ? formatValidationError(err)
+      : NextResponse.json({ error: "更新通知偏好失败" }, { status: 500 })
   }
 }
 

@@ -7,7 +7,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { NextRequest } from "next/server"
 import { GET, POST } from "@/app/api/likes/route"
 import * as interactionsLib from "@/lib/interactions"
-import { InteractionNotAllowedError, InteractionTargetNotFoundError } from "@/lib/interactions/errors"
+import {
+  InteractionNotAllowedError,
+  InteractionTargetNotFoundError,
+} from "@/lib/interactions/errors"
 import * as authSession from "@/lib/auth/session"
 import * as auditLog from "@/lib/audit-log"
 import { RateLimiter } from "@/lib/security"

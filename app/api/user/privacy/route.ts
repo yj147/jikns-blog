@@ -72,7 +72,9 @@ async function handlePut(request: NextRequest) {
     return NextResponse.json({ data: updated.privacySettings, message: "隐私设置已更新" })
   } catch (err) {
     logger.error("更新隐私设置失败", { userId: user.id }, err)
-    return err instanceof ZodError ? validationError(err) : NextResponse.json({ error: "更新隐私设置失败" }, { status: 500 })
+    return err instanceof ZodError
+      ? validationError(err)
+      : NextResponse.json({ error: "更新隐私设置失败" }, { status: 500 })
   }
 }
 

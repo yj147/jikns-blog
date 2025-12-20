@@ -76,15 +76,16 @@ type TooltipProps = {
   withDate: boolean
 }
 
-const formatMetric = (value?: number) => (value ?? null) !== null ? `${Math.round(value ?? 0)} ms` : "-"
-const formatCount = (value?: number) => (value ?? null) !== null ? `${value ?? 0} 次` : "-"
+const formatMetric = (value?: number) =>
+  (value ?? null) !== null ? `${Math.round(value ?? 0)} ms` : "-"
+const formatCount = (value?: number) => ((value ?? null) !== null ? `${value ?? 0} 次` : "-")
 
 function TooltipContent({ active, payload, label, withDate }: TooltipProps) {
   if (!active || !payload?.length || typeof label !== "number") return null
   const datum = payload[0].payload as ChartDatum
   return (
-    <div className="rounded-md border bg-background p-3 text-xs shadow-sm">
-      <p className="mb-2 font-medium text-foreground">{formatTick(label, withDate)}</p>
+    <div className="bg-background rounded-md border p-3 text-xs shadow-sm">
+      <p className="text-foreground mb-2 font-medium">{formatTick(label, withDate)}</p>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1">
         <span className="text-muted-foreground">P50</span>
         <span>{formatMetric(datum.p50)}</span>
@@ -144,7 +145,7 @@ export function MetricsChart({
     () =>
       buildChartData(
         data?.timeseries,
-        showComparison ? data?.comparison?.timeseries ?? [] : [],
+        showComparison ? (data?.comparison?.timeseries ?? []) : [],
         comparisonShift
       ),
     [comparisonShift, data?.comparison?.timeseries, data?.timeseries, showComparison]
@@ -165,7 +166,7 @@ export function MetricsChart({
     return (
       <div
         data-testid="metrics-chart"
-        className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+        className="border-destructive/30 bg-destructive/5 text-destructive flex items-center gap-2 rounded-md border p-3 text-sm"
       >
         <AlertTriangle className="h-4 w-4" />
         <span>加载失败：{error}</span>
@@ -176,7 +177,7 @@ export function MetricsChart({
   return (
     <div data-testid="metrics-chart" className="w-full">
       {!hasData ? (
-        <p className="text-sm text-muted-foreground">暂无数据</p>
+        <p className="text-muted-foreground text-sm">暂无数据</p>
       ) : (
         <div className="h-full w-full" style={{ minHeight: height }}>
           <ResponsiveContainer width="100%" height={height}>

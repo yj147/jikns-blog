@@ -144,9 +144,7 @@ export function randomUrl(valid = true): string {
 }
 
 // 随机所在地（覆盖 0-200 边界）
-export function randomLocation(
-  variant: "valid" | "boundary_max" | "overflow" = "valid"
-): string {
+export function randomLocation(variant: "valid" | "boundary_max" | "overflow" = "valid"): string {
   const cities = ["北京", "上海", "深圳", "旧金山", "伦敦", "柏林", "东京", "新加坡", "杭州"]
   switch (variant) {
     case "boundary_max":
@@ -201,10 +199,7 @@ export class TestReporter {
 }
 
 // 登录辅助：统一的邮箱密码登录流程
-export async function login(
-  page: Page,
-  user: { email: string; password: string }
-): Promise<void> {
+export async function login(page: Page, user: { email: string; password: string }): Promise<void> {
   await ensureLoggedOut(page)
   await page.goto("/login/email")
   await page.waitForLoadState("networkidle")
@@ -281,7 +276,10 @@ export async function captureScreenshotOnFailure(
   page: Page,
   testName: string
 ): Promise<string | undefined> {
-  const safeName = testName.replace(/[^a-z0-9-_]+/gi, "-").replace(/-+/g, "-").replace(/^-|-$/g, "")
+  const safeName = testName
+    .replace(/[^a-z0-9-_]+/gi, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
   const fileName = `${safeName || "failure"}-${Date.now()}.png`
   const filePath = path.join(TEST_RESULT_DIR, fileName)
 

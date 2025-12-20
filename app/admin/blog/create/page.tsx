@@ -149,7 +149,6 @@ export default function CreatePostPage() {
 
   return (
     <div className="bg-background min-h-screen">
-
       <div className="container mx-auto px-4 py-8">
         {/* 头部导航 */}
         <div className="mb-8">

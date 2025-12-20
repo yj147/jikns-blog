@@ -347,7 +347,7 @@ export function PostForm({
                     enableImageUpload={true}
                   />
                   {errors.content && (
-                    <p className="text-sm text-status-error">{errors.content.message}</p>
+                    <p className="text-status-error text-sm">{errors.content.message}</p>
                   )}
                 </div>
               </CardContent>
@@ -372,7 +372,7 @@ export function PostForm({
                 </>
               ) : lastSavedAt ? (
                 <>
-                  <div className="h-2 w-2 rounded-full bg-status-success"></div>
+                  <div className="bg-status-success h-2 w-2 rounded-full"></div>
                   <span>已自动保存于 {lastSavedAt.toLocaleTimeString()}</span>
                 </>
               ) : null}

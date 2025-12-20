@@ -129,7 +129,9 @@ export async function GET(request: NextRequest) {
         }
       } else {
         authLogger.error("授权码交换成功但会话中没有用户信息")
-        const response = NextResponse.redirect(new URL("/login?error=no_user_data", requestUrl.origin))
+        const response = NextResponse.redirect(
+          new URL("/login?error=no_user_data", requestUrl.origin)
+        )
         stateValidation.clearCookie(response)
         return response
       }

@@ -603,7 +603,9 @@ export async function uploadMultipleImages(
  * 获取用户上传的图片列表
  */
 export async function getUserImages(): Promise<
-  ApiResponse<{ name: string; size: number; url: string; path: string; bucket: string; expiresIn: number }[]>
+  ApiResponse<
+    { name: string; size: number; url: string; path: string; bucket: string; expiresIn: number }[]
+  >
 > {
   try {
     // 验证用户认证

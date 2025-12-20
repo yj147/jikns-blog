@@ -245,10 +245,8 @@ describe("中间件性能和缓存集成测试", () => {
       await requireAuth()
       const endTime = performance.now()
 
-      // 清理后的首次调用应该需要重新查询数据库
-      const executionTime = endTime - startTime
-      expect(executionTime).toBeGreaterThan(1) // 应该有数据库查询时间
-
+      // 清理后的首次调用应该重新查询数据库
+      // 注意：mock 查询非常快，不验证执行时间
       expect(mockPrisma.user.findUnique).toHaveBeenCalled()
     })
   })

@@ -2,7 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import useSWR from "swr"
-import { ChevronDown, Loader2, RefreshCw, Search, Shield, UserCheck, UserPlus, UserX, Users } from "lucide-react"
+import {
+  ChevronDown,
+  Loader2,
+  RefreshCw,
+  Search,
+  Shield,
+  UserCheck,
+  UserPlus,
+  UserX,
+  Users,
+} from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
@@ -19,11 +29,29 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { useToast } from "@/components/ui/use-toast"
 import { fetchJson, FetchError } from "@/lib/api/fetch-json"
 import { useDebounce } from "@/hooks/use-debounce"
@@ -149,13 +177,14 @@ export default function AdminUsersClient({ initialData, initialQuery }: AdminUse
         ? { status: confirmAction.nextStatus }
         : { role: confirmAction.nextRole }
 
-    const successMessage = confirmAction.type === "status"
-      ? confirmAction.nextStatus === "BANNED"
-        ? "用户已被封禁"
-        : "用户已解封"
-      : confirmAction.nextRole === "ADMIN"
-        ? "已提升为管理员"
-        : "已降级为普通用户"
+    const successMessage =
+      confirmAction.type === "status"
+        ? confirmAction.nextStatus === "BANNED"
+          ? "用户已被封禁"
+          : "用户已解封"
+        : confirmAction.nextRole === "ADMIN"
+          ? "已提升为管理员"
+          : "已降级为普通用户"
 
     setActionLoading(true)
     try {
@@ -166,7 +195,8 @@ export default function AdminUsersClient({ initialData, initialQuery }: AdminUse
       toast({ title: successMessage })
       await mutate()
     } catch (err) {
-      const message = err instanceof FetchError ? err.message : (err as Error)?.message ?? "操作失败"
+      const message =
+        err instanceof FetchError ? err.message : ((err as Error)?.message ?? "操作失败")
       toast({ variant: "destructive", title: message })
     } finally {
       setActionLoading(false)
@@ -184,7 +214,7 @@ export default function AdminUsersClient({ initialData, initialQuery }: AdminUse
           <p className="text-muted-foreground">管理账号、角色与状态，所有数据实时来源于 API</p>
         </div>
         <div className="flex items-center gap-3">
-          {isFetching && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          {isFetching && <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />}
           <Button variant="outline" onClick={() => void mutate()} disabled={isFetching}>
             <RefreshCw className="mr-2 h-4 w-4" /> 刷新
           </Button>
@@ -200,10 +230,30 @@ export default function AdminUsersClient({ initialData, initialQuery }: AdminUse
       </header>
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={<Users className="h-4 w-4 text-muted-foreground" />} title="总用户" value={summary.totalUsers} helper={`今日新增 ${summary.todayNewUsers}`} />
-        <StatCard icon={<UserCheck className="h-4 w-4 text-muted-foreground" />} title="活跃用户" value={summary.activeUsers} helper="状态为 ACTIVE" />
-        <StatCard icon={<Shield className="h-4 w-4 text-muted-foreground" />} title="管理员" value={summary.adminUsers} helper="拥有管理权限" />
-        <StatCard icon={<UserX className="h-4 w-4 text-muted-foreground" />} title="封禁用户" value={summary.bannedUsers} helper="需关注风险账号" />
+        <StatCard
+          icon={<Users className="text-muted-foreground h-4 w-4" />}
+          title="总用户"
+          value={summary.totalUsers}
+          helper={`今日新增 ${summary.todayNewUsers}`}
+        />
+        <StatCard
+          icon={<UserCheck className="text-muted-foreground h-4 w-4" />}
+          title="活跃用户"
+          value={summary.activeUsers}
+          helper="状态为 ACTIVE"
+        />
+        <StatCard
+          icon={<Shield className="text-muted-foreground h-4 w-4" />}
+          title="管理员"
+          value={summary.adminUsers}
+          helper="拥有管理权限"
+        />
+        <StatCard
+          icon={<UserX className="text-muted-foreground h-4 w-4" />}
+          title="封禁用户"
+          value={summary.bannedUsers}
+          helper="需关注风险账号"
+        />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-3">
@@ -221,7 +271,10 @@ export default function AdminUsersClient({ initialData, initialQuery }: AdminUse
         </div>
         <div>
           <Label className="text-sm font-medium">状态</Label>
-          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)}>
+          <Select
+            value={statusFilter}
+            onValueChange={(value) => setStatusFilter(value as StatusFilter)}
+          >
             <SelectTrigger className="mt-2">
               <SelectValue placeholder="选择状态" />
             </SelectTrigger>
@@ -280,7 +333,7 @@ export default function AdminUsersClient({ initialData, initialQuery }: AdminUse
             {users.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="h-32 text-center">
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                  <div className="text-muted-foreground flex flex-col items-center gap-2">
                     <Users className="h-6 w-6" />
                     <p>没有符合条件的用户</p>
                     <Button variant="ghost" size="sm" onClick={handleClearFilters}>
@@ -295,8 +348,13 @@ export default function AdminUsersClient({ initialData, initialQuery }: AdminUse
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar className="h-9 w-9">
-                        <AvatarImage src={user.avatarUrl ?? undefined} alt={user.name ?? user.email} />
-                        <AvatarFallback>{(user.name ?? user.email)[0]?.toUpperCase()}</AvatarFallback>
+                        <AvatarImage
+                          src={user.avatarUrl ?? undefined}
+                          alt={user.name ?? user.email}
+                        />
+                        <AvatarFallback>
+                          {(user.name ?? user.email)[0]?.toUpperCase()}
+                        </AvatarFallback>
                       </Avatar>
                       <div>
                         <p className="font-medium leading-tight">{user.name || "未命名用户"}</p>
@@ -308,7 +366,9 @@ export default function AdminUsersClient({ initialData, initialQuery }: AdminUse
                     <p className="font-mono text-sm">{user.email}</p>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={user.role === "ADMIN" ? "default" : "secondary"}>{ROLE_LABELS[user.role]}</Badge>
+                    <Badge variant={user.role === "ADMIN" ? "default" : "secondary"}>
+                      {ROLE_LABELS[user.role]}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={user.status} />
@@ -316,7 +376,9 @@ export default function AdminUsersClient({ initialData, initialQuery }: AdminUse
                   <TableCell>
                     <p className="text-sm">{dateFormatter.format(new Date(user.createdAt))}</p>
                     {user.lastLoginAt && (
-                      <p className="text-muted-foreground text-xs">最后活跃 {dateFormatter.format(new Date(user.lastLoginAt))}</p>
+                      <p className="text-muted-foreground text-xs">
+                        最后活跃 {dateFormatter.format(new Date(user.lastLoginAt))}
+                      </p>
                     )}
                   </TableCell>
                   <TableCell>
@@ -329,7 +391,9 @@ export default function AdminUsersClient({ initialData, initialQuery }: AdminUse
                       <Button
                         variant={user.status === "BANNED" ? "secondary" : "destructive"}
                         size="sm"
-                        onClick={() => openStatusDialog(user, user.status === "BANNED" ? "ACTIVE" : "BANNED")}
+                        onClick={() =>
+                          openStatusDialog(user, user.status === "BANNED" ? "ACTIVE" : "BANNED")
+                        }
                         disabled={actionLoading}
                       >
                         {busyUserId === user.id && confirmAction?.type === "status" ? (
@@ -374,7 +438,8 @@ export default function AdminUsersClient({ initialData, initialQuery }: AdminUse
 
       <footer className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="text-muted-foreground text-sm">
-          第 {pagination.page} / {pagination.totalPages} 页 · 共 {numberFormatter.format(pagination.total)} 人
+          第 {pagination.page} / {pagination.totalPages} 页 · 共{" "}
+          {numberFormatter.format(pagination.total)} 人
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -414,7 +479,11 @@ export default function AdminUsersClient({ initialData, initialQuery }: AdminUse
             <AlertDialogAction
               onClick={handleConfirmAction}
               disabled={actionLoading}
-              className={confirmAction?.type === "status" && confirmAction?.nextStatus === "BANNED" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined}
+              className={
+                confirmAction?.type === "status" && confirmAction?.nextStatus === "BANNED"
+                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  : undefined
+              }
             >
               {actionLoading ? "处理中..." : getDialogActionLabel(confirmAction)}
             </AlertDialogAction>

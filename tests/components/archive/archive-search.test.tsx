@@ -151,7 +151,10 @@ describe("ArchiveSearch", () => {
 
   it("可以清除搜索历史", async () => {
     localStorage.setItem("archive-search-history", JSON.stringify(["Playwright"]))
-    ;(global.fetch as unknown as vi.Mock).mockResolvedValue({ ok: true, json: async () => ({ results: [] }) })
+    ;(global.fetch as unknown as vi.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ results: [] }),
+    })
 
     render(<ArchiveSearch years={YEARS} />)
 

@@ -177,9 +177,7 @@ describe("管理员用户管理 API 测试", () => {
       vi.mocked(prisma.user.findMany).mockResolvedValue([])
       vi.mocked(prisma.user.count).mockResolvedValue(100)
 
-      const request = new NextRequest(
-        "http://localhost/api/admin/users?page=2&limit=10"
-      )
+      const request = new NextRequest("http://localhost/api/admin/users?page=2&limit=10")
       const response = await getUsersList(request)
       const data = await response.json()
 
@@ -202,9 +200,7 @@ describe("管理员用户管理 API 测试", () => {
       vi.mocked(prisma.user.findMany).mockResolvedValue([])
       vi.mocked(prisma.user.count).mockResolvedValue(0)
 
-      const request = new NextRequest(
-        "http://localhost/api/admin/users?status=BANNED"
-      )
+      const request = new NextRequest("http://localhost/api/admin/users?status=BANNED")
       await getUsersList(request)
 
       expect(prisma.user.findMany).toHaveBeenCalledWith(
@@ -220,9 +216,7 @@ describe("管理员用户管理 API 测试", () => {
       vi.mocked(prisma.user.findMany).mockResolvedValue([])
       vi.mocked(prisma.user.count).mockResolvedValue(0)
 
-      const request = new NextRequest(
-        "http://localhost/api/admin/users?role=ADMIN"
-      )
+      const request = new NextRequest("http://localhost/api/admin/users?role=ADMIN")
       await getUsersList(request)
 
       expect(prisma.user.findMany).toHaveBeenCalledWith(
@@ -238,9 +232,7 @@ describe("管理员用户管理 API 测试", () => {
       vi.mocked(prisma.user.findMany).mockResolvedValue([])
       vi.mocked(prisma.user.count).mockResolvedValue(0)
 
-      const request = new NextRequest(
-        "http://localhost/api/admin/users?search=test"
-      )
+      const request = new NextRequest("http://localhost/api/admin/users?search=test")
       await getUsersList(request)
 
       expect(prisma.user.findMany).toHaveBeenCalledWith(
@@ -259,9 +251,7 @@ describe("管理员用户管理 API 测试", () => {
       vi.mocked(prisma.user.findMany).mockResolvedValue([])
       vi.mocked(prisma.user.count).mockResolvedValue(0)
 
-      const request = new NextRequest(
-        "http://localhost/api/admin/users?limit=500"
-      )
+      const request = new NextRequest("http://localhost/api/admin/users?limit=500")
       await getUsersList(request)
 
       expect(prisma.user.findMany).toHaveBeenCalledWith(
@@ -284,9 +274,7 @@ describe("管理员用户管理 API 测试", () => {
     })
 
     it("数据库错误应该返回500", async () => {
-      vi.mocked(prisma.user.findMany).mockRejectedValue(
-        new Error("Database connection failed")
-      )
+      vi.mocked(prisma.user.findMany).mockRejectedValue(new Error("Database connection failed"))
 
       const request = new NextRequest("http://localhost/api/admin/users")
       const response = await getUsersList(request)
@@ -306,10 +294,9 @@ describe("管理员用户管理 API 测试", () => {
         status: "BANNED",
       })
 
-      const request = new NextRequest(
-        "http://localhost/api/admin/users/user-456/ban",
-        { method: "POST" }
-      )
+      const request = new NextRequest("http://localhost/api/admin/users/user-456/ban", {
+        method: "POST",
+      })
 
       const response = await banUser(request, {
         params: Promise.resolve({ userId: "user-456" }),
@@ -340,10 +327,9 @@ describe("管理员用户管理 API 测试", () => {
     it("应该阻止管理员封禁自己", async () => {
       vi.mocked(prisma.user.findUnique).mockResolvedValue(mockAdminUser)
 
-      const request = new NextRequest(
-        "http://localhost/api/admin/users/admin-123/ban",
-        { method: "POST" }
-      )
+      const request = new NextRequest("http://localhost/api/admin/users/admin-123/ban", {
+        method: "POST",
+      })
 
       const response = await banUser(request, {
         params: Promise.resolve({ userId: "admin-123" }),
@@ -367,10 +353,9 @@ describe("管理员用户管理 API 测试", () => {
     it("用户不存在应该返回404", async () => {
       vi.mocked(prisma.user.findUnique).mockResolvedValue(null)
 
-      const request = new NextRequest(
-        "http://localhost/api/admin/users/nonexistent/ban",
-        { method: "POST" }
-      )
+      const request = new NextRequest("http://localhost/api/admin/users/nonexistent/ban", {
+        method: "POST",
+      })
 
       const response = await banUser(request, {
         params: Promise.resolve({ userId: "nonexistent" }),
@@ -384,14 +369,11 @@ describe("管理员用户管理 API 测试", () => {
 
     it("数据库错误应该返回500并记录审计日志", async () => {
       vi.mocked(prisma.user.findUnique).mockResolvedValue(mockRegularUser)
-      vi.mocked(prisma.user.update).mockRejectedValue(
-        new Error("Database error")
-      )
+      vi.mocked(prisma.user.update).mockRejectedValue(new Error("Database error"))
 
-      const request = new NextRequest(
-        "http://localhost/api/admin/users/user-456/ban",
-        { method: "POST" }
-      )
+      const request = new NextRequest("http://localhost/api/admin/users/user-456/ban", {
+        method: "POST",
+      })
 
       const response = await banUser(request, {
         params: Promise.resolve({ userId: "user-456" }),
@@ -419,10 +401,9 @@ describe("管理员用户管理 API 测试", () => {
         status: "ACTIVE",
       })
 
-      const request = new NextRequest(
-        "http://localhost/api/admin/users/user-789/ban",
-        { method: "DELETE" }
-      )
+      const request = new NextRequest("http://localhost/api/admin/users/user-789/ban", {
+        method: "DELETE",
+      })
 
       const response = await unbanUser(request, {
         params: Promise.resolve({ userId: "user-789" }),
@@ -453,10 +434,9 @@ describe("管理员用户管理 API 测试", () => {
     it("用户不存在应该返回404", async () => {
       vi.mocked(prisma.user.findUnique).mockResolvedValue(null)
 
-      const request = new NextRequest(
-        "http://localhost/api/admin/users/nonexistent/ban",
-        { method: "DELETE" }
-      )
+      const request = new NextRequest("http://localhost/api/admin/users/nonexistent/ban", {
+        method: "DELETE",
+      })
 
       const response = await unbanUser(request, {
         params: Promise.resolve({ userId: "nonexistent" }),
@@ -477,13 +457,10 @@ describe("管理员用户管理 API 测试", () => {
         role: "ADMIN",
       })
 
-      const request = new NextRequest(
-        "http://localhost/api/admin/users/user-456/role",
-        {
-          method: "POST",
-          body: JSON.stringify({ role: "ADMIN" }),
-        }
-      )
+      const request = new NextRequest("http://localhost/api/admin/users/user-456/role", {
+        method: "POST",
+        body: JSON.stringify({ role: "ADMIN" }),
+      })
 
       const response = await changeRole(request, {
         params: Promise.resolve({ userId: "user-456" }),
@@ -514,13 +491,10 @@ describe("管理员用户管理 API 测试", () => {
     it("应该阻止管理员降级自己", async () => {
       vi.mocked(prisma.user.findUnique).mockResolvedValue(mockAdminUser)
 
-      const request = new NextRequest(
-        "http://localhost/api/admin/users/admin-123/role",
-        {
-          method: "POST",
-          body: JSON.stringify({ role: "USER" }),
-        }
-      )
+      const request = new NextRequest("http://localhost/api/admin/users/admin-123/role", {
+        method: "POST",
+        body: JSON.stringify({ role: "USER" }),
+      })
 
       const response = await changeRole(request, {
         params: Promise.resolve({ userId: "admin-123" }),
@@ -544,13 +518,10 @@ describe("管理员用户管理 API 测试", () => {
     it("缺少role参数应该返回400", async () => {
       vi.mocked(prisma.user.findUnique).mockResolvedValue(mockRegularUser)
 
-      const request = new NextRequest(
-        "http://localhost/api/admin/users/user-456/role",
-        {
-          method: "POST",
-          body: JSON.stringify({}),
-        }
-      )
+      const request = new NextRequest("http://localhost/api/admin/users/user-456/role", {
+        method: "POST",
+        body: JSON.stringify({}),
+      })
 
       const response = await changeRole(request, {
         params: Promise.resolve({ userId: "user-456" }),
@@ -565,13 +536,10 @@ describe("管理员用户管理 API 测试", () => {
     it("无效的role值应该返回400", async () => {
       vi.mocked(prisma.user.findUnique).mockResolvedValue(mockRegularUser)
 
-      const request = new NextRequest(
-        "http://localhost/api/admin/users/user-456/role",
-        {
-          method: "POST",
-          body: JSON.stringify({ role: "SUPERADMIN" }),
-        }
-      )
+      const request = new NextRequest("http://localhost/api/admin/users/user-456/role", {
+        method: "POST",
+        body: JSON.stringify({ role: "SUPERADMIN" }),
+      })
 
       const response = await changeRole(request, {
         params: Promise.resolve({ userId: "user-456" }),
@@ -586,13 +554,10 @@ describe("管理员用户管理 API 测试", () => {
     it("用户不存在应该返回404", async () => {
       vi.mocked(prisma.user.findUnique).mockResolvedValue(null)
 
-      const request = new NextRequest(
-        "http://localhost/api/admin/users/nonexistent/role",
-        {
-          method: "POST",
-          body: JSON.stringify({ role: "ADMIN" }),
-        }
-      )
+      const request = new NextRequest("http://localhost/api/admin/users/nonexistent/role", {
+        method: "POST",
+        body: JSON.stringify({ role: "ADMIN" }),
+      })
 
       const response = await changeRole(request, {
         params: Promise.resolve({ userId: "nonexistent" }),

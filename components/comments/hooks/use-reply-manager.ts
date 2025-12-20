@@ -73,13 +73,15 @@ export function useReplyManager(targetType: CommentTargetType, targetId: string)
           params.set("cursor", cursor)
         }
 
-        const response = (await fetchGet(`/api/comments?${params.toString()}`)) as CommentsApiResponse
+        const response = (await fetchGet(
+          `/api/comments?${params.toString()}`
+        )) as CommentsApiResponse
         const newReplies = response.data ?? []
         const pagination = response.meta?.pagination
 
         setReplyCache((prev) => {
           const previous = prev[commentId]
-          const base = append ? previous?.data ?? [] : []
+          const base = append ? (previous?.data ?? []) : []
 
           return {
             ...prev,
@@ -214,4 +216,3 @@ export function useReplyManager(targetType: CommentTargetType, targetId: string)
     removeReply,
   }
 }
-

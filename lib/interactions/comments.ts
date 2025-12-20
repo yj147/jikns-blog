@@ -278,9 +278,7 @@ export async function createComment(data: CreateCommentData): Promise<CommentWit
 /**
  * 获取评论列表
  */
-export async function listComments(
-  options: CommentQueryOptions
-): Promise<{
+export async function listComments(options: CommentQueryOptions): Promise<{
   comments: CommentWithAuthor[]
   hasMore: boolean
   nextCursor?: string
@@ -440,9 +438,7 @@ export async function listComments(
   }
 }
 
-async function signCommentAuthors(
-  comments: CommentWithAuthor[]
-): Promise<CommentWithAuthor[]> {
+async function signCommentAuthors(comments: CommentWithAuthor[]): Promise<CommentWithAuthor[]> {
   return Promise.all(
     comments.map(async (comment) => {
       const signedAvatar = await signAvatarUrl(comment.author?.avatarUrl ?? null)

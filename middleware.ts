@@ -82,8 +82,7 @@ const METRICS_EXCLUDED_PATHS = ["/api/admin/monitoring", "/api/admin/metrics"] a
 function isApiMetricsTarget(pathname: string): boolean {
   if (!(pathname === "/api" || pathname.startsWith("/api/"))) return false
   return !METRICS_EXCLUDED_PATHS.some(
-    (excludedPath) =>
-      pathname === excludedPath || pathname.startsWith(excludedPath + "/")
+    (excludedPath) => pathname === excludedPath || pathname.startsWith(excludedPath + "/")
   )
 }
 
@@ -218,7 +217,9 @@ export async function middleware(request: NextRequest) {
   const isMetricsPath = isApiMetricsTarget(pathname)
   const requestId = request.headers.get("x-request-id") ?? generateRequestId()
   const traceStart = request.headers.get("x-trace-start") ?? Date.now().toString()
-  const metricsSample = isMetricsPath ? decideMetricsSample(request.headers.get("x-metrics-sample")) : undefined
+  const metricsSample = isMetricsPath
+    ? decideMetricsSample(request.headers.get("x-metrics-sample"))
+    : undefined
   const forwardedHeaders = new Headers(request.headers)
   forwardedHeaders.set("x-request-id", requestId)
   forwardedHeaders.set("x-trace-start", traceStart)
@@ -301,7 +302,11 @@ export async function middleware(request: NextRequest) {
           if (isApiRequest) {
             return attachTraceHeaders(
               NextResponse.json(
-                { error: "用户未认证", code: "AUTHENTICATION_REQUIRED", timestamp: new Date().toISOString() },
+                {
+                  error: "用户未认证",
+                  code: "AUTHENTICATION_REQUIRED",
+                  timestamp: new Date().toISOString(),
+                },
                 { status: 401 }
               )
             )
@@ -323,7 +328,11 @@ export async function middleware(request: NextRequest) {
         if (isApiRequest) {
           return attachTraceHeaders(
             NextResponse.json(
-              { error: "用户未认证", code: "AUTHENTICATION_REQUIRED", timestamp: new Date().toISOString() },
+              {
+                error: "用户未认证",
+                code: "AUTHENTICATION_REQUIRED",
+                timestamp: new Date().toISOString(),
+              },
               { status: 401 }
             )
           )

@@ -74,22 +74,15 @@ export function NotificationList({ initialType = "ALL", className }: Notificatio
   const { toast } = useToast()
   const { user, supabase } = useAuth()
 
-  const {
-    data,
-    error,
-    isLoading,
-    isValidating,
-    size,
-    setSize,
-    mutate,
-  } = useSWRInfinite<NotificationApiResponse>(
-    (index, previous) => buildKey(index, previous, filter),
-    fetcher,
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: true,
-    }
-  )
+  const { data, error, isLoading, isValidating, size, setSize, mutate } =
+    useSWRInfinite<NotificationApiResponse>(
+      (index, previous) => buildKey(index, previous, filter),
+      fetcher,
+      {
+        revalidateOnFocus: false,
+        revalidateOnReconnect: true,
+      }
+    )
 
   const sentinelRef = useRef<HTMLDivElement | null>(null)
 
@@ -217,7 +210,7 @@ export function NotificationList({ initialType = "ALL", className }: Notificatio
   if (isInitialLoading) {
     return (
       <Card className={cn("border-dashed", className)}>
-        <CardContent className="flex items-center gap-2 py-8 text-muted-foreground">
+        <CardContent className="text-muted-foreground flex items-center gap-2 py-8">
           <Loader2 className="h-4 w-4 animate-spin" />
           <span>加载通知中...</span>
         </CardContent>
@@ -229,7 +222,7 @@ export function NotificationList({ initialType = "ALL", className }: Notificatio
     return (
       <Card className={className}>
         <CardContent className="space-y-3 py-8 text-center">
-          <BellRing className="mx-auto h-10 w-10 text-muted-foreground" />
+          <BellRing className="text-muted-foreground mx-auto h-10 w-10" />
           <p className="text-muted-foreground text-sm">获取通知失败，请稍后再试</p>
           <Button variant="outline" onClick={() => mutate()}>
             重新加载
@@ -243,7 +236,7 @@ export function NotificationList({ initialType = "ALL", className }: Notificatio
     return (
       <Card className={className}>
         <CardContent className="space-y-3 py-12 text-center">
-          <Inbox className="mx-auto h-10 w-10 text-muted-foreground" />
+          <Inbox className="text-muted-foreground mx-auto h-10 w-10" />
           <p className="text-muted-foreground text-sm">暂时没有通知</p>
         </CardContent>
       </Card>
@@ -256,14 +249,10 @@ export function NotificationList({ initialType = "ALL", className }: Notificatio
         <Tabs value={filter} onValueChange={handleFilterChange} className="w-full md:w-auto">
           <TabsList className="grid h-auto w-full grid-cols-2 gap-2 md:flex md:w-auto">
             {FILTERS.map((item) => (
-              <TabsTrigger
-                key={item.value}
-                value={item.value}
-                className="text-xs md:text-sm"
-              >
+              <TabsTrigger key={item.value} value={item.value} className="text-xs md:text-sm">
                 {item.label}
                 {item.value !== "ALL" && filteredUnreadCount > 0 && filter === item.value ? (
-                  <span className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1 text-[10px] text-primary-foreground">
+                  <span className="bg-primary text-primary-foreground ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10px]">
                     {filteredUnreadCount}
                   </span>
                 ) : null}
@@ -293,7 +282,7 @@ export function NotificationList({ initialType = "ALL", className }: Notificatio
         <div ref={sentinelRef} />
 
         {isLoadingMore ? (
-          <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground text-sm">
+          <div className="text-muted-foreground flex items-center justify-center gap-2 py-4 text-sm">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span>加载更多...</span>
           </div>

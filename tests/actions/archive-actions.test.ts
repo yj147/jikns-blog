@@ -200,10 +200,7 @@ describe("Archive server actions 聚合逻辑", () => {
         { year: 2024, count: 6 },
         { year: 2023, count: 3 },
       ])
-      .mockResolvedValueOnce([
-        { id: "post-alpha" },
-        { id: "post-beta" },
-      ])
+      .mockResolvedValueOnce([{ id: "post-alpha" }, { id: "post-beta" }])
       .mockResolvedValueOnce([
         { year: 2024, month: 5, count: 1 },
         { year: 2023, month: 12, count: 1 },
@@ -235,9 +232,7 @@ describe("Archive server actions 聚合逻辑", () => {
     const dataCacheCall = cacheCalls.find(
       (entry) => Array.isArray(entry.key) && entry.key[0] === "archive:data"
     )
-    expect(dataCacheCall?.options?.tags).toEqual(
-      expect.arrayContaining([ARCHIVE_CACHE_TAGS.years])
-    )
+    expect(dataCacheCall?.options?.tags).toEqual(expect.arrayContaining([ARCHIVE_CACHE_TAGS.years]))
   })
 
   it("getArchiveData 在 perMonthPostLimit 为 null 时直接走 findMany 分页", async () => {

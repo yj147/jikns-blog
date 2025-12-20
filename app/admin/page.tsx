@@ -151,25 +151,25 @@ function DashboardContent({ stats }: { stats: AdminStats }) {
       <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="总用户"
-          icon={<Users className="h-4 w-4 text-muted-foreground" />}
+          icon={<Users className="text-muted-foreground h-4 w-4" />}
           value={stats.totals.users}
           helper={`活跃用户 ${numberFormatter.format(stats.summary.activeUsers)}`}
         />
         <StatCard
           title="文章总数"
-          icon={<BookOpen className="h-4 w-4 text-muted-foreground" />}
+          icon={<BookOpen className="text-muted-foreground h-4 w-4" />}
           value={stats.totals.posts}
           helper={`待审核 ${stats.summary.draftPosts}`}
         />
         <StatCard
           title="评论总数"
-          icon={<MessageSquare className="h-4 w-4 text-muted-foreground" />}
+          icon={<MessageSquare className="text-muted-foreground h-4 w-4" />}
           value={stats.totals.comments}
           helper={`近7天 +${stats.trends.newComments7d}`}
         />
         <StatCard
           title="动态总数"
-          icon={<Activity className="h-4 w-4 text-muted-foreground" />}
+          icon={<Activity className="text-muted-foreground h-4 w-4" />}
           value={stats.totals.activities}
           helper={`近7天 +${stats.trends.newActivities7d}`}
         />
@@ -199,7 +199,7 @@ function DashboardContent({ stats }: { stats: AdminStats }) {
               <div key={item.title} className="rounded-lg border p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">{item.title}</p>
+                    <p className="text-muted-foreground text-sm">{item.title}</p>
                     <p className="text-2xl font-bold">{item.value}</p>
                   </div>
                   <AlertTriangle className="text-amber-500" />
@@ -234,7 +234,7 @@ function DashboardContent({ stats }: { stats: AdminStats }) {
                   </div>
                   <Badge variant="secondary">{numberFormatter.format(post.viewCount)} 浏览</Badge>
                 </div>
-                <div className="mt-3 flex gap-4 text-sm text-muted-foreground">
+                <div className="text-muted-foreground mt-3 flex gap-4 text-sm">
                   <span>评论 {post.comments}</span>
                   <span>点赞 {post.likes}</span>
                   <span>{new Date(post.createdAt).toLocaleDateString("zh-CN")}</span>
@@ -250,15 +250,15 @@ function DashboardContent({ stats }: { stats: AdminStats }) {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-lg border p-4">
-              <p className="text-sm text-muted-foreground">管理员</p>
+              <p className="text-muted-foreground text-sm">管理员</p>
               <p className="text-2xl font-bold">{stats.summary.adminUsers}</p>
             </div>
             <div className="rounded-lg border p-4">
-              <p className="text-sm text-muted-foreground">封禁用户</p>
+              <p className="text-muted-foreground text-sm">封禁用户</p>
               <p className="text-2xl font-bold">{stats.summary.bannedUsers}</p>
             </div>
             <div className="rounded-lg border p-4">
-              <p className="text-sm text-muted-foreground">活跃用户</p>
+              <p className="text-muted-foreground text-sm">活跃用户</p>
               <p className="text-2xl font-bold">{stats.summary.activeUsers}</p>
             </div>
           </CardContent>
@@ -297,11 +297,7 @@ function StatCard({
   )
 }
 
-function RecentActivityItem({
-  activity,
-}: {
-  activity: AdminStats["recentActivities"][number]
-}) {
+function RecentActivityItem({ activity }: { activity: AdminStats["recentActivities"][number] }) {
   return (
     <div className="flex items-start gap-3 rounded-lg border p-3">
       <Avatar className="h-10 w-10">
@@ -315,8 +311,8 @@ function RecentActivityItem({
             {new Date(activity.createdAt).toLocaleString("zh-CN", { hour12: false })}
           </span>
         </div>
-        <p className="text-sm text-muted-foreground">{activity.content}</p>
-        <div className="mt-2 flex gap-4 text-xs text-muted-foreground">
+        <p className="text-muted-foreground text-sm">{activity.content}</p>
+        <div className="text-muted-foreground mt-2 flex gap-4 text-xs">
           <span>点赞 {activity.likes}</span>
           <span>评论 {activity.comments}</span>
         </div>
@@ -352,7 +348,7 @@ function DashboardSkeleton() {
 function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div className="rounded-lg border p-8 text-center">
-      <p className="mb-4 text-sm text-muted-foreground">{message}</p>
+      <p className="text-muted-foreground mb-4 text-sm">{message}</p>
       <Button onClick={onRetry} variant="secondary">
         重新加载
       </Button>

@@ -11,7 +11,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { LoadingIndicator } from "@/components/ui/loading-indicator"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import {
   Activity,
@@ -198,9 +204,9 @@ export const MonitoringDashboard: React.FC = () => {
     data: stats,
     isLoading: statsLoading,
     error: statsError,
-  connectionState,
-  lastUpdated: statsUpdatedAt,
-  refresh: refreshStats,
+    connectionState,
+    lastUpdated: statsUpdatedAt,
+    refresh: refreshStats,
   } = useRealtimeDashboard()
 
   const {
@@ -221,7 +227,9 @@ export const MonitoringDashboard: React.FC = () => {
   }, [])
 
   const rangeDuration = React.useMemo(
-    () => TIME_RANGE_OPTIONS.find((option) => option.value === timeRange)?.ms ?? TIME_RANGE_OPTIONS[0].ms,
+    () =>
+      TIME_RANGE_OPTIONS.find((option) => option.value === timeRange)?.ms ??
+      TIME_RANGE_OPTIONS[0].ms,
     [timeRange]
   )
   const endTime = React.useMemo(() => now, [now])
@@ -350,7 +358,9 @@ export const MonitoringDashboard: React.FC = () => {
             实时基础计数
           </CardTitle>
           {statsError && (
-            <p className="text-xs text-red-500 dark:text-red-400">计数更新失败：{statsError.message}</p>
+            <p className="text-xs text-red-500 dark:text-red-400">
+              计数更新失败：{statsError.message}
+            </p>
           )}
         </CardHeader>
         <CardContent>
@@ -430,10 +440,7 @@ export const MonitoringDashboard: React.FC = () => {
                 onCheckedChange={setCompareEnabled}
                 aria-label="开启趋势对比"
               />
-              <label
-                htmlFor="metrics-compare"
-                className="text-sm text-gray-600 dark:text-gray-300"
-              >
+              <label htmlFor="metrics-compare" className="text-sm text-gray-600 dark:text-gray-300">
                 趋势对比
               </label>
             </div>
@@ -501,10 +508,7 @@ export const MonitoringDashboard: React.FC = () => {
 
       {/* 健康状态和认证指标 */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <HealthStatus
-          status={performanceData.healthStatus}
-          uptime={performanceData.uptime ?? 0}
-        />
+        <HealthStatus status={performanceData.healthStatus} uptime={performanceData.uptime ?? 0} />
 
         <Card>
           <CardHeader>

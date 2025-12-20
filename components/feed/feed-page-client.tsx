@@ -29,14 +29,14 @@ const SuggestedUsersCard = dynamic(() => import("@/components/feed/suggested-use
   ssr: true,
   loading: () => (
     <div className="space-y-4 p-4">
-      <div className="h-4 w-1/3 rounded bg-muted animate-pulse" />
+      <div className="bg-muted h-4 w-1/3 animate-pulse rounded" />
       <div className="space-y-3">
         {[...Array(3)].map((_, i) => (
           <div key={i} className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-muted animate-pulse" />
+            <div className="bg-muted h-10 w-10 animate-pulse rounded-full" />
             <div className="flex-1 space-y-2">
-              <div className="h-3 w-1/2 bg-muted rounded animate-pulse" />
-              <div className="h-2 w-1/3 bg-muted rounded animate-pulse" />
+              <div className="bg-muted h-3 w-1/2 animate-pulse rounded" />
+              <div className="bg-muted h-2 w-1/3 animate-pulse rounded" />
             </div>
           </div>
         ))}
@@ -49,10 +49,10 @@ const TrendingTopicsCard = dynamic(() => import("@/components/feed/trending-topi
   ssr: true,
   loading: () => (
     <div className="space-y-4 p-4">
-      <div className="h-4 w-1/3 rounded bg-muted animate-pulse" />
+      <div className="bg-muted h-4 w-1/3 animate-pulse rounded" />
       <div className="space-y-2">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="h-8 bg-muted rounded animate-pulse" />
+          <div key={i} className="bg-muted h-8 animate-pulse rounded" />
         ))}
       </div>
     </div>
@@ -91,9 +91,9 @@ const ActivityComposer = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex gap-4 p-4 animate-pulse">
-        <div className="h-10 w-10 rounded-full bg-muted" />
-        <div className="flex-1 h-24 bg-muted rounded-xl" />
+      <div className="flex animate-pulse gap-4 p-4">
+        <div className="bg-muted h-10 w-10 rounded-full" />
+        <div className="bg-muted h-24 flex-1 rounded-xl" />
       </div>
     ),
   }
@@ -197,8 +197,8 @@ export default function FeedPageClient({
 
   if (isError) {
     return (
-      <div className="bg-background min-h-screen flex flex-col items-center justify-center p-8">
-        <h3 className="text-lg font-semibold mb-2">加载失败</h3>
+      <div className="bg-background flex min-h-screen flex-col items-center justify-center p-8">
+        <h3 className="mb-2 text-lg font-semibold">加载失败</h3>
         <p className="text-muted-foreground mb-4">{error?.message || "请稍后重试"}</p>
         <Button onClick={() => window.location.reload()}>重新加载</Button>
       </div>
@@ -209,7 +209,7 @@ export default function FeedPageClient({
     <div className="bg-background min-h-screen">
       <div className="mx-auto flex max-w-[1000px] justify-center gap-0 lg:gap-8">
         {/* 主内容区 - 固定宽度，移动端无边框 */}
-        <div className="w-full max-w-[600px] lg:border-x lg:border-border">
+        <div className="lg:border-border w-full max-w-[600px] lg:border-x">
           <FeedHeader
             activeTab={activeTab}
             featureFlags={featureFlags}
@@ -221,13 +221,13 @@ export default function FeedPageClient({
           />
 
           {realtimeActivitiesError && (
-            <div className="mx-4 mt-4 rounded-md bg-destructive/10 px-4 py-2 text-xs text-destructive flex items-center justify-center">
+            <div className="bg-destructive/10 text-destructive mx-4 mt-4 flex items-center justify-center rounded-md px-4 py-2 text-xs">
               实时连接断开，尝试重连中...
             </div>
           )}
 
           {user && (
-            <div className="border-b border-border px-4 py-4">
+            <div className="border-border border-b px-4 py-4">
               <ActivityComposer
                 onSuccess={() => refresh()}
                 placeholder="有什么新鲜事？"
@@ -257,17 +257,17 @@ export default function FeedPageClient({
         {/* 侧边栏 - 固定宽度 */}
         <div className="hidden w-[350px] shrink-0 lg:block">
           <div className="sticky top-20 space-y-4 py-4">
-            <div className="rounded-xl bg-muted/30 overflow-hidden">
-              <h3 className="font-bold px-4 pt-4 pb-2 text-lg">热门话题</h3>
+            <div className="bg-muted/30 overflow-hidden rounded-xl">
+              <h3 className="px-4 pb-2 pt-4 text-lg font-bold">热门话题</h3>
               <TrendingTopicsCard />
             </div>
 
-            <div className="rounded-xl bg-muted/30 overflow-hidden">
-              <h3 className="font-bold px-4 pt-4 pb-2 text-lg">推荐关注</h3>
+            <div className="bg-muted/30 overflow-hidden rounded-xl">
+              <h3 className="px-4 pb-2 pt-4 text-lg font-bold">推荐关注</h3>
               <SuggestedUsersCard onFollowChange={refresh} />
             </div>
 
-            <div className="px-4 text-xs text-muted-foreground">
+            <div className="text-muted-foreground px-4 text-xs">
               <p>&copy; 2025 现代博客平台</p>
             </div>
           </div>

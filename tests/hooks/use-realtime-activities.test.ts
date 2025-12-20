@@ -62,10 +62,9 @@ describe("useRealtimeActivities", () => {
     const firstInsert = vi.fn()
     const nextInsert = vi.fn()
 
-    const { rerender } = renderHook(
-      ({ handler }) => useRealtimeActivities({ onInsert: handler }),
-      { initialProps: { handler: firstInsert } }
-    )
+    const { rerender } = renderHook(({ handler }) => useRealtimeActivities({ onInsert: handler }), {
+      initialProps: { handler: firstInsert },
+    })
 
     await flushEffects()
     const channel = supabaseCtx.channels[0]

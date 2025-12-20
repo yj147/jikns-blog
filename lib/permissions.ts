@@ -376,7 +376,10 @@ export async function checkRoutePermission(route: string, user?: User | null): P
   if (routeMatches(route, publicPaths)) return true
 
   // 管理员专属
-  if (routeMatches(route, adminOnlyPaths) || (route.startsWith("/api/admin") && !routeMatches(route, authorAllowedAdminPaths))) {
+  if (
+    routeMatches(route, adminOnlyPaths) ||
+    (route.startsWith("/api/admin") && !routeMatches(route, authorAllowedAdminPaths))
+  ) {
     return Boolean(isAdmin)
   }
 

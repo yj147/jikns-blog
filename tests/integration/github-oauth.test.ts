@@ -250,8 +250,7 @@ describe("GitHub OAuth 完整流程集成测试", () => {
 
     it("应该处理复杂的重定向路径", async () => {
       const stateToken = generateOAuthState()
-      const complexRedirectUrl =
-        `http://localhost:3000/auth/callback?code=auth_code&state=${stateToken.state}&redirect_to=%2Fadmin%2Fposts%3Fpage%3D2%26filter%3Ddraft`
+      const complexRedirectUrl = `http://localhost:3000/auth/callback?code=auth_code&state=${stateToken.state}&redirect_to=%2Fadmin%2Fposts%3Fpage%3D2%26filter%3Ddraft`
       const cookieValue = `${stateToken.state}.${stateToken.issuedAt}.${stateToken.signature}`
       const callbackRequest = createNextRequest(complexRedirectUrl, { oauth_state: cookieValue })
 

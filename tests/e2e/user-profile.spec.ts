@@ -158,7 +158,9 @@ test.describe("用户资料页 - E2E", () => {
     await page.waitForLoadState("networkidle")
 
     // 查找关注按钮（可能是 data-testid="follow-button" 或包含"关注"文本的按钮）
-    const followButton = page.getByTestId("follow-button").or(page.getByRole("button", { name: /关注/ }))
+    const followButton = page
+      .getByTestId("follow-button")
+      .or(page.getByRole("button", { name: /关注/ }))
     await expect(followButton).toBeVisible()
   })
 
@@ -373,7 +375,8 @@ test.describe("用户资料页 - 边界与随机测试", () => {
 
       if (status === 200) {
         const url = page.url()
-        const atLogin = url.includes("/login") || (await page.getByRole("heading", { name: /登录/ }).count()) > 0
+        const atLogin =
+          url.includes("/login") || (await page.getByRole("heading", { name: /登录/ }).count()) > 0
         expect(atLogin).toBe(true)
       }
 
@@ -396,7 +399,8 @@ test.describe("用户资料页 - 边界与随机测试", () => {
         if (status === 200) {
           const url = page.url()
           const atLogin =
-            url.includes("/login") || (await page.getByRole("heading", { name: /登录/ }).count()) > 0
+            url.includes("/login") ||
+            (await page.getByRole("heading", { name: /登录/ }).count()) > 0
           expect(atLogin).toBe(true)
         }
       }
@@ -561,7 +565,8 @@ test.describe("用户资料页 - 边界与随机测试", () => {
         if (status === 200) {
           const url = page.url()
           const atLogin =
-            url.includes("/login") || (await page.getByRole("heading", { name: /登录/ }).count()) > 0
+            url.includes("/login") ||
+            (await page.getByRole("heading", { name: /登录/ }).count()) > 0
           expect(atLogin).toBe(true)
         }
       }

@@ -143,10 +143,8 @@ async function createPost(
   }
 ) {
   const createdAt = data.createdAt ?? new Date()
-  const published =
-    typeof data.published === "boolean" ? data.published : true
-  const publishedAt =
-    published === false ? null : data.publishedAt ?? createdAt
+  const published = typeof data.published === "boolean" ? data.published : true
+  const publishedAt = published === false ? null : (data.publishedAt ?? createdAt)
 
   const post = await realPrisma.post.create({
     data: {
@@ -295,7 +293,10 @@ describe("Profile API integration", () => {
     it("returns paginated published posts with metrics while filtering drafts and deleted entries", async () => {
       if (!tracker) throw new Error("tracker not initialized")
       const author = await createUser(tracker, { name: "Profile Author" })
-      const primaryTag = await createTag(tracker, { name: "Performance", slug: `perf-${randomUUID()}` })
+      const primaryTag = await createTag(tracker, {
+        name: "Performance",
+        slug: `perf-${randomUUID()}`,
+      })
       const secondaryTag = await createTag(tracker, { name: "SEO", slug: `seo-${randomUUID()}` })
 
       const longContent = Array.from({ length: 600 }, () => "reading").join(" ")
@@ -421,7 +422,11 @@ describe("Profile API integration", () => {
         createdAt: new Date("2024-05-06T08:00:00.000Z"),
       })
       await linkTagToActivity(tracker, newest.id, tag.id)
-      await createActivityComment(tracker, { authorId: commenter.id, activityId: newest.id, content: "Nice!" })
+      await createActivityComment(tracker, {
+        authorId: commenter.id,
+        activityId: newest.id,
+        content: "Nice!",
+      })
       await createActivityLike(tracker, { authorId: commenter.id, activityId: newest.id })
 
       await createActivity(tracker, {
@@ -457,7 +462,9 @@ describe("Profile API integration", () => {
       const [activity] = payload.data
       expect(activity.id).toBe(newest.id)
       expect(activity.author).toEqual(expect.objectContaining({ id: author.id, name: author.name }))
-      expect(activity.tags).toEqual(expect.arrayContaining([expect.objectContaining({ id: tag.id })]))
+      expect(activity.tags).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: tag.id })])
+      )
       expect(activity._count).toEqual(expect.objectContaining({ comments: 1, likes: 1 }))
       expect(activity.id).not.toBe(deleted.id)
     })
@@ -519,13 +526,15 @@ describe("Profile API integration", () => {
 
       await createActivity(tracker, { authorId: owner.id, content: "Active A" })
       await createActivity(tracker, { authorId: owner.id, content: "Active B" })
-      const deletedActivity = await createActivity(tracker, { authorId: owner.id, content: "Deleted" })
+      const deletedActivity = await createActivity(tracker, {
+        authorId: owner.id,
+        content: "Deleted",
+      })
       await softDeleteActivity(deletedActivity.id)
 
-      const response = await statsHandler(
-        buildRequest(`/api/users/${owner.id}/stats`),
-        { params: Promise.resolve({ userId: owner.id }) }
-      )
+      const response = await statsHandler(buildRequest(`/api/users/${owner.id}/stats`), {
+        params: Promise.resolve({ userId: owner.id }),
+      })
 
       expect(response.status).toBe(200)
       const payload = await response.json()
@@ -541,10 +550,9 @@ describe("Profile API integration", () => {
 
     it("returns zeroed stats for unknown users", async () => {
       const ghostUserId = randomUUID()
-      const response = await statsHandler(
-        buildRequest(`/api/users/${ghostUserId}/stats`),
-        { params: Promise.resolve({ userId: ghostUserId }) }
-      )
+      const response = await statsHandler(buildRequest(`/api/users/${ghostUserId}/stats`), {
+        params: Promise.resolve({ userId: ghostUserId }),
+      })
 
       expect(response.status).toBe(200)
       const payload = await response.json()

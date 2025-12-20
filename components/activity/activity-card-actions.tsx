@@ -74,11 +74,11 @@ function ActivityCardActionsComponent({
 
   return (
     <div className="-mx-2 mt-3">
-      <div className="flex items-center justify-between max-w-md">
+      <div className="flex max-w-md items-center justify-between">
         {/* 评论 */}
         <button
           onClick={handleComment}
-          className="group flex flex-1 items-center justify-center gap-1 py-2 text-muted-foreground transition-colors hover:text-sky-500"
+          className="text-muted-foreground group flex flex-1 items-center justify-center gap-1 py-2 transition-colors hover:text-sky-500"
         >
           <div className="rounded-full p-2 transition-colors group-hover:bg-sky-500/10">
             <MessageCircle className="h-[18px] w-[18px]" />
@@ -91,7 +91,7 @@ function ActivityCardActionsComponent({
         {/* 转发 */}
         <button
           onClick={handleShare}
-          className="group flex flex-1 items-center justify-center gap-1 py-2 text-muted-foreground transition-colors hover:text-green-500"
+          className="text-muted-foreground group flex flex-1 items-center justify-center gap-1 py-2 transition-colors hover:text-green-500"
         >
           <div className="rounded-full p-2 transition-colors group-hover:bg-green-500/10">
             <Repeat2 className="h-[18px] w-[18px]" />
@@ -114,7 +114,7 @@ function ActivityCardActionsComponent({
         </div>
 
         {/* 浏览 */}
-        <button className="group flex flex-1 items-center justify-center gap-1 py-2 text-muted-foreground transition-colors hover:text-sky-500">
+        <button className="text-muted-foreground group flex flex-1 items-center justify-center gap-1 py-2 transition-colors hover:text-sky-500">
           <div className="rounded-full p-2 transition-colors group-hover:bg-sky-500/10">
             <BarChart2 className="h-[18px] w-[18px]" />
           </div>

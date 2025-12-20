@@ -87,11 +87,7 @@ function cloneDirectives(base: Readonly<CspDirectives>): CspDirectives {
 function applyNonce(directives: CspDirectives, nonce?: string): void {
   if (!nonce) return
 
-  directives["script-src"] = [
-    ...directives["script-src"],
-    `'nonce-${nonce}'`,
-    "'strict-dynamic'",
-  ]
+  directives["script-src"] = [...directives["script-src"], `'nonce-${nonce}'`, "'strict-dynamic'"]
   directives["style-src"] = [...directives["style-src"], `'nonce-${nonce}'`]
 }
 
@@ -103,9 +99,7 @@ function applyDevelopmentRelaxations(directives: CspDirectives): void {
 
 function stripUnsafeTokens(directives: CspDirectives): void {
   // 只移除 unsafe-eval，保留 unsafe-inline（Next.js/Tailwind 需要）
-  directives["script-src"] = directives["script-src"].filter(
-    (source) => !UNSAFE_TOKENS.has(source)
-  )
+  directives["script-src"] = directives["script-src"].filter((source) => !UNSAFE_TOKENS.has(source))
 }
 
 function dedupeSources(sources: string[]): string[] {

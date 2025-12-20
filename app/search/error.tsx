@@ -25,7 +25,6 @@ export default function SearchError({
 
   return (
     <div className="bg-background min-h-screen">
-
       <div className="container mx-auto px-4 py-16">
         <Card className="mx-auto max-w-2xl">
           <CardContent className="py-16 text-center">

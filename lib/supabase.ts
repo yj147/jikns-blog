@@ -8,9 +8,7 @@ import { createClient as createSupabaseJsClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/database"
 import { logger } from "./utils/logger"
 
-type NextCookiesStore = Awaited<
-  ReturnType<(typeof import("next/headers"))["cookies"]>
->
+type NextCookiesStore = Awaited<ReturnType<(typeof import("next/headers"))["cookies"]>>
 
 type SupabaseCookieMethods = {
   get: (name: string) => string | undefined
@@ -78,9 +76,7 @@ export async function createRouteHandlerClient() {
  */
 export function createServiceRoleClient() {
   if (!supabaseUrl || !supabaseServiceRoleKey) {
-    throw new Error(
-      "缺少 Supabase Service Role Key。请在环境变量中设置 SUPABASE_SERVICE_ROLE_KEY"
-    )
+    throw new Error("缺少 Supabase Service Role Key。请在环境变量中设置 SUPABASE_SERVICE_ROLE_KEY")
   }
 
   return createSupabaseJsClient<Database>(supabaseUrl, supabaseServiceRoleKey, {

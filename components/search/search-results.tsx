@@ -30,7 +30,10 @@ const RESULT_BUCKET_KEYS: readonly ResultBucketKey[] = [
   "tags",
 ] as const
 
-const BUCKET_CONFIG: Record<ResultBucketKey, { label: string; icon: LucideIcon; cardType: ResultCardType }> = {
+const BUCKET_CONFIG: Record<
+  ResultBucketKey,
+  { label: string; icon: LucideIcon; cardType: ResultCardType }
+> = {
   posts: { label: "文章", icon: FileText, cardType: "posts" },
   activities: { label: "动态", icon: Activity, cardType: "activities" },
   users: { label: "用户", icon: User, cardType: "users" },
@@ -250,7 +253,12 @@ function createVisibleCards(
               rank: item.rank,
             }
             return (
-              <SearchResultCard key={`posts-${item.id}`} type="posts" data={cardData} query={query} />
+              <SearchResultCard
+                key={`posts-${item.id}`}
+                type="posts"
+                data={cardData}
+                query={query}
+              />
             )
           })
         )
@@ -293,7 +301,12 @@ function createVisibleCards(
               rank: item.rank,
             }
             return (
-              <SearchResultCard key={`users-${item.id}`} type="users" data={cardData} query={query} />
+              <SearchResultCard
+                key={`users-${item.id}`}
+                type="users"
+                data={cardData}
+                query={query}
+              />
             )
           })
         )

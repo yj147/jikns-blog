@@ -3,7 +3,12 @@ import { NextRequest } from "next/server"
 import { GET as listFeeds } from "@/app/api/admin/feeds/route"
 import { GET as getFeed } from "@/app/api/admin/feeds/[feedId]/route"
 import { POST as batchAction } from "@/app/api/admin/feeds/batch/route"
-import { feedInclude, FEED_ORDER_BY, buildFeedWhere, mapFeedRecord } from "@/app/api/admin/feeds/utils"
+import {
+  feedInclude,
+  FEED_ORDER_BY,
+  buildFeedWhere,
+  mapFeedRecord,
+} from "@/app/api/admin/feeds/utils"
 import { createErrorResponse } from "@/lib/api-guards"
 import { prisma } from "@/lib/prisma"
 
@@ -308,9 +313,12 @@ describe("admin feeds API", () => {
       authHarness.currentUser = { ...authorUser }
       vi.mocked(prisma.activity.findUnique).mockResolvedValue(feedRecord as any)
 
-      const response = await getFeed(new NextRequest("http://localhost:3000/api/admin/feeds/feed-1"), {
-        params: { feedId: "feed-1" },
-      })
+      const response = await getFeed(
+        new NextRequest("http://localhost:3000/api/admin/feeds/feed-1"),
+        {
+          params: { feedId: "feed-1" },
+        }
+      )
       const payload = await response.json()
 
       expect(response.status).toBe(200)
@@ -322,9 +330,12 @@ describe("admin feeds API", () => {
       authHarness.currentUser = { ...authorUser, id: "other-user" }
       vi.mocked(prisma.activity.findUnique).mockResolvedValue(feedRecord as any)
 
-      const response = await getFeed(new NextRequest("http://localhost:3000/api/admin/feeds/feed-1"), {
-        params: { feedId: "feed-1" },
-      })
+      const response = await getFeed(
+        new NextRequest("http://localhost:3000/api/admin/feeds/feed-1"),
+        {
+          params: { feedId: "feed-1" },
+        }
+      )
       const payload = await response.json()
 
       expect(response.status).toBe(403)
@@ -334,9 +345,12 @@ describe("admin feeds API", () => {
     it("不存在的动态返回 404", async () => {
       vi.mocked(prisma.activity.findUnique).mockResolvedValue(null as any)
 
-      const response = await getFeed(new NextRequest("http://localhost:3000/api/admin/feeds/nope"), {
-        params: { feedId: "nope" },
-      })
+      const response = await getFeed(
+        new NextRequest("http://localhost:3000/api/admin/feeds/nope"),
+        {
+          params: { feedId: "nope" },
+        }
+      )
       const payload = await response.json()
 
       expect(response.status).toBe(404)
@@ -346,9 +360,12 @@ describe("admin feeds API", () => {
     it("未登录访问直接返回守卫错误", async () => {
       authHarness.overrideResponse = createErrorResponse("未登录", "UNAUTH", 401)
 
-      const response = await getFeed(new NextRequest("http://localhost:3000/api/admin/feeds/feed-1"), {
-        params: { feedId: "feed-1" },
-      })
+      const response = await getFeed(
+        new NextRequest("http://localhost:3000/api/admin/feeds/feed-1"),
+        {
+          params: { feedId: "feed-1" },
+        }
+      )
       const payload = await response.json()
 
       expect(response.status).toBe(401)
@@ -376,12 +393,16 @@ describe("admin feeds API", () => {
       expect(response.status).toBe(200)
       expect(payload.data).toEqual({ action: "delete", affected: 2 })
       expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1)
-      expect(mockPrisma.activity.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ["f1", "f2"] } } })
+      expect(mockPrisma.activity.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ["f1", "f2"] } },
+      })
     })
 
     it("作者删除仅影响自身动态", async () => {
       authHarness.currentUser = { ...authorUser }
-      vi.mocked(prisma.activity.findMany).mockResolvedValue([{ id: "f1", authorId: authorUser.id }] as any)
+      vi.mocked(prisma.activity.findMany).mockResolvedValue([
+        { id: "f1", authorId: authorUser.id },
+      ] as any)
       mockPrisma.activity.deleteMany.mockResolvedValue({ count: 1 } as any)
 
       const response = await batchAction(
@@ -427,7 +448,9 @@ describe("admin feeds API", () => {
         updateMany: vi.fn().mockResolvedValue({ count: 2 }),
       }
 
-      mockPrisma.$transaction.mockImplementationOnce(async (fn) => fn({ activity: txActivity } as any))
+      mockPrisma.$transaction.mockImplementationOnce(async (fn) =>
+        fn({ activity: txActivity } as any)
+      )
 
       const response = await batchAction(
         new NextRequest("http://localhost:3000/api/admin/feeds/batch", {
@@ -448,7 +471,9 @@ describe("admin feeds API", () => {
     })
 
     it("隐藏操作应仅处理未删除记录并设置删除时间", async () => {
-      vi.mocked(prisma.activity.findMany).mockResolvedValue([{ id: "f1", authorId: adminUser.id }] as any)
+      vi.mocked(prisma.activity.findMany).mockResolvedValue([
+        { id: "f1", authorId: adminUser.id },
+      ] as any)
       mockPrisma.activity.updateMany.mockResolvedValue({ count: 1 } as any)
 
       const response = await batchAction(
@@ -469,7 +494,9 @@ describe("admin feeds API", () => {
 
     it("作者隐藏仅作用自身未删除动态", async () => {
       authHarness.currentUser = { ...authorUser }
-      vi.mocked(prisma.activity.findMany).mockResolvedValue([{ id: "f1", authorId: authorUser.id }] as any)
+      vi.mocked(prisma.activity.findMany).mockResolvedValue([
+        { id: "f1", authorId: authorUser.id },
+      ] as any)
       mockPrisma.activity.updateMany.mockResolvedValue({ count: 1 } as any)
 
       const response = await batchAction(
@@ -488,7 +515,9 @@ describe("admin feeds API", () => {
 
     it("作者置顶仅作用于自身未删除动态", async () => {
       authHarness.currentUser = { ...authorUser }
-      vi.mocked(prisma.activity.findMany).mockResolvedValue([{ id: "f1", authorId: authorUser.id }] as any)
+      vi.mocked(prisma.activity.findMany).mockResolvedValue([
+        { id: "f1", authorId: authorUser.id },
+      ] as any)
       mockPrisma.activity.updateMany.mockResolvedValue({ count: 1 } as any)
 
       const response = await batchAction(
@@ -506,7 +535,9 @@ describe("admin feeds API", () => {
     })
 
     it("管理员置顶不受作者限制", async () => {
-      vi.mocked(prisma.activity.findMany).mockResolvedValue([{ id: "f1", authorId: adminUser.id }] as any)
+      vi.mocked(prisma.activity.findMany).mockResolvedValue([
+        { id: "f1", authorId: adminUser.id },
+      ] as any)
       mockPrisma.activity.updateMany.mockResolvedValue({ count: 1 } as any)
 
       const response = await batchAction(
@@ -524,7 +555,9 @@ describe("admin feeds API", () => {
     })
 
     it("取消置顶会清除 isPinned", async () => {
-      vi.mocked(prisma.activity.findMany).mockResolvedValue([{ id: "f1", authorId: adminUser.id }] as any)
+      vi.mocked(prisma.activity.findMany).mockResolvedValue([
+        { id: "f1", authorId: adminUser.id },
+      ] as any)
       mockPrisma.activity.updateMany.mockResolvedValue({ count: 1 } as any)
 
       const response = await batchAction(
@@ -543,7 +576,9 @@ describe("admin feeds API", () => {
 
     it("作者取消置顶同样受作者约束", async () => {
       authHarness.currentUser = { ...authorUser }
-      vi.mocked(prisma.activity.findMany).mockResolvedValue([{ id: "f1", authorId: authorUser.id }] as any)
+      vi.mocked(prisma.activity.findMany).mockResolvedValue([
+        { id: "f1", authorId: authorUser.id },
+      ] as any)
       mockPrisma.activity.updateMany.mockResolvedValue({ count: 1 } as any)
 
       const response = await batchAction(
@@ -562,7 +597,9 @@ describe("admin feeds API", () => {
 
     it("恢复显示时会限制作者", async () => {
       authHarness.currentUser = { ...authorUser }
-      vi.mocked(prisma.activity.findMany).mockResolvedValue([{ id: "f1", authorId: authorUser.id }] as any)
+      vi.mocked(prisma.activity.findMany).mockResolvedValue([
+        { id: "f1", authorId: authorUser.id },
+      ] as any)
       mockPrisma.activity.updateMany.mockResolvedValue({ count: 1 } as any)
 
       const response = await batchAction(
@@ -580,7 +617,9 @@ describe("admin feeds API", () => {
     })
 
     it("管理员恢复显示可操作任意作者", async () => {
-      vi.mocked(prisma.activity.findMany).mockResolvedValue([{ id: "f1", authorId: adminUser.id }] as any)
+      vi.mocked(prisma.activity.findMany).mockResolvedValue([
+        { id: "f1", authorId: adminUser.id },
+      ] as any)
       mockPrisma.activity.updateMany.mockResolvedValue({ count: 1 } as any)
 
       const response = await batchAction(
@@ -613,7 +652,9 @@ describe("admin feeds API", () => {
     })
 
     it("事务失败返回 500 并不中断权限校验", async () => {
-      vi.mocked(prisma.activity.findMany).mockResolvedValue([{ id: "f1", authorId: adminUser.id }] as any)
+      vi.mocked(prisma.activity.findMany).mockResolvedValue([
+        { id: "f1", authorId: adminUser.id },
+      ] as any)
       mockPrisma.$transaction.mockRejectedValueOnce(new Error("tx failed"))
 
       const response = await batchAction(

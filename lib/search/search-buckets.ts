@@ -6,4 +6,3 @@ export const SEARCH_BUCKET_LIMITS_FOR_ALL: Record<Exclude<SearchContentType, "al
   users: 8,
   tags: 8,
 }
-

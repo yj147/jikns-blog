@@ -69,15 +69,7 @@ export function useFeedState({
     ]
   }, [initialActivities, initialPagination])
 
-  const {
-    activities,
-    isLoading,
-    isError,
-    error,
-    hasMore,
-    loadMore,
-    refresh,
-  } = useActivities(
+  const { activities, isLoading, isError, error, hasMore, loadMore, refresh } = useActivities(
     {
       orderBy: resolvedOrderBy,
       limit: initialPagination.limit,

@@ -135,7 +135,6 @@ describe("MetricsQueue", () => {
 
     await queue.enqueue(createMetric({ requestId: "req-1" }))
     await queue.flush()
-
     ;(globalThis as any).window = savedWindow
 
     const exists = await fs
@@ -183,11 +182,7 @@ describe("MetricsQueue", () => {
       (queue as any).writeFallback([createMetric({ requestId: "req-error" })])
     ).resolves.toBeUndefined()
 
-    expect(errorSpy).toHaveBeenCalledWith(
-      "性能指标回退写入失败",
-      {},
-      expect.any(Error)
-    )
+    expect(errorSpy).toHaveBeenCalledWith("性能指标回退写入失败", {}, expect.any(Error))
 
     errorSpy.mockRestore()
     ;(globalThis as any).window = savedWindow

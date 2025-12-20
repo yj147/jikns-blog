@@ -86,7 +86,7 @@ function normalizeTimeseries(rows: TimeseriesRow[]): MetricsTimeseriesDTO[] {
     avg: Number(row.avg ?? 0),
     p50: Number(row.p50 ?? 0),
     p95: Number(row.p95 ?? 0),
-    count: typeof row.count === "bigint" ? Number(row.count) : row.count ?? 0,
+    count: typeof row.count === "bigint" ? Number(row.count) : (row.count ?? 0),
   }))
 }
 
@@ -97,7 +97,7 @@ function normalizeStats(row?: StatsRow | null): MetricsStatsDTO {
 
   const total = row.total ?? 0
   return {
-    total: typeof total === "bigint" ? Number(total) : total ?? 0,
+    total: typeof total === "bigint" ? Number(total) : (total ?? 0),
     min: Number(row.min ?? 0),
     max: Number(row.max ?? 0),
     avg: Number(row.avg ?? 0),
