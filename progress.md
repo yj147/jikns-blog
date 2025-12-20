@@ -4,9 +4,18 @@
 
 ## 当前阶段
 
-**功能收尾 + 稳定性巩固**
+**Phase 11: 搜索功能重构与文档同步**
 
 ## 已完成任务
+
+### P0: 搜索模块重构 (2025-12-20)
+
+| 任务                          | 状态 | 说明                                         |
+| :---------------------------- | :--- | :------------------------------------------- |
+| 移除 `lib/services/search.ts` | ✅   | 简化架构                                     |
+| 统一 REST API 入口            | ✅   | `app/api/search/route.ts` -> `unifiedSearch` |
+| 兼容性修复 (中文/邮箱/排序)   | ✅   | 分词、Email 匹配、Tags 排序                  |
+| 文档同步                      | ✅   | 设计文档、架构说明、验证报告                 |
 
 ### P0: 功能验证 (2025-12-02)
 
@@ -67,6 +76,12 @@
 ## 关键文件变更 (本次会话)
 
 ```
+# 搜索文档
+docs/10-search/搜索功能设计文档.md
+docs/10-search/搜索功能架构简化说明.md
+docs/10-search/差异分析报告.md
+docs/10-search/搜索功能使用指南.md
+
 # 迁移
 supabase/migrations/20251202_email_rls_hardening.sql
 supabase/migrations/20251202113000_notifications_target_exact_one.sql
