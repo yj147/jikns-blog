@@ -8,8 +8,8 @@ import { createServerSupabaseClient } from "./supabase"
 import { prisma } from "./prisma"
 import type { User } from "./generated/prisma"
 import { authLogger } from "./utils/logger"
-import { assertPolicy, fetchSessionUserProfile } from "@/lib/auth/session"
-import type { AuthError } from "@/lib/error-handling/auth-error"
+import { assertPolicy, fetchSessionUserProfile, type PolicyUserMap } from "@/lib/auth/session"
+import { AuthErrors, type AuthError } from "@/lib/error-handling/auth-error"
 import { signAvatarUrl, signCoverImageUrl } from "@/lib/storage/signed-url"
 
 export { syncUserFromAuth, clearUserCache, isConfiguredAdminEmail } from "@/lib/auth/session"
@@ -143,22 +143,6 @@ const getUserSessionImpl = async () => {
 export const getUserSession = isTestEnv ? getUserSessionImpl : cache(getUserSessionImpl)
 
 /**
- * 获取用户信息的核心函数（不带缓存）
- */
-async function fetchUserFromDatabase(userId: string): Promise<User | null> {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-    })
-
-    return user
-  } catch (error) {
-    authLogger.error("获取用户信息失败", { stage: "fetchUserFromDatabase", userId }, error)
-    return null
-  }
-}
-
-/**
  * 获取当前用户信息（Server Components 专用）
  * 从数据库获取完整的用户信息，包括权限等业务数据
  * 使用经过身份验证的用户数据确保安全性
@@ -196,67 +180,43 @@ export const getCurrentUser = getCurrentUserImpl
 /**
  * 验证用户是否为管理员（Server Actions 专用）
  */
-export async function requireAdmin(): Promise<User> {
+export async function requireAdmin(): Promise<PolicyUserMap["admin"]> {
   const [policyUser, policyError] = await assertPolicy("admin", {
     path: "legacy:requireAdmin",
   })
 
-  if (!policyUser) {
-    throwLegacyAuthError(policyError, "未登录用户")
+  if (!policyUser || policyError) {
+    throwLegacyAuthError(policyError)
   }
 
-  const user = await fetchUserFromDatabase(policyUser.id)
-
-  if (!user) {
-    throw new Error("未登录用户")
-  }
-
-  if (user.role !== "ADMIN") {
-    throw new Error("需要管理员权限")
-  }
-
-  if (user.status !== "ACTIVE") {
-    throw new Error("账户已被封禁")
-  }
-
-  return user
+  return policyUser
 }
 
 /**
  * 验证用户是否已认证（Server Actions 专用）
  */
-export async function requireAuth(): Promise<User> {
+export async function requireAuth(): Promise<PolicyUserMap["user-active"]> {
   const [policyUser, policyError] = await assertPolicy("user-active", {
     path: "legacy:requireAuth",
   })
 
-  if (!policyUser) {
-    throwLegacyAuthError(policyError, "用户未登录")
+  if (!policyUser || policyError) {
+    throwLegacyAuthError(policyError)
   }
 
-  const user = await fetchUserFromDatabase(policyUser.id)
-
-  if (!user) {
-    throw new Error("用户未登录")
-  }
-
-  if (user.status !== "ACTIVE") {
-    throw new Error("账户已被封禁")
-  }
-
-  return user
+  return policyUser
 }
 
-function throwLegacyAuthError(error: AuthError | null, unauthorizedMessage: string): never {
+function throwLegacyAuthError(error: AuthError | null): never {
   if (error?.code === "ACCOUNT_BANNED") {
-    throw new Error("账户已被封禁")
+    throw AuthErrors.accountBanned()
   }
 
   if (error?.code === "FORBIDDEN") {
-    throw new Error("需要管理员权限")
+    throw AuthErrors.forbidden("需要管理员权限")
   }
 
-  throw new Error(unauthorizedMessage)
+  throw AuthErrors.unauthorized()
 }
 
 /**

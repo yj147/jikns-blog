@@ -53,7 +53,7 @@ vi.mock("@/lib/auth/session", async () => {
     __esModule: true,
     assertPolicy: vi.fn(async (policy: string) => {
       const user = await resolveCurrentUser()
-      if (!user) return [null as any, buildError("unauthorized", "未登录用户")]
+      if (!user) return [null as any, buildError("unauthorized", "请先登录")]
 
       if (policy === "admin") {
         if (user.status === "BANNED") {
@@ -192,7 +192,7 @@ describe("认证工具函数测试", () => {
     it("应该抛出错误当用户未登录", async () => {
       setCurrentTestUser(null)
 
-      await expect(requireAdmin()).rejects.toThrow("未登录用户")
+      await expect(requireAdmin()).rejects.toThrow("请先登录")
     })
 
     it("应该抛出错误当用户不是管理员", async () => {
@@ -225,7 +225,7 @@ describe("认证工具函数测试", () => {
     it("应该抛出错误当用户未登录", async () => {
       setCurrentTestUser(null)
 
-      await expect(requireAuth()).rejects.toThrow("用户未登录")
+      await expect(requireAuth()).rejects.toThrow("请先登录")
     })
 
     it("应该抛出错误当用户被封禁", async () => {

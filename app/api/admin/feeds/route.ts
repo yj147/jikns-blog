@@ -2,12 +2,12 @@ import { NextRequest } from "next/server"
 import { withApiAuth, createErrorResponse, createSuccessResponse } from "@/lib/api-guards"
 import { prisma } from "@/lib/prisma"
 import { feedInclude, feedQuerySchema, buildFeedWhere, FEED_ORDER_BY, mapFeedRecord } from "./utils"
-import type { User } from "@/lib/generated/prisma"
+import type { AuthenticatedUser } from "@/lib/auth/session"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 const MAX_LIMIT = 100
 
-const getHandler = withApiAuth(async (request: NextRequest, user: User) => {
+const getHandler = withApiAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   const parsed = feedQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams))
   if (!parsed.success) {
     const issue = parsed.error.issues[0]

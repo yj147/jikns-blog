@@ -7,7 +7,7 @@ import { NextRequest } from "next/server"
 import { withApiAuth, createSuccessResponse, createErrorResponse } from "@/lib/api-guards"
 import { prisma } from "@/lib/prisma"
 import { XSSProtection } from "@/lib/security"
-import type { User } from "@/lib/generated/prisma"
+import type { AuthenticatedUser } from "@/lib/auth/session"
 import { UserStatus, Role } from "@/lib/generated/prisma"
 import { ActivityPermissions } from "@/lib/permissions/activity-permissions"
 import { logger } from "@/lib/utils/logger"
@@ -16,7 +16,7 @@ import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 /**
  * 处理点赞/取消点赞
  */
-async function handleLikeHandler(request: NextRequest, user: User, parsedBody?: any) {
+async function handleLikeHandler(request: NextRequest, user: AuthenticatedUser, parsedBody?: any) {
   try {
     const body = parsedBody ?? (await request.json())
     const { targetType, targetId, action } = body
@@ -181,7 +181,11 @@ async function handleLikeHandler(request: NextRequest, user: User, parsedBody?: 
 /**
  * 处理关注/取消关注
  */
-async function handleFollowHandler(request: NextRequest, user: User, parsedBody?: any) {
+async function handleFollowHandler(
+  request: NextRequest,
+  user: AuthenticatedUser,
+  parsedBody?: any
+) {
   try {
     const body = parsedBody ?? (await request.json())
     const { targetUserId, action } = body
@@ -282,7 +286,11 @@ async function handleFollowHandler(request: NextRequest, user: User, parsedBody?
 /**
  * 处理收藏/取消收藏
  */
-async function handleBookmarkHandler(request: NextRequest, user: User, parsedBody?: any) {
+async function handleBookmarkHandler(
+  request: NextRequest,
+  user: AuthenticatedUser,
+  parsedBody?: any
+) {
   try {
     const body = parsedBody ?? (await request.json())
     const { postId, action } = body
@@ -374,7 +382,7 @@ async function handleBookmarkHandler(request: NextRequest, user: User, parsedBod
 /**
  * 主路由处理器
  */
-async function interactionHandler(request: NextRequest, user: User) {
+async function interactionHandler(request: NextRequest, user: AuthenticatedUser) {
   const body = await request.json()
   const { type } = body
 

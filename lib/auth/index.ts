@@ -13,7 +13,6 @@ export {
   withAuth,
   withAdminAuth,
   batchPermissionCheck,
-  clearPermissionCache,
   createPermissionError,
   validateApiPermissions,
 } from "@/lib/permissions"

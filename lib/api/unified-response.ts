@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server"
 import { Prisma } from "@/lib/generated/prisma"
 import { logger } from "@/lib/utils/logger"
-import type { User } from "@/lib/generated/prisma"
+import type { AuthenticatedUser } from "@/lib/auth/session"
 
 // 分页元数据接口
 export interface PaginationMeta {
@@ -32,7 +32,7 @@ export interface ApiResponse<T = any> {
   meta?: {
     requestId?: string
     timestamp: string
-    user?: Partial<User>
+    user?: Partial<AuthenticatedUser>
     pagination?: PaginationMeta
     filters?: Record<string, unknown>
   }

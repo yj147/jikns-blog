@@ -14,10 +14,40 @@ import { handleApiError } from "@/lib/api/error-handler"
 import { NextResponse } from "next/server"
 
 // Mock dependencies
-vi.mock("@/lib/auth/session", () => ({
-  fetchAuthenticatedUser: vi.fn(),
-  syncUserFromAuth: vi.fn(),
-}))
+vi.mock("@/lib/auth/session", async () => {
+  const { AuthErrors } = await import("@/lib/error-handling/auth-error")
+  const fetchAuthenticatedUser = vi.fn()
+
+  const assertPolicy = vi.fn(async (policy: string) => {
+    const user = await fetchAuthenticatedUser()
+    if (!user) {
+      return [null as any, AuthErrors.unauthorized()]
+    }
+
+    if (policy === "admin") {
+      if (user.role !== "ADMIN") {
+        return [null as any, AuthErrors.forbidden("需要管理员权限", { userId: user.id })]
+      }
+      if (user.status !== "ACTIVE") {
+        return [null as any, AuthErrors.accountBanned({ userId: user.id })]
+      }
+    }
+
+    if (policy === "user-active" && user.status !== "ACTIVE") {
+      return [null as any, AuthErrors.accountBanned({ userId: user.id })]
+    }
+
+    return [user as any, null]
+  })
+
+  return {
+    __esModule: true,
+    fetchAuthenticatedUser,
+    fetchSessionUserProfile: vi.fn(),
+    syncUserFromAuth: vi.fn(),
+    assertPolicy,
+  }
+})
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -29,13 +59,26 @@ vi.mock("@/lib/prisma", () => ({
 }))
 
 const sessionModule = await import("@/lib/auth/session")
+const prismaModule = await import("@/lib/prisma")
 const permissionsModule = await import("@/lib/permissions")
 const { fetchAuthenticatedUser } = vi.mocked(sessionModule)
+const { prisma } = prismaModule
 const { requireAuth, requireAdmin } = permissionsModule
+
+const mockedFindUnique = vi.mocked(prisma.user.findUnique)
+const userStore = new Map<string, any>()
+const recordUser = (user: any | null) => {
+  if (user) {
+    userStore.set(user.id, { ...user })
+  }
+  return user
+}
 
 describe("认证错误处理 - 边界条件测试", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    userStore.clear()
+    mockedFindUnique.mockImplementation(async ({ where }) => userStore.get(where.id) ?? null)
   })
 
   describe("AuthError 边界值测试", () => {
@@ -172,6 +215,8 @@ describe("认证错误处理 - 边界条件测试", () => {
 describe("认证错误处理 - 并发场景测试", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    userStore.clear()
+    mockedFindUnique.mockImplementation(async ({ where }) => userStore.get(where.id) ?? null)
   })
 
   describe("并发认证请求", () => {
@@ -181,14 +226,14 @@ describe("认证错误处理 - 并发场景测试", () => {
       fetchAuthenticatedUser.mockImplementation(async () => {
         callCount++
         if (callCount % 2 === 0) {
-          return {
+          return recordUser({
             id: `user-${callCount}`,
             email: `user${callCount}@test.com`,
             role: "USER",
             status: "ACTIVE",
-          } as any
+          } as any)
         }
-        return null
+        return recordUser(null)
       })
 
       const promises = Array.from({ length: 20 }, () => requireAuth())
@@ -217,14 +262,14 @@ describe("认证错误处理 - 并发场景测试", () => {
         const roles = ["ADMIN", "USER", null] as const
         const role = roles[callCount % 3]
 
-        if (!role) return null
+        if (!role) return recordUser(null)
 
-        return {
+        return recordUser({
           id: `user-${callCount}`,
           email: `user${callCount}@test.com`,
           role,
           status: "ACTIVE",
-        } as any
+        } as any)
       })
 
       const promises = Array.from({ length: 30 }, () => requireAdmin())
@@ -247,12 +292,12 @@ describe("认证错误处理 - 并发场景测试", () => {
         const temp = sharedState
         sharedState = temp + 1
 
-        return {
+        return recordUser({
           id: `user-${sharedState}`,
           email: `user@test.com`,
           role: "USER",
           status: "ACTIVE",
-        } as any
+        } as any)
       })
 
       const promises = Array.from({ length: 10 }, () => requireAuth())
@@ -320,12 +365,12 @@ describe("认证错误处理 - 并发场景测试", () => {
         // 模拟第10次请求后用户被封禁
         const status = current > 10 ? "BANNED" : "ACTIVE"
 
-        return {
+        return recordUser({
           id: "user-123",
           email: "user@test.com",
           role: "USER",
           status,
-        } as any
+        } as any)
       })
 
       const promises = Array.from({ length: 20 }, () => requireAuth())
@@ -358,12 +403,12 @@ describe("认证错误处理 - 并发场景测试", () => {
         // 模拟第15次请求后用户升级为管理员
         const role = current > 15 ? "ADMIN" : "USER"
 
-        return {
+        return recordUser({
           id: "user-123",
           email: "user@test.com",
           role,
           status: "ACTIVE",
-        } as any
+        } as any)
       })
 
       const promises = Array.from({ length: 30 }, () => requireAdmin())
@@ -381,12 +426,14 @@ describe("认证错误处理 - 并发场景测试", () => {
 
   describe("性能和稳定性测试", () => {
     it("应该在高并发下保持性能", async () => {
-      fetchAuthenticatedUser.mockResolvedValue({
-        id: "user-123",
-        email: "user@test.com",
-        role: "USER",
-        status: "ACTIVE",
-      } as any)
+      fetchAuthenticatedUser.mockResolvedValue(
+        recordUser({
+          id: "user-123",
+          email: "user@test.com",
+          role: "USER",
+          status: "ACTIVE",
+        } as any)
+      )
 
       const startTime = performance.now()
 
@@ -400,7 +447,7 @@ describe("认证错误处理 - 并发场景测试", () => {
     })
 
     it("应该在错误场景下保持性能", async () => {
-      fetchAuthenticatedUser.mockResolvedValue(null)
+      fetchAuthenticatedUser.mockResolvedValue(recordUser(null))
 
       const startTime = performance.now()
 
@@ -422,13 +469,13 @@ describe("认证错误处理 - 并发场景测试", () => {
         // 创建大对象模拟内存压力
         const largeData = new Array(100).fill({ data: "x".repeat(100) })
 
-        return {
+        return recordUser({
           id: "user-123",
           email: "user@test.com",
           role: "USER",
           status: "ACTIVE",
           metadata: largeData,
-        } as any
+        } as any)
       })
 
       const promises = Array.from({ length: 20 }, () => requireAuth())
@@ -449,12 +496,12 @@ describe("认证错误处理 - 并发场景测试", () => {
         if (failCount <= 5) {
           throw new Error("Database connection lost")
         }
-        return {
+        return recordUser({
           id: "user-123",
           email: "user@test.com",
           role: "USER",
           status: "ACTIVE",
-        } as any
+        } as any)
       })
 
       const results = []
@@ -485,12 +532,14 @@ describe("认证错误处理 - 并发场景测试", () => {
       }
 
       // 然后恢复正常
-      fetchAuthenticatedUser.mockResolvedValue({
-        id: "user-123",
-        email: "user@test.com",
-        role: "USER",
-        status: "ACTIVE",
-      } as any)
+      fetchAuthenticatedUser.mockResolvedValue(
+        recordUser({
+          id: "user-123",
+          email: "user@test.com",
+          role: "USER",
+          status: "ACTIVE",
+        } as any)
+      )
 
       const user = await requireAuth()
 
@@ -512,13 +561,13 @@ describe("认证错误处理 - 并发场景测试", () => {
         }
 
         // 大数据对象
-        return {
+        return recordUser({
           id: `user-${callCount}`,
           email: `user${callCount}@test.com`,
           role: callCount % 3 === 0 ? "ADMIN" : "USER",
           status: callCount % 5 === 0 ? "BANNED" : "ACTIVE",
           metadata: new Array(50).fill({ data: "x".repeat(50) }),
-        } as any
+        } as any)
       })
 
       const promises = Array.from({ length: 30 }, () => requireAuth().catch((error) => ({ error })))
@@ -538,12 +587,12 @@ describe("认证错误处理 - 并发场景测试", () => {
         const status = states[stateIndex % states.length]
         stateIndex++
 
-        return {
+        return recordUser({
           id: "user-123",
           email: "user@test.com",
           role: "USER",
           status,
-        } as any
+        } as any)
       })
 
       const results = []

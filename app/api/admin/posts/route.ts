@@ -7,7 +7,7 @@ import { NextRequest } from "next/server"
 import { withApiAuth, createSuccessResponse, createErrorResponse } from "@/lib/api-guards"
 import { prisma } from "@/lib/prisma"
 import { XSSProtection } from "@/lib/security"
-import type { User } from "@/lib/generated/prisma"
+import type { AuthenticatedUser } from "@/lib/auth/session"
 import { logger } from "@/lib/utils/logger"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 import { enqueueNewPostNotification } from "@/lib/services/email-queue"
@@ -18,7 +18,7 @@ const POST_IMAGE_SIGN_EXPIRES_IN = 60 * 60
 /**
  * 获取所有文章列表（管理员视图）
  */
-async function getPostsHandler(request: NextRequest, admin: User) {
+async function getPostsHandler(request: NextRequest, admin: AuthenticatedUser) {
   try {
     const { searchParams } = request.nextUrl
     const page = parseInt(searchParams.get("page") || "1")
@@ -133,7 +133,7 @@ async function getPostsHandler(request: NextRequest, admin: User) {
 /**
  * 创建新文章
  */
-async function createPostHandler(request: NextRequest, admin: User) {
+async function createPostHandler(request: NextRequest, admin: AuthenticatedUser) {
   try {
     const body = await request.json()
 
@@ -259,7 +259,7 @@ async function createPostHandler(request: NextRequest, admin: User) {
 /**
  * 更新文章状态（发布/撤回）
  */
-async function updatePostStatusHandler(request: NextRequest, admin: User) {
+async function updatePostStatusHandler(request: NextRequest, admin: AuthenticatedUser) {
   try {
     const body = await request.json()
     const { postId, published } = body
@@ -329,7 +329,7 @@ async function updatePostStatusHandler(request: NextRequest, admin: User) {
 /**
  * 删除文章
  */
-async function deletePostHandler(request: NextRequest, admin: User) {
+async function deletePostHandler(request: NextRequest, admin: AuthenticatedUser) {
   try {
     const { searchParams } = request.nextUrl
     const postId = searchParams.get("id")

@@ -41,8 +41,8 @@ describe("中间件性能和缓存集成测试", () => {
     resetMocks()
     resetPrismaMocks()
     vi.clearAllMocks()
-    const { clearPermissionCache } = await import("@/lib/permissions")
-    clearPermissionCache()
+    const { clearUserCache } = await import("@/lib/auth")
+    await clearUserCache()
   })
 
   describe("权限检查性能测试", () => {
@@ -158,7 +158,8 @@ describe("中间件性能和缓存集成测试", () => {
     it("用户状态变更应清除缓存", async () => {
       setCurrentTestUser("user")
 
-      const { requireAuth, clearPermissionCache } = await import("@/lib/permissions")
+      const { requireAuth } = await import("@/lib/permissions")
+      const { clearUserCache } = await import("@/lib/auth")
 
       // 初始权限检查
       const initialResult = await requireAuth()
@@ -169,7 +170,7 @@ describe("中间件性能和缓存集成测试", () => {
       vi.mocked(mockPrisma.user.findUnique).mockResolvedValue(bannedUser)
 
       // 清除缓存
-      clearPermissionCache(TEST_USERS.user.id)
+      await clearUserCache(TEST_USERS.user.id)
 
       // 权限检查应该反映新状态
       await expect(requireAuth()).rejects.toThrow("账户已被封禁")
@@ -211,7 +212,7 @@ describe("中间件性能和缓存集成测试", () => {
 
   describe("内存使用和清理测试", () => {
     it("权限缓存不应造成内存泄漏", async () => {
-      const { clearPermissionCache } = await import("@/lib/permissions")
+      const { clearUserCache } = await import("@/lib/auth")
 
       // 创建大量用户权限缓存
       const userIds = Array.from({ length: 1000 }, (_, i) => `user-${i}`)
@@ -235,7 +236,7 @@ describe("中间件性能和缓存集成测试", () => {
       }
 
       // 清空所有缓存
-      clearPermissionCache()
+      await clearUserCache()
 
       // 验证清理后的状态
       setCurrentTestUser("user")

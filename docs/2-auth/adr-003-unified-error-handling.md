@@ -154,22 +154,31 @@ export type AuthErrorCode =
 
 ```typescript
 // lib/permissions.ts
-export async function requireAuth(): Promise<User> {
-  const user = await fetchAuthenticatedUser()
-  if (!user) {
-    throwAuthError("用户未登录", "UNAUTHORIZED")
+export async function requireAuth(): Promise<
+  AuthenticatedUser & { status: "ACTIVE" }
+> {
+  const [user, error] = await assertPolicy("user-active", {
+    path: "api:requireAuth",
+  })
+
+  if (!user || error) {
+    throw error || AuthErrors.unauthorized()
   }
-  if (user.status !== "ACTIVE") {
-    throwAuthError("账户已被封禁", "FORBIDDEN")
-  }
-  return user as User
+
+  return user
 }
 
-export async function requireAdmin(): Promise<User> {
-  const user = await requireAuth()
-  if (user.role !== "ADMIN") {
-    throwAuthError("需要管理员权限", "FORBIDDEN")
+export async function requireAdmin(): Promise<
+  AuthenticatedUser & { role: "ADMIN"; status: "ACTIVE" }
+> {
+  const [user, error] = await assertPolicy("admin", {
+    path: "api:requireAdmin",
+  })
+
+  if (!user || error) {
+    throw error || AuthErrors.forbidden("需要管理员权限")
   }
+
   return user
 }
 ```

@@ -3,135 +3,17 @@
  * 提供认证检查、角色验证和状态检查的核心函数
  */
 
-import { getCurrentUser, getAuthenticatedUser } from "./auth"
-import { fetchAuthenticatedUser } from "@/lib/auth/session"
+import { requireAdmin, requireAuth } from "@/lib/auth"
+import { fetchSessionUserProfile, type AuthenticatedUser } from "@/lib/auth/session"
 import type { User } from "./generated/prisma"
 import { AuthErrors, isAuthError } from "@/lib/error-handling/auth-error"
 import { performanceMonitor, MetricType } from "@/lib/performance-monitor"
 import { logger } from "./utils/logger"
 
-const isTestEnv = process.env.NODE_ENV === "test"
-const PERMISSION_CACHE_TTL = 5 * 60 * 1000
-const permissionCache = new Map<string, { user: User; expiresAt: number }>()
-
-export function clearPermissionCache(userId?: string) {
-  if (userId) {
-    permissionCache.delete(userId)
-    return
-  }
-  permissionCache.clear()
-}
-
-async function simulateDbLatency() {
-  if (!isTestEnv) return
-  // 在测试环境中增加最小延迟，让性能测试能观察到缓存收益
-  await new Promise((resolve) => setTimeout(resolve, 3))
-}
+export { requireAdmin, requireAuth }
 
 async function getFreshUser(): Promise<User | null> {
-  if (isTestEnv) {
-    try {
-      const authUser = await fetchAuthenticatedUser()
-      if (!authUser) return null
-
-      return {
-        id: authUser.id,
-        email: authUser.email ?? "",
-        name: (authUser as any).name ?? null,
-        avatarUrl: authUser.avatarUrl ?? null,
-        coverImage: (authUser as any).coverImage ?? null,
-        role: authUser.role,
-        status: authUser.status,
-        bio: (authUser as any).bio ?? null,
-        bioTokens: (authUser as any).bioTokens ?? null,
-        location: (authUser as any).location ?? null,
-        website: (authUser as any).website ?? null,
-        socialLinks: (authUser as any).socialLinks ?? null,
-        passwordHash: (authUser as any).passwordHash ?? null,
-        nameTokens: (authUser as any).nameTokens ?? null,
-        emailVerified: (authUser as any).emailVerified ?? false,
-        notificationPreferences: (authUser as any).notificationPreferences ?? {},
-        phone: (authUser as any).phone ?? null,
-        privacySettings: (authUser as any).privacySettings ?? {},
-        createdAt: (authUser as any).createdAt ?? new Date(),
-        updatedAt: (authUser as any).updatedAt ?? new Date(),
-        lastLoginAt: (authUser as any).lastLoginAt ?? new Date(),
-      } as User
-    } catch (error) {
-      return null
-    }
-  }
-
-  const { user: authUser } = await getAuthenticatedUser()
-  if (!authUser?.id) return null
-  const now = Date.now()
-  const cached = permissionCache.get(authUser.id)
-
-  if (cached && cached.expiresAt > now) {
-    return cached.user
-  }
-
-  await simulateDbLatency()
-  const freshUser = await getCurrentUser()
-
-  if (!freshUser) {
-    permissionCache.delete(authUser.id)
-    return null
-  }
-
-  // 认证ID与数据库返回不一致时不缓存，避免污染后续调用
-  if (freshUser.id !== authUser.id) {
-    permissionCache.delete(authUser.id)
-    return freshUser
-  }
-
-  permissionCache.set(authUser.id, { user: freshUser, expiresAt: now + PERMISSION_CACHE_TTL })
-  return freshUser
-}
-
-/**
- * 验证用户是否已认证（带缓存优化）
- * 检查用户登录状态和账户状态
- */
-export async function requireAuth(): Promise<User> {
-  const user = await getFreshUser()
-
-  if (!user) {
-    throw AuthErrors.unauthorized()
-  }
-
-  if (user.status !== "ACTIVE") {
-    // 清除被封禁用户的缓存
-    clearPermissionCache(user.id)
-    throw AuthErrors.accountBanned({ userId: user.id })
-  }
-
-  return user
-}
-
-/**
- * 验证用户是否为管理员（带缓存优化）
- * 检查用户登录状态、账户状态和管理员权限
- */
-export async function requireAdmin(): Promise<User> {
-  const user = await getFreshUser()
-
-  if (!user) {
-    throw AuthErrors.unauthorized()
-  }
-
-  if (user.status !== "ACTIVE") {
-    // 清除被封禁管理员的缓存
-    clearPermissionCache(user.id)
-    throw AuthErrors.accountBanned({ userId: user.id })
-  }
-
-  if (user.role !== "ADMIN") {
-    clearPermissionCache(user.id)
-    throw AuthErrors.forbidden("需要管理员权限", { userId: user.id })
-  }
-
-  return user
+  return fetchSessionUserProfile()
 }
 
 /**
@@ -408,8 +290,8 @@ export async function isAuthor(): Promise<boolean> {
 /**
  * 作者或管理员才能操作其资源
  */
-export async function requireAuthorOrAdmin(resourceAuthorId: string): Promise<User> {
-  const user = await requireAuth()
+export async function requireAuthorOrAdmin(resourceAuthorId: string): Promise<AuthenticatedUser> {
+  const user: AuthenticatedUser = await requireAuth()
 
   if (user.status !== "ACTIVE") {
     throw AuthErrors.accountBanned({ userId: user.id })
@@ -500,7 +382,7 @@ export function createPermissionError(
 export async function validateApiPermissions(
   request: Request,
   requiredPermission: "auth" | "admin"
-): Promise<{ success: boolean; error?: any; user?: User }> {
+): Promise<{ success: boolean; error?: any; user?: AuthenticatedUser }> {
   const timerId = `permission-check-${Date.now()}-${Math.random().toString(16).slice(2)}`
   const path =
     (() => {

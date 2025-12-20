@@ -1,21 +1,54 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { TEST_USERS } from "../helpers/test-data"
 
-vi.mock("@/lib/auth", () => ({
-  getCurrentUser: vi.fn(),
-  getAuthenticatedUser: vi.fn(),
-  requireAuth: vi.fn(),
-  requireAdmin: vi.fn(),
+vi.mock("@/lib/auth/session", () => ({
+  fetchSessionUserProfile: vi.fn(),
 }))
 
-const mockAuth = vi.mocked(await import("@/lib/auth"))
+vi.mock("@/lib/auth", async () => {
+  const { AuthErrors } = await import("@/lib/error-handling/auth-error")
+  const { fetchSessionUserProfile } = await import("@/lib/auth/session")
+
+  const requireAuth = vi.fn(async () => {
+    const user = await fetchSessionUserProfile()
+    if (!user) {
+      throw AuthErrors.unauthorized()
+    }
+    if (user.status !== "ACTIVE") {
+      throw AuthErrors.accountBanned({ userId: user.id })
+    }
+    return user
+  })
+
+  const requireAdmin = vi.fn(async () => {
+    const user = await fetchSessionUserProfile()
+    if (!user) {
+      throw AuthErrors.unauthorized()
+    }
+    if (user.status !== "ACTIVE") {
+      throw AuthErrors.accountBanned({ userId: user.id })
+    }
+    if (user.role !== "ADMIN") {
+      throw AuthErrors.forbidden("需要管理员权限", { userId: user.id })
+    }
+    return user
+  })
+
+  return {
+    __esModule: true,
+    requireAuth,
+    requireAdmin,
+  }
+})
+
+const sessionModule = await import("@/lib/auth/session")
+const mockedFetchSessionUserProfile = vi.mocked(sessionModule.fetchSessionUserProfile)
 const permissions = await import("@/lib/permissions")
 // 触发 lib/auth/permissions.ts 的 re-export 覆盖率
 await import("@/lib/auth/permissions")
 
 const setCurrentUser = (user: any | null) => {
-  mockAuth.getAuthenticatedUser.mockResolvedValue({ user, error: null } as any)
-  mockAuth.getCurrentUser.mockResolvedValue(user as any)
+  mockedFetchSessionUserProfile.mockResolvedValue(user as any)
 }
 
 describe("权限框架 - 管理员与作者识别", () => {
@@ -133,8 +166,7 @@ describe("权限框架 - 管理员与作者识别", () => {
 
   describe("角色变更即时生效", () => {
     it("第二次检查应读取最新角色而非缓存", async () => {
-      mockAuth.getAuthenticatedUser.mockResolvedValue({ user: TEST_USERS.user, error: null } as any)
-      mockAuth.getCurrentUser
+      mockedFetchSessionUserProfile
         .mockResolvedValueOnce(TEST_USERS.user as any)
         .mockResolvedValueOnce({ ...TEST_USERS.user, role: "ADMIN" } as any)
 
@@ -143,7 +175,7 @@ describe("权限框架 - 管理员与作者识别", () => {
 
       expect(first).toBe(false)
       expect(second).toBe(true)
-      expect(mockAuth.getCurrentUser).toHaveBeenCalledTimes(2)
+      expect(mockedFetchSessionUserProfile).toHaveBeenCalledTimes(2)
     })
   })
 

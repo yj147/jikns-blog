@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { validateApiPermissions, createPermissionError } from "@/lib/permissions"
-import type { User } from "@/lib/generated/prisma"
+import type { AuthenticatedUser } from "@/lib/auth/session"
 import { logger } from "@/lib/utils/logger"
 import { getClientIp } from "@/lib/api/get-client-ip"
 
@@ -24,7 +24,7 @@ export interface ApiResponse<T = any> {
   meta?: {
     requestId?: string
     timestamp: string
-    user?: Partial<User>
+    user?: Partial<AuthenticatedUser>
   }
 }
 
@@ -38,7 +38,7 @@ export type PermissionLevel = "public" | "auth" | "admin"
  */
 export function createSuccessResponse<T>(
   data: T,
-  user?: User,
+  user?: AuthenticatedUser,
   requestId?: string
 ): NextResponse<ApiResponse<T>> {
   const response: ApiResponse<T> = {
@@ -90,9 +90,11 @@ export function createErrorResponse(
 /**
  * API 权限守卫装饰器
  * 用于包装 API 路由处理函数
+ *
+ * @deprecated 请使用 "@/lib/api/unified-auth" 中的 withApiAuth
  */
 export function withApiAuth(
-  handler: (request: NextRequest, user: User, context?: any) => Promise<NextResponse>,
+  handler: (request: NextRequest, user: AuthenticatedUser, context?: any) => Promise<NextResponse>,
   permissionLevel: PermissionLevel = "auth"
 ) {
   return async (request: NextRequest, context?: any): Promise<NextResponse> => {
@@ -137,7 +139,7 @@ export function withApiAuth(
  * 用于包装 Server Actions
  */
 export function withServerActionAuth<TArgs extends any[], TReturn>(
-  action: (user: User, ...args: TArgs) => Promise<TReturn>,
+  action: (user: AuthenticatedUser, ...args: TArgs) => Promise<TReturn>,
   permissionLevel: PermissionLevel = "auth"
 ) {
   return async (...args: TArgs): Promise<TReturn> => {
@@ -177,7 +179,7 @@ export function withServerActionAuth<TArgs extends any[], TReturn>(
 export interface BatchPermissionResult {
   userId: string
   permissions: Record<string, boolean>
-  user: User
+  user: AuthenticatedUser
 }
 
 /**
@@ -240,7 +242,7 @@ export async function batchPermissionCheck(
  * 检查资源权限
  */
 async function checkResourcePermission(
-  user: User,
+  user: AuthenticatedUser,
   action: string,
   resource: string
 ): Promise<boolean> {
@@ -274,7 +276,10 @@ async function checkResourcePermission(
 /**
  * 检查自定义权限
  */
-async function checkCustomPermission(user: User, permission: string): Promise<boolean> {
+async function checkCustomPermission(
+  user: AuthenticatedUser,
+  permission: string
+): Promise<boolean> {
   const isAdmin = user.role === "ADMIN" && user.status === "ACTIVE"
   const isActive = user.status === "ACTIVE"
 
@@ -300,7 +305,7 @@ async function checkCustomPermission(user: User, permission: string): Promise<bo
  * 与权限检查结合的限流控制
  */
 export function withRateLimit(
-  handler: (request: NextRequest, user?: User, context?: any) => Promise<NextResponse>,
+  handler: (request: NextRequest, user?: AuthenticatedUser, context?: any) => Promise<NextResponse>,
   options: {
     requests: number
     window: number // 毫秒
@@ -412,7 +417,7 @@ export function withCORS(
  * 将多个装饰器组合在一起
  */
 export function withApiMiddleware(
-  handler: (request: NextRequest, user?: User, context?: any) => Promise<NextResponse>,
+  handler: (request: NextRequest, user?: AuthenticatedUser, context?: any) => Promise<NextResponse>,
   options: {
     permissionLevel?: PermissionLevel
     rateLimit?: { requests: number; window: number }

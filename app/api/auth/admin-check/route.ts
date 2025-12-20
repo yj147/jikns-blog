@@ -9,6 +9,7 @@ import { RateLimiter } from "@/lib/security"
 import { authLogger } from "@/lib/utils/logger"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 import { getClientIp } from "@/lib/api/get-client-ip"
+import { isAuthError } from "@/lib/error-handling/auth-error"
 
 async function handleGet(request: NextRequest) {
   const clientIP = getClientIp(request)
@@ -47,45 +48,55 @@ async function handleGet(request: NextRequest) {
       { status: 200 }
     )
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "未知错误"
+    if (isAuthError(error)) {
+      authLogger.warn("管理员权限验证失败", {
+        errorCode: error.code,
+        message: error.message,
+      })
 
-    authLogger.warn("管理员权限验证失败", { error: errorMessage })
+      if (
+        error.code === "UNAUTHORIZED" ||
+        error.code === "INVALID_TOKEN" ||
+        error.code === "SESSION_EXPIRED" ||
+        error.code === "INVALID_CREDENTIALS"
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            isAdmin: false,
+            error: "not_authenticated",
+            message: "用户未登录",
+          },
+          { status: 401 }
+        )
+      }
 
-    // 根据错误类型返回适当的响应
-    if (errorMessage.includes("未登录") || errorMessage.includes("用户未登录")) {
-      return NextResponse.json(
-        {
-          success: false,
-          isAdmin: false,
-          error: "not_authenticated",
-          message: "用户未登录",
-        },
-        { status: 401 }
-      )
-    }
+      if (error.code === "FORBIDDEN") {
+        return NextResponse.json(
+          {
+            success: false,
+            isAdmin: false,
+            error: "insufficient_permissions",
+            message: "需要管理员权限",
+          },
+          { status: 403 }
+        )
+      }
 
-    if (errorMessage.includes("管理员权限")) {
-      return NextResponse.json(
-        {
-          success: false,
-          isAdmin: false,
-          error: "insufficient_permissions",
-          message: "需要管理员权限",
-        },
-        { status: 403 }
-      )
-    }
-
-    if (errorMessage.includes("封禁")) {
-      return NextResponse.json(
-        {
-          success: false,
-          isAdmin: false,
-          error: "account_banned",
-          message: "账户已被封禁",
-        },
-        { status: 403 }
-      )
+      if (error.code === "ACCOUNT_BANNED") {
+        return NextResponse.json(
+          {
+            success: false,
+            isAdmin: false,
+            error: "account_banned",
+            message: "账户已被封禁",
+          },
+          { status: 403 }
+        )
+      }
+    } else {
+      const errorMessage = error instanceof Error ? error.message : "未知错误"
+      authLogger.warn("管理员权限验证失败", { error: errorMessage })
     }
 
     // 其他服务器错误

@@ -2,13 +2,13 @@ import { NextRequest } from "next/server"
 import { withApiAuth, createErrorResponse, createSuccessResponse } from "@/lib/api-guards"
 import { prisma } from "@/lib/prisma"
 import { adminFeedActionSchema } from "@/types/feed"
-import type { User } from "@/lib/generated/prisma"
+import type { AuthenticatedUser } from "@/lib/auth/session"
 import { adjustTagActivitiesCountForActivities } from "@/lib/services/activity-tags"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 type AllowedAction = "delete" | "pin" | "unpin" | "hide" | "unhide"
 
-const postHandler = withApiAuth(async (request: NextRequest, user: User) => {
+const postHandler = withApiAuth(async (request: NextRequest, user: AuthenticatedUser) => {
   const payload = await request.json().catch(() => ({}))
   const parsed = adminFeedActionSchema.safeParse(payload)
 

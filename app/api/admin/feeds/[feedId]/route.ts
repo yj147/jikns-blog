@@ -2,11 +2,15 @@ import { NextRequest } from "next/server"
 import { withApiAuth, createErrorResponse, createSuccessResponse } from "@/lib/api-guards"
 import { prisma } from "@/lib/prisma"
 import { feedInclude, mapFeedRecord } from "../utils"
-import type { User } from "@/lib/generated/prisma"
+import type { AuthenticatedUser } from "@/lib/auth/session"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 const getHandler = withApiAuth(
-  async (_request: NextRequest, user: User, context: { params: { feedId: string } }) => {
+  async (
+    _request: NextRequest,
+    user: AuthenticatedUser,
+    context: { params: { feedId: string } }
+  ) => {
     const feedId = context.params?.feedId
 
     if (!feedId) {

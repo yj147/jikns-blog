@@ -384,10 +384,10 @@ describe("安全边缘案例集成测试", () => {
     })
 
     it("应该防止缓存投毒攻击", async () => {
-      const { clearPermissionCache } = await import("@/lib/permissions")
+      const { clearUserCache } = await import("@/lib/auth")
 
       // 清空缓存
-      clearPermissionCache()
+      await clearUserCache()
 
       setCurrentTestUser("admin")
 
@@ -478,8 +478,8 @@ describe("安全边缘案例集成测试", () => {
 
       for (const { user, expectAuth, expectAdmin } of edgeCases) {
         // 重置缓存
-        const { clearPermissionCache } = await import("@/lib/permissions")
-        clearPermissionCache()
+        const { clearUserCache } = await import("@/lib/auth")
+        await clearUserCache()
 
         if (user) {
           setCurrentTestUser("user")
