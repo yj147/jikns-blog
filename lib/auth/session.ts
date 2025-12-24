@@ -711,15 +711,17 @@ export async function syncUserFromAuth(authUser: SupabaseUser): Promise<User> {
     }
 
     // 后续登录：仅更新空字段 + 登录时间
-    // 例外：avatarUrl 始终从 OAuth 更新（保持与 GitHub 头像同步）
+    // 所有字段（包括 avatarUrl）都采用相同策略：仅当数据库为空时填充
+    // 这样用户手动上传的自定义头像不会被 OAuth 头像覆盖
     const updateData: Record<string, any> = {
       lastLoginAt: currentTime,
       updatedAt: currentTime,
       ...(grantAdmin ? { role: "ADMIN" as Role } : {}),
     }
 
-    // avatarUrl 始终从 OAuth 更新（如果有新值）
-    if (extractedAvatarUrl) {
+    // avatarUrl 仅当数据库为空时填充（与其他字段保持一致策略）
+    // 用户上传的自定义头像优先级高于 OAuth 头像
+    if (!existingUser.avatarUrl && extractedAvatarUrl) {
       updateData.avatarUrl = extractedAvatarUrl
     }
     // 其他字段仅当数据库为空时填充

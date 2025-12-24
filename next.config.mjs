@@ -70,6 +70,18 @@ const supabaseRemotePatterns = [
           hostname: supabaseHostname,
           pathname: "/storage/v1/object/public/**",
         },
+        // 支持签名 URL 路径
+        {
+          protocol: "https",
+          hostname: supabaseHostname,
+          pathname: "/storage/v1/object/sign/**",
+        },
+        // 支持 Supabase Image Transformation API (render)
+        {
+          protocol: "https",
+          hostname: supabaseHostname,
+          pathname: "/storage/v1/render/image/**",
+        },
       ]
     : []),
   {
@@ -77,10 +89,34 @@ const supabaseRemotePatterns = [
     hostname: "*.supabase.co",
     pathname: "/storage/v1/object/public/**",
   },
+  // 支持签名 URL (*.supabase.co)
+  {
+    protocol: "https",
+    hostname: "*.supabase.co",
+    pathname: "/storage/v1/object/sign/**",
+  },
+  // 支持 Image Transformation API (*.supabase.co)
+  {
+    protocol: "https",
+    hostname: "*.supabase.co",
+    pathname: "/storage/v1/render/image/**",
+  },
   {
     protocol: "https",
     hostname: "*.supabase.in",
     pathname: "/storage/v1/object/public/**",
+  },
+  // 支持签名 URL (*.supabase.in)
+  {
+    protocol: "https",
+    hostname: "*.supabase.in",
+    pathname: "/storage/v1/object/sign/**",
+  },
+  // 支持 Image Transformation API (*.supabase.in)
+  {
+    protocol: "https",
+    hostname: "*.supabase.in",
+    pathname: "/storage/v1/render/image/**",
   },
   {
     protocol: "http",
@@ -178,7 +214,7 @@ const nextConfig = {
               "default-src 'self'",
               "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-              "img-src 'self' data: blob: https://*.supabase.co http://localhost:* http://127.0.0.1:* https://avatars.githubusercontent.com https://github.com https://api.dicebear.com https://picsum.photos",
+              "img-src 'self' data: blob: https://*.supabase.co https://*.supabase.in http://localhost:* http://127.0.0.1:* https://avatars.githubusercontent.com https://github.com https://api.dicebear.com https://picsum.photos",
               "font-src 'self' https://fonts.gstatic.com",
               "connect-src 'self' https://*.supabase.co http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* wss://*.supabase.co",
               "frame-ancestors 'none'",
