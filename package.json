@@ -103,6 +103,7 @@
     "@uiw/react-markdown-preview": "5.1.2",
     "@uiw/react-md-editor": "4.0.4",
     "@upstash/redis": "^1.35.6",
+    "@vercel/analytics": "^1.4.0",
     "@vitalets/google-translate-api": "^9.2.1",
     "autoprefixer": "^10.4.20",
     "bcryptjs": "^3.0.2",

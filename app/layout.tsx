@@ -4,6 +4,7 @@ import ErrorBoundary from "@/components/error-boundary"
 import NavigationServer from "@/components/navigation-server"
 import { CSRFToken } from "@/components/security/csrf-token"
 import { ThemeProvider } from "@/components/theme-provider"
+import { Analytics } from "@vercel/analytics/next"
 import { AuthProvider } from "./providers/auth-provider"
 import { SwrProvider } from "./providers/swr-provider"
 import { geistSans, manrope, lora } from "./fonts"
@@ -50,6 +51,7 @@ export default function RootLayout({
             <Toaster />
           </ThemeProvider>
         </SwrProvider>
+        <Analytics />
       </body>
     </html>
   )
