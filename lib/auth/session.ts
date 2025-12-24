@@ -75,6 +75,7 @@ import {
 
 /**
  * Supabase Auth User 类型定义
+ * GitHub OAuth 会提供额外字段：bio, location, html_url 等
  */
 interface SupabaseUser {
   id: string
@@ -85,6 +86,10 @@ interface SupabaseUser {
     name?: string
     user_name?: string
     picture?: string
+    // GitHub OAuth 扩展字段
+    bio?: string
+    location?: string
+    html_url?: string // GitHub profile URL
   } | null
 }
 
@@ -581,10 +586,19 @@ export function createAuthContext<P extends AuthPolicy>(
 
 /**
  * 用户资料同步（从 Supabase 到数据库）
- * 使用 upsert 简化数据同步，消除竞态条件
+ *
+ * 同步策略：
+ * - 首次登录（create）：从 OAuth 填充所有可用字段
+ * - 后续登录（update）：仅填充数据库中为空的字段，保留用户自定义资料
+ *
+ * 支持的 OAuth 字段映射：
+ * - name: full_name / name / user_name
+ * - avatarUrl: avatar_url / picture
+ * - bio: bio
+ * - location: location
+ * - socialLinks: html_url (GitHub profile)
  *
  * Linus 原则：消除特殊情况，使用数据库的原子操作
- * 删除了 Database Trigger，只使用业务代码的 upsert
  */
 export async function syncUserFromAuth(authUser: SupabaseUser): Promise<User> {
   if (!authUser.email) {
@@ -594,56 +608,103 @@ export async function syncUserFromAuth(authUser: SupabaseUser): Promise<User> {
   const currentTime = new Date()
   const normalizedEmail = authUser.email.toLowerCase()
   const grantAdmin = isConfiguredAdminEmail(normalizedEmail)
+  const metadata = authUser.user_metadata
 
   // 从 metadata 提取用户信息
   const extractedName =
-    authUser.user_metadata?.full_name ||
-    authUser.user_metadata?.name ||
-    authUser.user_metadata?.user_name ||
-    authUser.email.split("@")[0]
+    metadata?.full_name || metadata?.name || metadata?.user_name || authUser.email.split("@")[0]
 
-  const extractedAvatarUrl =
-    authUser.user_metadata?.avatar_url || authUser.user_metadata?.picture || null
+  const extractedAvatarUrl = metadata?.avatar_url || metadata?.picture || null
+  const extractedBio = metadata?.bio || null
+  const extractedLocation = metadata?.location || null
+  const extractedGitHubUrl = metadata?.html_url || null
 
   try {
-    const user = await prisma.user.upsert({
+    // 先查询现有用户，判断哪些字段需要更新
+    const existingUser = await prisma.user.findUnique({
       where: { id: authUser.id },
-      create: {
-        id: authUser.id,
-        email: normalizedEmail,
-        name: extractedName,
-        avatarUrl: extractedAvatarUrl,
-        role: grantAdmin ? "ADMIN" : "USER",
-        status: "ACTIVE",
-        createdAt: currentTime,
-        updatedAt: currentTime,
-        lastLoginAt: currentTime,
-      },
-      // ✅ 仅更新登录时间，避免覆盖用户自定义资料
-      update: {
-        lastLoginAt: currentTime,
-        updatedAt: currentTime,
-        ...(grantAdmin ? { role: "ADMIN" as Role } : {}),
-      },
+      select: { name: true, avatarUrl: true, bio: true, location: true, socialLinks: true },
     })
 
-    // 清除缓存，确保下次查询获取最新数据
-    // 这是关键步骤：登录后用户资料可能已更新（如 GitHub 昵称变更）
-    // 必须清除缓存，否则用户会看到旧数据（最长 5 分钟）
+    if (!existingUser) {
+      // 首次登录：创建用户，填充所有可用字段
+      const socialLinks = extractedGitHubUrl ? { github: extractedGitHubUrl } : undefined
+
+      const user = await prisma.user.create({
+        data: {
+          id: authUser.id,
+          email: normalizedEmail,
+          name: extractedName,
+          avatarUrl: extractedAvatarUrl,
+          bio: extractedBio,
+          location: extractedLocation,
+          socialLinks: socialLinks,
+          role: grantAdmin ? "ADMIN" : "USER",
+          status: "ACTIVE",
+          createdAt: currentTime,
+          updatedAt: currentTime,
+          lastLoginAt: currentTime,
+        },
+      })
+
+      await clearUserCache(user.id)
+
+      const context = buildSessionLogContext(user.id)
+      authLogger.info("新用户创建成功", {
+        ...context,
+        email: user.email,
+        filledFields: ["name", "avatarUrl", "bio", "location", "socialLinks"].filter(
+          (f) => user[f as keyof typeof user] !== null
+        ),
+        adminWhitelisted: grantAdmin,
+      })
+
+      return user
+    }
+
+    // 后续登录：仅更新空字段 + 登录时间
+    const updateData: Record<string, any> = {
+      lastLoginAt: currentTime,
+      updatedAt: currentTime,
+      ...(grantAdmin ? { role: "ADMIN" as Role } : {}),
+    }
+
+    // 仅当数据库字段为空时，从 OAuth 填充
+    if (!existingUser.name && extractedName) {
+      updateData.name = extractedName
+    }
+    if (!existingUser.avatarUrl && extractedAvatarUrl) {
+      updateData.avatarUrl = extractedAvatarUrl
+    }
+    if (!existingUser.bio && extractedBio) {
+      updateData.bio = extractedBio
+    }
+    if (!existingUser.location && extractedLocation) {
+      updateData.location = extractedLocation
+    }
+    if (!existingUser.socialLinks && extractedGitHubUrl) {
+      updateData.socialLinks = { github: extractedGitHubUrl }
+    }
+
+    const user = await prisma.user.update({
+      where: { id: authUser.id },
+      data: updateData,
+    })
+
     await clearUserCache(user.id)
 
+    const filledFields = Object.keys(updateData).filter(
+      (k) => k !== "lastLoginAt" && k !== "updatedAt"
+    )
     const context = buildSessionLogContext(user.id)
-    const logPayload = {
+    authLogger.info("用户资料同步成功", {
       ...context,
       email: user.email,
-      updatedFields: ["upsert"],
+      updatedFields: filledFields.length > 0 ? filledFields : ["loginTime"],
       adminWhitelisted: grantAdmin,
-      roleAfterUpsert: user.role,
-    }
-    authLogger.info("用户资料同步成功", logPayload)
-    if (isTestEnv) {
-      console.log("同步用户资料:", logPayload)
-    }
+      roleAfterSync: user.role,
+    })
+
     return user
   } catch (error) {
     const context = buildSessionLogContext(authUser.id)

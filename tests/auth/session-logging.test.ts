@@ -150,6 +150,9 @@ describe("认证会话日志字段基线测试", () => {
         email: "test@example.com",
         name: "Test User",
         avatarUrl: null,
+        bio: null,
+        location: null,
+        socialLinks: null,
         role: "USER",
         status: "ACTIVE",
         createdAt: new Date(),
@@ -157,7 +160,10 @@ describe("认证会话日志字段基线测试", () => {
         lastLoginAt: new Date(),
       }
 
-      ;(prisma.user.upsert as any).mockResolvedValue(mockUser)
+      // Mock findUnique 返回 null（新用户）
+      ;(prisma.user.findUnique as any).mockResolvedValue(null)
+      // Mock create 返回新用户
+      ;(prisma.user.create as any).mockResolvedValue(mockUser)
 
       const sessionModule = await import("@/lib/auth/session")
       await sessionModule.syncUserFromAuth({
@@ -170,7 +176,7 @@ describe("认证会话日志字段基线测试", () => {
 
       // 验证成功日志包含完整上下文
       expect(authLogger.info).toHaveBeenCalledWith(
-        "用户资料同步成功",
+        "新用户创建成功",
         expect.objectContaining({
           requestId: expect.any(String),
           path: expect.any(String),

@@ -153,11 +153,21 @@ describe("核心认证功能稳定性测试", () => {
         id: "new-user-id",
         email: "newuser@test.com",
         name: "新用户",
+        avatarUrl: null,
+        bio: null,
+        location: null,
+        socialLinks: null,
         role: "USER" as const,
         status: "ACTIVE" as const,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        lastLoginAt: new Date(),
       }
 
-      mockPrismaUser.upsert.mockResolvedValue(newUserData)
+      // Mock findUnique 返回 null（新用户）
+      mockPrismaUser.findUnique.mockResolvedValue(null)
+      // Mock create 返回新用户
+      mockPrismaUser.create.mockResolvedValue(newUserData)
 
       const { syncUserFromAuth } = await import("@/lib/auth")
       const result = await syncUserFromAuth({
@@ -169,10 +179,14 @@ describe("核心认证功能稳定性测试", () => {
       })
 
       expect(result).toBeDefined()
-      expect(mockPrismaUser.upsert).toHaveBeenCalledWith(
+      expect(mockPrismaUser.findUnique).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: newUserData.id },
-          create: expect.objectContaining({
+        })
+      )
+      expect(mockPrismaUser.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
             id: newUserData.id,
             email: newUserData.email,
           }),
@@ -181,10 +195,19 @@ describe("核心认证功能稳定性测试", () => {
     })
 
     it("应该正确更新现有用户（仅更新 lastLoginAt，已有 name 不覆盖）", async () => {
-      const existingUser = TEST_USERS.user
+      const existingUser = {
+        ...TEST_USERS.user,
+        avatarUrl: "https://example.com/avatar.jpg",
+        bio: "现有 bio",
+        location: "现有 location",
+        socialLinks: { github: "https://github.com/test" },
+      }
       const updatedUser = { ...existingUser, lastLoginAt: new Date() }
 
-      mockPrismaUser.upsert.mockResolvedValue(updatedUser)
+      // Mock findUnique 返回现有用户
+      mockPrismaUser.findUnique.mockResolvedValue(existingUser)
+      // Mock update 返回更新后的用户
+      mockPrismaUser.update.mockResolvedValue(updatedUser)
 
       const { syncUserFromAuth } = await import("@/lib/auth")
       const result = await syncUserFromAuth({
@@ -196,14 +219,17 @@ describe("核心认证功能稳定性测试", () => {
       })
 
       expect(result).toBeDefined()
-      expect(mockPrismaUser.upsert).toHaveBeenCalledWith(
+      expect(mockPrismaUser.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: existingUser.id },
-          update: expect.objectContaining({
+          data: expect.objectContaining({
             lastLoginAt: expect.any(Date),
           }),
         })
       )
+      // 验证不会覆盖已有的 name
+      const updateCall = mockPrismaUser.update.mock.calls[0][0]
+      expect(updateCall.data.name).toBeUndefined()
     })
   })
 
