@@ -55,3 +55,21 @@ lighthouse-*.json
 
 # Windows lighthouse artifacts (should not be in WSL)
 C:\\Users\\
+.mcp.json
+
+# Supabase temporary files
+supabase/.temp/
+
+# Development documentation (not for public repo)
+docs/
+
+# AI assistant rule files
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+.claude/
+
+# Personal documents
+开题报告.md
+新文章-Next.js全栈开发实战指南.md
+progress.md
