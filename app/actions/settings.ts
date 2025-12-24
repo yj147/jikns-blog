@@ -7,10 +7,11 @@ import { prisma } from "@/lib/prisma"
 import { requireAuth } from "@/lib/permissions"
 import { logger } from "@/lib/utils/logger"
 import { Prisma } from "@/lib/generated/prisma"
-import { parseStorageTarget } from "@/lib/storage/signed-url"
+import { parseStorageTarget, createSignedUrlIfNeeded } from "@/lib/storage/signed-url"
 import { auditLogger, AuditEventType } from "@/lib/audit-log"
-import { createServiceRoleClient } from "@/lib/supabase"
+import { createServiceRoleClient, createServerSupabaseClient } from "@/lib/supabase"
 import { mergeSupabaseUserMetadata } from "@/lib/auth/supabase-metadata"
+import { validateImageFile, generateFileName, formatFileSize } from "@/lib/upload/image-utils"
 import {
   notificationPreferencesSchema,
   privacySettingsSchema,
@@ -481,45 +482,45 @@ export async function deleteCoverImage(
 async function uploadAvatarFile(
   userId: string,
   file: File,
-  cookieHeader: Record<string, string>
+  _cookieHeader: Record<string, string>
 ): Promise<string> {
-  let uploadJson: any = null
+  const BUCKET_NAME = "activity-images"
+  const AVATAR_PATH_PREFIX = "avatars"
+  const SIGNED_URL_EXPIRES_IN = 60 * 60 // 1 小时
+  const MAX_AVATAR_SIZE = 5 * 1024 * 1024 // 5MB
 
-  const uploadForm = new FormData()
-  uploadForm.append("files", file as File)
+  // 验证文件大小
+  if (file.size > MAX_AVATAR_SIZE) {
+    throw new Error(`头像大小超过限制（${formatFileSize(MAX_AVATAR_SIZE)}）`)
+  }
 
-  try {
-    const uploadResponse = await fetch(
-      buildApiUrl(`/api/upload/images?purpose=${AVATAR_PURPOSE}`),
-      {
-        method: "POST",
-        body: uploadForm,
-        headers: cookieHeader,
-      }
-    )
+  // 验证文件类型
+  const validation = validateImageFile(file)
+  if (!validation.isValid) {
+    throw new Error(validation.error || "头像格式不支持")
+  }
 
-    uploadJson = await uploadResponse.json()
+  // 生成存储路径
+  const fileName = generateFileName(file, 0)
+  const path = `${AVATAR_PATH_PREFIX}/${userId}/${Date.now()}-${fileName}`
 
-    if (!uploadResponse.ok || !uploadJson?.success) {
-      const message = uploadJson?.error?.message || "头像上传失败"
-      throw new Error(message)
-    }
-  } catch (error) {
-    logger.error("调用上传服务失败", { module: "app/actions/settings", userId }, error)
+  // 直接使用 Supabase Storage SDK 上传
+  const supabase = await createServerSupabaseClient()
+  const { error } = await supabase.storage.from(BUCKET_NAME).upload(path, file, {
+    cacheControl: "3600",
+    upsert: false,
+    contentType: file.type,
+  })
+
+  if (error) {
+    logger.error("头像上传到 Storage 失败", { module: "app/actions/settings", userId, path }, error)
     throw new Error("头像上传失败，请稍后重试")
   }
 
-  const uploadedDetail = uploadJson?.data?.details?.[0]
-  const uploadedPath =
-    uploadedDetail?.path ||
-    extractStoragePath(uploadJson?.data?.urls?.[0]) ||
-    extractStoragePath(uploadedDetail?.url)
-  const uploadedSignedUrl = uploadedDetail?.signedUrl || uploadJson?.data?.urls?.[0] || null
+  // 生成签名 URL
+  const signedUrl = await createSignedUrlIfNeeded(path, SIGNED_URL_EXPIRES_IN)
 
-  if (!uploadedPath && !uploadedSignedUrl) {
-    throw new Error("上传返回数据不完整")
-  }
-  return uploadedPath ?? uploadedSignedUrl
+  return signedUrl || path
 }
 
 async function cleanupOldAvatar(
