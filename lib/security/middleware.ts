@@ -210,6 +210,12 @@ export class SecurityMiddleware {
     request: NextRequest,
     pathname: string
   ): Promise<NextResponse | null> {
+    // 跳过 Next.js Server Actions - 它们有自己的安全机制
+    const nextAction = request.headers.get("next-action")
+    if (nextAction) {
+      return null
+    }
+
     const requiresOriginCheck = request.method !== "GET" && this.isProtectedPath(pathname)
 
     if (requiresOriginCheck && !validateRequestOrigin(request)) {
