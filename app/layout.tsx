@@ -12,6 +12,8 @@ import "./globals.css"
 // 导入 EventEmitter 优化配置
 import "@/lib/event-emitter-config"
 
+import { SpeedInsights } from "@vercel/speed-insights/next"
+
 import type { Metadata } from "next"
 import type React from "react"
 
@@ -50,6 +52,7 @@ export default function RootLayout({
             <Toaster />
           </ThemeProvider>
         </SwrProvider>
+        <SpeedInsights />
       </body>
     </html>
   )
