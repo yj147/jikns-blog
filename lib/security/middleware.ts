@@ -384,6 +384,12 @@ export class SecurityMiddleware {
       return false
     }
 
+    // 跳过 Server Action 内部调用
+    if (request.headers.get("X-Internal-Request") === "server-action") {
+      logger.debug("跳过 Server Action 内部调用的 CSRF 验证", { pathname })
+      return false
+    }
+
     // 开发环境更宽松的CSRF验证
     if (process.env.NODE_ENV === "development") {
       // 开发环境跳过管理员页面的CSRF验证，因为有其他安全层保护

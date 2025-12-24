@@ -135,6 +135,9 @@ async function buildCookieHeader(): Promise<Record<string, string>> {
     headers.Origin = baseUrl
     headers.Referer = `${baseUrl}/`
 
+    // 标识为 Server Action 内部调用，跳过 CSRF 检查
+    headers["X-Internal-Request"] = "server-action"
+
     return headers
   } catch {
     return {}

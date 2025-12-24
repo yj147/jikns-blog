@@ -30,6 +30,11 @@ function buildPolicyContext(request: NextRequest) {
 }
 
 function rejectIfCsrfInvalid(request: NextRequest) {
+  // Server Action 内部调用跳过 CSRF 检查
+  if (request.headers.get("X-Internal-Request") === "server-action") {
+    return null
+  }
+
   if (CSRFProtection.validateToken(request)) return null
 
   logger.warn("CSRF token missing or invalid for cover upload", {
