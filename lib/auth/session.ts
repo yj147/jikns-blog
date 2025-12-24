@@ -626,28 +626,6 @@ export async function syncUserFromAuth(authUser: SupabaseUser): Promise<User> {
       select: { name: true, avatarUrl: true, bio: true, location: true, socialLinks: true },
     })
 
-    // 调试日志：查看 OAuth 返回的 metadata 和现有用户字段
-    authLogger.info("syncUserFromAuth 调试信息", {
-      userId: authUser.id,
-      oauthMetadata: metadata,
-      extractedFields: {
-        name: extractedName,
-        avatarUrl: extractedAvatarUrl,
-        bio: extractedBio,
-        location: extractedLocation,
-        githubUrl: extractedGitHubUrl,
-      },
-      existingUser: existingUser
-        ? {
-            name: existingUser.name,
-            avatarUrl: existingUser.avatarUrl,
-            bio: existingUser.bio,
-            location: existingUser.location,
-            socialLinks: existingUser.socialLinks,
-          }
-        : null,
-    })
-
     if (!existingUser) {
       // 首次登录：创建用户，填充所有可用字段
       const socialLinks = extractedGitHubUrl ? { github: extractedGitHubUrl } : undefined
@@ -685,18 +663,20 @@ export async function syncUserFromAuth(authUser: SupabaseUser): Promise<User> {
     }
 
     // 后续登录：仅更新空字段 + 登录时间
+    // 例外：avatarUrl 始终从 OAuth 更新（保持与 GitHub 头像同步）
     const updateData: Record<string, any> = {
       lastLoginAt: currentTime,
       updatedAt: currentTime,
       ...(grantAdmin ? { role: "ADMIN" as Role } : {}),
     }
 
-    // 仅当数据库字段为空时，从 OAuth 填充
+    // avatarUrl 始终从 OAuth 更新（如果有新值）
+    if (extractedAvatarUrl) {
+      updateData.avatarUrl = extractedAvatarUrl
+    }
+    // 其他字段仅当数据库为空时填充
     if (!existingUser.name && extractedName) {
       updateData.name = extractedName
-    }
-    if (!existingUser.avatarUrl && extractedAvatarUrl) {
-      updateData.avatarUrl = extractedAvatarUrl
     }
     if (!existingUser.bio && extractedBio) {
       updateData.bio = extractedBio
