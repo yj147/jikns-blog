@@ -517,10 +517,10 @@ async function uploadAvatarFile(
     throw new Error("头像上传失败，请稍后重试")
   }
 
-  // 生成签名 URL
-  const signedUrl = await createSignedUrlIfNeeded(path, SIGNED_URL_EXPIRES_IN)
-
-  return signedUrl || path
+  // 返回相对路径，而不是签名 URL
+  // 签名 URL 有 1 小时有效期，存入数据库后会过期
+  // 读取时会在 /api/user 路由中动态生成签名 URL
+  return path
 }
 
 async function cleanupOldAvatar(
@@ -609,9 +609,16 @@ async function persistAvatarUrl({
   await cleanupOldAvatar(existing.avatarUrl, targetUserId, actorUserId, cookieHeader)
   await refreshUserCache(targetUserId)
 
+  // 为前端生成签名 URL，以便立即显示新头像
+  // 数据库中存储的是相对路径，此处仅用于响应
+  const signedAvatarUrl = await createSignedUrlIfNeeded(updated.avatarUrl)
+
   return {
     success: true,
-    data: updated,
+    data: {
+      id: updated.id,
+      avatarUrl: signedAvatarUrl || updated.avatarUrl,
+    },
     message: "头像已更新",
   }
 }
