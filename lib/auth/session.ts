@@ -76,21 +76,31 @@ import {
 /**
  * Supabase Auth User 类型定义
  * GitHub OAuth 会提供额外字段：bio, location, html_url 等
+ *
+ * 注意：user_metadata 在某些情况下可能不完整（如邮箱登录后再用 OAuth 登录），
+ * 此时需要从 identities[].identity_data 中获取完整信息。
  */
+interface OAuthIdentityData {
+  avatar_url?: string
+  full_name?: string
+  name?: string
+  user_name?: string
+  preferred_username?: string
+  picture?: string
+  bio?: string
+  location?: string
+  html_url?: string
+}
+
 interface SupabaseUser {
   id: string
   email?: string | null
-  user_metadata?: {
-    full_name?: string
-    avatar_url?: string
-    name?: string
-    user_name?: string
-    picture?: string
-    // GitHub OAuth 扩展字段
-    bio?: string
-    location?: string
-    html_url?: string // GitHub profile URL
-  } | null
+  user_metadata?: OAuthIdentityData | null
+  // identities 数组包含每个 OAuth provider 的完整数据
+  identities?: Array<{
+    provider?: string
+    identity_data?: OAuthIdentityData
+  }> | null
 }
 
 const adminEmailList = (process.env.ADMIN_EMAIL || "")
@@ -298,6 +308,7 @@ const fetchAuthenticatedUserImpl = async (): Promise<AuthenticatedUser | null> =
         id: supabaseUser.id,
         email: supabaseUser.email,
         user_metadata: supabaseUser.user_metadata,
+        identities: supabaseUser.identities,
       })
       const result = toAuthenticatedUser(syncedUser)
       endTimer({
@@ -610,14 +621,51 @@ export async function syncUserFromAuth(authUser: SupabaseUser): Promise<User> {
   const grantAdmin = isConfiguredAdminEmail(normalizedEmail)
   const metadata = authUser.user_metadata
 
-  // 从 metadata 提取用户信息
-  const extractedName =
-    metadata?.full_name || metadata?.name || metadata?.user_name || authUser.email.split("@")[0]
+  // 调试日志：查看 GitHub OAuth 返回的原始 metadata
+  authLogger.info("syncUserFromAuth: OAuth metadata 详情", {
+    userId: authUser.id,
+    email: normalizedEmail,
+    metadataKeys: metadata ? Object.keys(metadata) : [],
+    metadata: metadata,
+    identitiesCount: authUser.identities?.length ?? 0,
+    identities: authUser.identities?.map((i) => ({
+      provider: i.provider,
+      dataKeys: i.identity_data ? Object.keys(i.identity_data) : [],
+    })),
+  })
 
-  const extractedAvatarUrl = metadata?.avatar_url || metadata?.picture || null
-  const extractedBio = metadata?.bio || null
-  const extractedLocation = metadata?.location || null
-  const extractedGitHubUrl = metadata?.html_url || null
+  // 优先从 identities 中获取 GitHub provider 的完整数据
+  // 因为 user_metadata 在某些情况下可能不完整
+  const githubIdentity = authUser.identities?.find((i) => i.provider === "github")
+  const identityData = githubIdentity?.identity_data
+
+  // 合并数据源：优先 identities，其次 user_metadata
+  const mergedData = {
+    full_name: identityData?.full_name || metadata?.full_name,
+    name: identityData?.name || metadata?.name,
+    user_name: identityData?.user_name || identityData?.preferred_username || metadata?.user_name,
+    avatar_url: identityData?.avatar_url || metadata?.avatar_url || metadata?.picture,
+    bio: identityData?.bio || metadata?.bio,
+    location: identityData?.location || metadata?.location,
+    html_url: identityData?.html_url || metadata?.html_url,
+  }
+
+  // 从合并后的数据提取用户信息
+  const extractedName =
+    mergedData.full_name || mergedData.name || mergedData.user_name || authUser.email.split("@")[0]
+
+  const extractedAvatarUrl = mergedData.avatar_url || null
+
+  authLogger.info("syncUserFromAuth: 提取的字段", {
+    extractedName,
+    extractedAvatarUrl,
+    bio: mergedData.bio,
+    location: mergedData.location,
+    source: identityData ? "identities" : "user_metadata",
+  })
+  const extractedBio = mergedData.bio || null
+  const extractedLocation = mergedData.location || null
+  const extractedGitHubUrl = mergedData.html_url || null
 
   try {
     // 先查询现有用户，判断哪些字段需要更新

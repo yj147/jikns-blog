@@ -88,10 +88,12 @@ export async function GET(request: NextRequest) {
 
         try {
           // 同步用户数据到数据库
+          // 传递 identities 以获取完整的 OAuth 数据（user_metadata 可能不完整）
           const syncedUser = await syncUserFromAuth({
             id: session.user.id,
             email: session.user.email,
             user_metadata: session.user.user_metadata,
+            identities: session.user.identities,
           })
           // 同步成功后，使用户资料缓存失效，确保页面显示最新数据
           try {
