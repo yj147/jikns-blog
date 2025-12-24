@@ -53,12 +53,13 @@ function AvatarImage({
   // 签名 URL 也需要 unoptimized，避免 Next.js Image 优化器处理
   const shouldUnoptimize = (unoptimized ?? isSvg) || isDataUrl || isLocalSupabase || isSignedUrl
 
-  // 本地开发环境使用原生 img 标签，避免 Next.js Image 与 Radix Avatar 的时序冲突
-  if (isLocalSupabase) {
+  // 本地开发环境或签名 URL 使用原生 img 标签
+  // 避免 Next.js Image 与 Radix Avatar 的时序冲突导致图片无法显示
+  if (isLocalSupabase || isSignedUrl) {
     return (
       <AvatarPrimitive.Image
         data-slot="avatar-image"
-        className={cn("aspect-square size-full", className)}
+        className={cn("aspect-square size-full object-cover", className)}
         src={resolvedSrc}
         alt={alt}
       />
