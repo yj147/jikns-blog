@@ -626,6 +626,28 @@ export async function syncUserFromAuth(authUser: SupabaseUser): Promise<User> {
       select: { name: true, avatarUrl: true, bio: true, location: true, socialLinks: true },
     })
 
+    // 调试日志：查看 OAuth 返回的 metadata 和现有用户字段
+    authLogger.info("syncUserFromAuth 调试信息", {
+      userId: authUser.id,
+      oauthMetadata: metadata,
+      extractedFields: {
+        name: extractedName,
+        avatarUrl: extractedAvatarUrl,
+        bio: extractedBio,
+        location: extractedLocation,
+        githubUrl: extractedGitHubUrl,
+      },
+      existingUser: existingUser
+        ? {
+            name: existingUser.name,
+            avatarUrl: existingUser.avatarUrl,
+            bio: existingUser.bio,
+            location: existingUser.location,
+            socialLinks: existingUser.socialLinks,
+          }
+        : null,
+    })
+
     if (!existingUser) {
       // 首次登录：创建用户，填充所有可用字段
       const socialLinks = extractedGitHubUrl ? { github: extractedGitHubUrl } : undefined
