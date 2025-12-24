@@ -47,6 +47,13 @@ export class SecurityMiddleware {
         "/api/subscribe/verify",
         "/api/subscribe/unsubscribe",
         "/api/cron/email-queue",
+        // 公开 API 端点 - 这些路由已有自己的认证检查
+        "/api/activities",
+        "/api/comments",
+        "/api/likes",
+        "/api/posts",
+        "/api/search",
+        "/api/tags",
       ],
     },
     xss: {
