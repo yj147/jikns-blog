@@ -42,7 +42,12 @@ type CspDirectives = Record<string, string[]>
 // 生产基线：Next.js hydration 和主题切换需要 'unsafe-inline'
 export const CSP_DIRECTIVES: Readonly<CspDirectives> = {
   "default-src": ["'self'"],
-  "script-src": ["'self'", "'unsafe-inline'", "https://unpkg.com"],
+  "script-src": [
+    "'self'",
+    "'unsafe-inline'",
+    "https://unpkg.com",
+    "https://static.cloudflareinsights.com",
+  ],
   "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
   "img-src": [
     "'self'",

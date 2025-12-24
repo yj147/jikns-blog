@@ -176,7 +176,7 @@ const nextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://unpkg.com",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "img-src 'self' data: blob: https://*.supabase.co http://localhost:* http://127.0.0.1:* https://avatars.githubusercontent.com https://github.com https://api.dicebear.com https://picsum.photos",
               "font-src 'self' https://fonts.gstatic.com",
