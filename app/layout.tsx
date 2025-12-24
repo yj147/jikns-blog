@@ -7,6 +7,8 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "./providers/auth-provider"
 import { SwrProvider } from "./providers/swr-provider"
 import { geistSans, manrope, lora } from "./fonts"
+import { SpeedInsights } from "@vercel/speed-insights/next"
+import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 
 // 导入 EventEmitter 优化配置
@@ -50,6 +52,8 @@ export default function RootLayout({
             <Toaster />
           </ThemeProvider>
         </SwrProvider>
+        <SpeedInsights />
+        <Analytics />
       </body>
     </html>
   )
