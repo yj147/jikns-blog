@@ -71,47 +71,10 @@ export default defineConfig({
     // 启用隔离模式，每个测试文件独立环境
     isolate: true,
 
-    // 测试文件匹配模式 - 扩展测试覆盖范围
+    // 测试文件匹配模式 - 简化为通用 glob
     include: includeFromEnv?.length
       ? includeFromEnv
-      : [
-          "tests/auth-core-stable.test.ts",
-          "tests/security/phase4-basic.test.ts",
-          "tests/unit/utils-basic.test.ts",
-          "tests/unit/utils.test.ts",
-          "tests/unit/notification-service.test.ts",
-          "tests/unit/notification-components.test.tsx",
-          "tests/unit/email-queue.test.ts",
-          "tests/unit/email-queue-cron.test.ts",
-          "tests/unit/realtime-notifications.test.ts",
-          "tests/unit/activity-tags.test.ts",
-          "tests/unit/email-subscription.test.ts",
-          "tests/unit/email-subscription.test.tsx",
-          "tests/unit/search-tokenizer.test.ts",
-          "tests/unit/prisma-token-extension.test.ts",
-          "tests/unit/schema-validation.test.ts",
-          "tests/unit/admin-settings-page.test.tsx",
-          "tests/unit/profile-*.test.{ts,tsx}",
-          "tests/unit/likes-*.test.{ts,tsx}",
-          "tests/unit/lib/realtime/**/*.test.ts",
-          readingTimeTestPattern,
-          "tests/middleware/auth-middleware.test.ts",
-          "tests/auth/**/*.test.ts",
-          "tests/api/posts-crud.test.ts",
-          "tests/actions/**/*.test.ts",
-          "tests/api/**/*.test.ts",
-          "tests/api/**/*.spec.ts",
-          "tests/repos/**/*.test.ts",
-          "tests/services/**/*.test.ts",
-          "tests/unit/scripts/**/*.test.ts",
-          "tests/components/**/*.test.{ts,tsx}",
-          "tests/components/**/*.spec.{ts,tsx}",
-          "tests/hooks/**/*.test.{ts,tsx}",
-          "tests/ui/**/*.test.{ts,tsx}",
-          "tests/ui/**/*.spec.{ts,tsx}",
-          "tests/integration/**/*.test.{ts,tsx}",
-          "tests/integration/subscribe-api.test.ts",
-        ],
+      : ["tests/**/*.test.{ts,tsx}", "tests/**/*.spec.{ts,tsx}"],
 
     // 排除不稳定的测试文件
     exclude: [

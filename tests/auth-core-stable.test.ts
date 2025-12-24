@@ -143,7 +143,7 @@ describe("核心认证功能稳定性测试", () => {
 
       const { requireAuth } = await import("@/lib/auth")
 
-      await expect(requireAuth()).rejects.toThrow("用户未登录")
+      await expect(requireAuth()).rejects.toThrow("请先登录")
     })
   })
 
