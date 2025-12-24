@@ -72,6 +72,12 @@ export function getOptimizedImageUrl(
     return normalizedSrc
   }
 
+  // 签名 URL 不进行 Render API 转换，因为 Supabase Image Transformation
+  // 对签名 URL 的支持不稳定，可能导致图片无法加载
+  if (matchedSegment.object.includes("/object/sign/")) {
+    return src
+  }
+
   // 在本地开发环境禁用图片优化，因为 Supabase 本地开发不支持 Render API
   const isLocalDev = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1"
   if (isLocalDev) {
