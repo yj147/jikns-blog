@@ -1,3 +1,4 @@
+import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Toaster } from "@/components/ui/sonner"
 import { AuthStateListener } from "@/components/auth-state-listener"
 import ErrorBoundary from "@/components/error-boundary"
@@ -50,6 +51,7 @@ export default function RootLayout({
             <Toaster />
           </ThemeProvider>
         </SwrProvider>
+        <SpeedInsights />
       </body>
     </html>
   )
