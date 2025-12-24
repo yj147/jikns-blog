@@ -593,39 +593,17 @@ async function persistAvatarUrl({
     select: { id: true, avatarUrl: true },
   })
 
+  // Metadata 同步是次要功能，失败不应阻止头像更新
   try {
     await mergeSupabaseUserMetadata(supabaseAdmin, targetUserId, { avatar_url: uploadedUrl })
   } catch (metadataError) {
-    try {
-      await prisma.user.update({
-        where: { id: targetUserId },
-        data: { avatarUrl: existing.avatarUrl },
-      })
-      await refreshUserCache(targetUserId)
-    } catch (rollbackError) {
-      logger.error(
-        "头像元数据同步失败且数据库回滚失败",
-        {
-          module: "app/actions/settings",
-          action: "updateAvatar",
-          userId: targetUserId,
-          previousAvatar: existing.avatarUrl,
-        },
-        rollbackError
-      )
-    }
-
-    logger.error(
-      "头像元数据同步失败",
-      { module: "app/actions/settings", action: "updateAvatar", userId: targetUserId },
-      metadataError as Error
-    )
-
-    return {
-      success: false,
-      error: "头像元数据同步失败，请稍后重试",
-      code: "METADATA_SYNC_FAILED",
-    }
+    logger.warn("头像元数据同步失败（不影响头像更新）", {
+      module: "app/actions/settings",
+      action: "updateAvatar",
+      userId: targetUserId,
+      error: metadataError instanceof Error ? metadataError.message : String(metadataError),
+    })
+    // 不回滚数据库，metadata 同步失败不是关键错误
   }
 
   await cleanupOldAvatar(existing.avatarUrl, targetUserId, actorUserId, cookieHeader)
