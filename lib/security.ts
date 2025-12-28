@@ -462,18 +462,19 @@ export function validateRequestOrigin(request: NextRequest): boolean {
   }
 
   // 生产/其他环境严格验证
+  const requestOrigin = normalizeOrigin(request.nextUrl.origin)
   const siteUrl = normalizeOrigin(process.env.NEXT_PUBLIC_SITE_URL ?? "")
-  if (!siteUrl) {
-    logger.warn("Origin validation failed: NEXT_PUBLIC_SITE_URL is not configured")
-    return false
-  }
 
   const extraOrigins = (process.env.ALLOWED_ORIGINS ?? "")
     .split(",")
     .map((value) => normalizeOrigin(value))
     .filter((value): value is string => Boolean(value))
 
-  const allowedOrigins = Array.from(new Set([siteUrl, ...extraOrigins]))
+  const allowedOrigins = Array.from(
+    new Set(
+      [requestOrigin, siteUrl, ...extraOrigins].filter((value): value is string => Boolean(value))
+    )
+  )
 
   const validateOrigin = (testOrigin: string | null): boolean => {
     const normalized = normalizeOrigin(testOrigin)

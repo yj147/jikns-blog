@@ -245,6 +245,10 @@ function createPrismaClient(): PrismaClient {
         url: process.env.DATABASE_URL,
       },
     },
+    transactionOptions: {
+      timeout: 20_000,
+      maxWait: 5_000,
+    },
   }).$extends(searchTokenExtension) as PrismaClient
 }
 

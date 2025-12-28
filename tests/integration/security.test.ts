@@ -3,7 +3,7 @@
  * 测试 CSRF 保护、XSS 防护和会话安全管理
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest"
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import { NextRequest, NextResponse } from "next/server"
 import {
   CSRFProtection,
@@ -210,6 +210,23 @@ describe("Phase 4.1 安全性增强测试", () => {
   })
 
   describe("速率限制测试", () => {
+    const prevNodeEnv = process.env.NODE_ENV
+    const prevDisableRateLimit = process.env.DISABLE_RATE_LIMIT
+
+    beforeEach(() => {
+      process.env.NODE_ENV = "production"
+      delete process.env.DISABLE_RATE_LIMIT
+    })
+
+    afterEach(() => {
+      process.env.NODE_ENV = prevNodeEnv
+      if (prevDisableRateLimit === undefined) {
+        delete process.env.DISABLE_RATE_LIMIT
+      } else {
+        process.env.DISABLE_RATE_LIMIT = prevDisableRateLimit
+      }
+    })
+
     it("应该允许正常频率的请求", () => {
       const identifier = "test-ip-1"
       const result = RateLimiter.checkRateLimit(identifier, 10, 60000)
@@ -249,6 +266,50 @@ describe("Phase 4.1 安全性增强测试", () => {
   })
 
   describe("请求来源验证测试", () => {
+    it("应该在缺少 NEXT_PUBLIC_SITE_URL 时仍允许同源请求", () => {
+      const prevSiteUrl = process.env.NEXT_PUBLIC_SITE_URL
+      delete process.env.NEXT_PUBLIC_SITE_URL
+
+      try {
+        const request = new NextRequest("http://localhost:3000/api/test", {
+          headers: {
+            origin: "http://localhost:3000",
+          },
+        })
+
+        const isValid = validateRequestOrigin(request)
+        expect(isValid).toBe(true)
+      } finally {
+        if (prevSiteUrl === undefined) {
+          delete process.env.NEXT_PUBLIC_SITE_URL
+        } else {
+          process.env.NEXT_PUBLIC_SITE_URL = prevSiteUrl
+        }
+      }
+    })
+
+    it("应该允许与请求 URL 同源的 origin，即使 NEXT_PUBLIC_SITE_URL 配置不同", () => {
+      const prevSiteUrl = process.env.NEXT_PUBLIC_SITE_URL
+      process.env.NEXT_PUBLIC_SITE_URL = "https://example.com"
+
+      try {
+        const request = new NextRequest("https://www.example.com/api/test", {
+          headers: {
+            origin: "https://www.example.com",
+          },
+        })
+
+        const isValid = validateRequestOrigin(request)
+        expect(isValid).toBe(true)
+      } finally {
+        if (prevSiteUrl === undefined) {
+          delete process.env.NEXT_PUBLIC_SITE_URL
+        } else {
+          process.env.NEXT_PUBLIC_SITE_URL = prevSiteUrl
+        }
+      }
+    })
+
     it("应该验证有效的请求来源", () => {
       const request = new NextRequest("http://localhost:3000/api/test", {
         headers: {
