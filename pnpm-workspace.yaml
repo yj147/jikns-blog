@@ -1,3 +1,7 @@
+# 非 monorepo 项目，使用空 packages
+packages: []
+
+# 忽略特定依赖的构建
 ignoredBuiltDependencies:
   - bcrypt
 
