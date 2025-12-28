@@ -36,6 +36,12 @@ jobs:
       - name: "📥 安装依赖"
         run: pnpm install --frozen-lockfile
 
+      - name: "🧬 生成 Prisma Client"
+        run: pnpm db:generate
+        env:
+          DATABASE_URL: postgresql://prisma:prisma@localhost:5432/prisma?schema=public
+          DIRECT_DATABASE_URL: postgresql://prisma:prisma@localhost:5432/prisma?schema=public
+
       - name: "🔍 ESLint 代码规范检查"
         run: pnpm lint:check --max-warnings 1000
 
