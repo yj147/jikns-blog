@@ -5,11 +5,10 @@
 
 "use client"
 
-import { useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useCallback } from "react"
 import { BlogPagination } from "./blog-pagination"
 import { PaginationMeta } from "@/types/blog"
-import { createBlogListUrl, parseSearchParams } from "@/lib/utils/blog-helpers"
 
 interface ClientPaginationProps {
   pagination: PaginationMeta
@@ -18,23 +17,17 @@ interface ClientPaginationProps {
 
 export function ClientPagination({ pagination, className }: ClientPaginationProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
 
   const handlePageChange = useCallback(
     (newPage: number) => {
-      const currentParams = parseSearchParams(searchParams)
+      const params = new URLSearchParams(searchParams.toString())
+      params.set("page", String(newPage))
 
-      const url = createBlogListUrl({
-        page: newPage,
-        q: currentParams.q,
-        tag: currentParams.tag,
-        sort: currentParams.sort,
-        author: currentParams.author,
-      })
-
-      router.push(url)
+      router.push(`${pathname}?${params.toString()}`)
     },
-    [searchParams, router]
+    [pathname, router, searchParams]
   )
 
   return (

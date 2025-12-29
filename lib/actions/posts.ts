@@ -750,9 +750,9 @@ export async function getPost(
   options?: { incrementView?: boolean }
 ): Promise<ApiResponse<PostResponse>> {
   try {
-    // 判断是 slug 还是 ID
-    const isId = slugOrId.length > 20 // cuid 长度通常大于20
-    const where = isId ? { id: slugOrId } : { slug: slugOrId }
+    // Post.id 是 UUID；slug 可能很长，不能用长度猜测
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slugOrId)
+    const where = isUuid ? { id: slugOrId } : { slug: slugOrId }
 
     const post = await prisma.post.findUnique({
       where,

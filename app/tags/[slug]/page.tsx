@@ -11,6 +11,7 @@ import { getTag } from "@/lib/actions/tags"
 import { getPosts } from "@/lib/actions/posts"
 import { BlogPostCard } from "@/components/blog/blog-post-card"
 import { ClientPagination } from "@/components/blog/client-pagination"
+import { TagPostsSort } from "@/components/tags/tag-posts-sort"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -20,7 +21,7 @@ import { logger } from "@/lib/utils/logger"
 
 interface TagDetailPageProps {
   params: Promise<{ slug: string }>
-  searchParams: Promise<{ page?: string }>
+  searchParams: Promise<{ page?: string; sort?: string }>
 }
 
 const resolveTag = cache(async (slug: string) => {
@@ -58,9 +59,13 @@ export async function generateMetadata({ params }: TagDetailPageProps): Promise<
 
 export default async function TagDetailPage({ params, searchParams }: TagDetailPageProps) {
   const { slug } = await params
-  const { page: pageParam } = await searchParams
+  const { page: pageParam, sort: sortParam } = await searchParams
   const parsedPage = Number.parseInt(pageParam ?? "", 10)
   const currentPage = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1
+  const orderBy = sortParam === "viewCount" ? "viewCount" : "publishedAt"
+  const order = "desc"
+  const sortValue: "publishedAt" | "viewCount" =
+    orderBy === "viewCount" ? "viewCount" : "publishedAt"
 
   // 获取标签信息
   const tag = await resolveTag(slug)
@@ -75,8 +80,8 @@ export default async function TagDetailPage({ params, searchParams }: TagDetailP
     limit: 10,
     tag: slug,
     published: true,
-    orderBy: "publishedAt",
-    order: "desc",
+    orderBy,
+    order,
   })
 
   let posts: PostListItem[] = []
@@ -188,6 +193,9 @@ export default async function TagDetailPage({ params, searchParams }: TagDetailP
           </Card>
         ) : (
           <>
+            <div className="mb-6 flex items-center justify-end">
+              <TagPostsSort value={sortValue} />
+            </div>
             <div className="mb-8 space-y-6">
               {posts.map((post, index) => (
                 <BlogPostCard key={post.id} post={post} index={index} />

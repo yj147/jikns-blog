@@ -3,6 +3,7 @@ import { EmailSubscriptionStatus } from "@/lib/generated/prisma"
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/services/resend"
 import VerificationEmail from "@/emails/verification-email"
+import { logger } from "@/lib/utils/logger"
 
 const VERIFY_TOKEN_TTL_MS =
   Number(process.env.EMAIL_VERIFY_TTL_MS ?? 24 * 60 * 60 * 1000) || 24 * 60 * 60 * 1000
@@ -43,6 +44,14 @@ const generateToken = (): TokenPair => {
     token,
     hash: hashToken(token),
   }
+}
+
+function isEmailServiceConfigError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  return (
+    error.message === "Resend client is not configured" ||
+    error.message === "EMAIL_FROM is not configured"
+  )
 }
 
 async function sendVerificationEmail(input: {
@@ -98,11 +107,21 @@ export async function createSubscription(email: string, userId?: string) {
     ? await prisma.emailSubscriber.update({ where: { id: existing.id }, data })
     : await prisma.emailSubscriber.create({ data })
 
-  await sendVerificationEmail({
-    email: normalizedEmail,
-    token: verifyToken.token,
-    unsubscribeToken: unsubscribeToken.token,
-  })
+  try {
+    await sendVerificationEmail({
+      email: normalizedEmail,
+      token: verifyToken.token,
+      unsubscribeToken: unsubscribeToken.token,
+    })
+  } catch (error) {
+    if (!isEmailServiceConfigError(error)) {
+      throw error
+    }
+
+    logger.warn("Email service not configured; skipping verification email", {
+      email: normalizedEmail,
+    })
+  }
 
   return {
     subscriber,
@@ -168,4 +187,32 @@ export async function unsubscribe(token: string) {
   })
 
   return updated
+}
+
+export async function unsubscribeByEmail(email: string) {
+  if (!email || !isValidEmail(email)) {
+    throw new SubscriptionError("邮箱格式不正确", "INVALID_EMAIL")
+  }
+
+  const normalized = normalizeEmail(email)
+  const subscriber = await prisma.emailSubscriber.findUnique({
+    where: { email: normalized },
+  })
+
+  if (!subscriber) {
+    return null
+  }
+
+  if (subscriber.status === EmailSubscriptionStatus.UNSUBSCRIBED) {
+    return subscriber
+  }
+
+  return prisma.emailSubscriber.update({
+    where: { id: subscriber.id },
+    data: {
+      status: EmailSubscriptionStatus.UNSUBSCRIBED,
+      verifyTokenHash: null,
+      verifyExpiresAt: null,
+    },
+  })
 }

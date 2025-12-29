@@ -51,8 +51,13 @@ export default function SubscribeForm() {
         return
       }
 
+      const subscribeStatus = result?.data?.status as string | undefined
       setStatus("success")
-      setMessage("订阅请求已提交，请查收邮箱完成验证。")
+      setMessage(
+        subscribeStatus === "already_verified"
+          ? "该邮箱已订阅，无需重复提交。"
+          : "订阅请求已提交，请查收邮箱完成验证。"
+      )
       form.reset()
     } catch (error) {
       setStatus("error")
