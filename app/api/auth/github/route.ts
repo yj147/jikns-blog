@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { createRouteHandlerClient } from "@/lib/supabase"
-import { generateOAuthState, setOAuthStateCookie, validateRedirectUrl } from "@/lib/auth"
+import { validateRedirectUrl } from "@/lib/auth"
 import { RateLimiter } from "@/lib/security"
 import { authLogger } from "@/lib/utils/logger"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
@@ -35,8 +35,6 @@ async function handlePost(request: NextRequest) {
     // 验证重定向URL安全性
     const safeRedirectTo = validateRedirectUrl(redirectTo) ? redirectTo : "/"
 
-    const stateToken = generateOAuthState()
-
     // 创建 Supabase 客户端
     const supabase = await createRouteHandlerClient()
     // 构建 OAuth 重定向 URL
@@ -52,7 +50,6 @@ async function handlePost(request: NextRequest) {
       options: {
         redirectTo: callbackUrl.toString(),
         scopes: "read:user user:email", // 请求基本用户信息和邮箱权限
-        queryParams: { state: stateToken.state },
       },
     })
 
@@ -103,7 +100,6 @@ async function handlePost(request: NextRequest) {
       },
       { status: 200 }
     )
-    setOAuthStateCookie(response, stateToken)
     return response
   } catch (error) {
     authLogger.error("GitHub OAuth API 异常", { clientIP }, error)
@@ -128,8 +124,6 @@ async function handleGet(request: NextRequest) {
     // 验证重定向URL安全性
     const safeRedirectTo = validateRedirectUrl(redirectTo) ? redirectTo : "/"
 
-    const stateToken = generateOAuthState()
-
     // 创建 Supabase 客户端
     const supabase = await createRouteHandlerClient()
     // 构建回调 URL
@@ -145,7 +139,6 @@ async function handleGet(request: NextRequest) {
       options: {
         redirectTo: callbackUrl.toString(),
         scopes: "read:user user:email",
-        queryParams: { state: stateToken.state },
       },
     })
 
@@ -154,10 +147,8 @@ async function handleGet(request: NextRequest) {
       return NextResponse.redirect(new URL(`/login?error=oauth_start_failed`, request.url))
     }
 
-    // 直接重定向到 GitHub OAuth 页面（写入 state cookie 用于回调校验）
-    const response = NextResponse.redirect(data.url)
-    setOAuthStateCookie(response, stateToken)
-    return response
+    // 直接重定向到 GitHub OAuth 页面
+    return NextResponse.redirect(data.url)
   } catch (error) {
     authLogger.error("GitHub OAuth 重定向异常", {}, error)
     return NextResponse.redirect(new URL("/login?error=oauth_redirect_failed", request.url))
