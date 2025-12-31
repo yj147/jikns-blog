@@ -5,11 +5,19 @@ import { listActivities } from "@/lib/repos/activity-repo"
 import type { ActivityListItem } from "@/lib/repos/activity-repo"
 import type { ActivityWithAuthor } from "@/types/activity"
 import { signActivityListItems } from "@/lib/storage/signed-url"
+import { unstable_cache } from "next/cache"
 
 const INITIAL_LIMIT = 10
+const INITIAL_LATEST_CACHE_SECONDS = 30
 type FeedTab = "latest" | "trending" | "following"
 
 export const dynamic = "force-dynamic"
+
+const getCachedLatestInitialActivities = unstable_cache(
+  async () => fetchInitialActivities("latest", null),
+  ["feed", "initial", "latest"],
+  { revalidate: INITIAL_LATEST_CACHE_SECONDS }
+)
 
 export default async function FeedPage({
   searchParams,
@@ -25,17 +33,26 @@ export default async function FeedPage({
 
   // `/feed` 首屏不应该被认证链路阻塞：默认渲染最新流；关注流由客户端在已登录后按需加载。
   const initialTab: FeedTab = "latest"
-  const initialResult = await fetchInitialActivities(initialTab, null, highlightActivityId)
+  const baseInitialResult = await getCachedLatestInitialActivities()
+  let initialActivities = baseInitialResult.activities
+
+  if (highlightActivityId && !initialActivities.some((item) => item.id === highlightActivityId)) {
+    const highlighted = await fetchHighlightedActivity(highlightActivityId)
+    if (highlighted) {
+      const [signedHighlighted] = await signActivityListItems([highlighted])
+      initialActivities = [signedHighlighted as ActivityWithAuthor, ...initialActivities]
+    }
+  }
 
   return (
     <FeedPageClient
       featureFlags={featureFlags}
-      initialActivities={initialResult.activities}
+      initialActivities={initialActivities}
       initialPagination={{
         limit: INITIAL_LIMIT,
-        total: initialResult.totalCount,
-        hasMore: initialResult.hasMore,
-        nextCursor: initialResult.nextCursor,
+        total: baseInitialResult.totalCount,
+        hasMore: baseInitialResult.hasMore,
+        nextCursor: baseInitialResult.nextCursor,
       }}
       initialTab={initialTab}
       highlightActivityId={highlightActivityId}
