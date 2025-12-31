@@ -176,6 +176,11 @@ function isSupabaseSessionMissingError(error: any): boolean {
   return false
 }
 
+function isSupabaseSessionCookie(name?: string): boolean {
+  if (!name || !name.startsWith("sb-")) return false
+  return name.includes("-auth-token") || name.includes("-refresh-token")
+}
+
 /**
  * 获取错误消息
  */
@@ -262,41 +267,81 @@ export async function middleware(request: NextRequest) {
       return attachTraceHeaders(securityCheckResult)
     }
 
+    const requiresAuth = matchesPath(pathname, PATH_PERMISSIONS.authenticated)
+    if (requiresAuth) {
+      const hasSessionCookie = request.cookies.getAll().some((cookie) => {
+        if (!isSupabaseSessionCookie(cookie.name)) return false
+        return cookie.value.length > 0
+      })
+
+      if (!hasSessionCookie) {
+        return attachTraceHeaders(createUnauthorizedResponse(request, "AUTHENTICATION_REQUIRED"))
+      }
+    }
+
     // 安全检查已在 SecurityMiddleware.processSecurityChecks() 中完成
     // 移除重复的速率限制检查以避免双重消耗配额
 
     // 创建 Supabase 客户端
     const response = NextResponse.next({ request: { headers: forwardedHeaders } })
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return request.cookies.get(name)?.value
-          },
-          set(name: string, value: string, options: any) {
-            response.cookies.set(name, value, options)
-          },
-          remove(name: string, options: any) {
-            response.cookies.delete(name)
-          },
-        },
-      }
-    )
 
     // 获取经过验证的用户信息
     let user: any = null
-    try {
-      const {
-        data: { user: fetchedUser },
-        error: userError,
-      } = await supabase.auth.getUser()
+    if (requiresAuth) {
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            get(name: string) {
+              return request.cookies.get(name)?.value
+            },
+            set(name: string, value: string, options: any) {
+              response.cookies.set(name, value, options)
+            },
+            remove(name: string, options: any) {
+              response.cookies.delete(name)
+            },
+          },
+        }
+      )
 
-      if (userError) {
-        if (!isSupabaseSessionMissingError(userError)) {
-          console.error("中间件用户验证错误:", userError)
-          // 用户认证错误时，区分 API 和页面请求
+      try {
+        const {
+          data: { user: fetchedUser },
+          error: userError,
+        } = await supabase.auth.getUser()
+
+        if (userError) {
+          if (!isSupabaseSessionMissingError(userError)) {
+            console.error("中间件用户验证错误:", userError)
+            // 用户认证错误时，区分 API 和页面请求
+            const isApiRequest = pathname.startsWith("/api/")
+            if (isApiRequest) {
+              return attachTraceHeaders(
+                NextResponse.json(
+                  {
+                    error: "用户未认证",
+                    code: "AUTHENTICATION_REQUIRED",
+                    timestamp: new Date().toISOString(),
+                  },
+                  { status: 401 }
+                )
+              )
+            } else {
+              // 页面请求重定向到登录页
+              const loginUrl = new URL("/login", request.url)
+              loginUrl.searchParams.set("redirect", pathname)
+              return attachTraceHeaders(createRedirectResponse(loginUrl.toString(), request))
+            }
+          }
+        } else {
+          user = fetchedUser
+        }
+      } catch (error) {
+        if (!isSupabaseSessionMissingError(error)) {
+          console.error("中间件用户验证异常:", error)
+          // 用户认证异常时，区分 API 和页面请求
           const isApiRequest = pathname.startsWith("/api/")
           if (isApiRequest) {
             return attachTraceHeaders(
@@ -316,36 +361,8 @@ export async function middleware(request: NextRequest) {
             return attachTraceHeaders(createRedirectResponse(loginUrl.toString(), request))
           }
         }
-      } else {
-        user = fetchedUser
-      }
-    } catch (error) {
-      if (!isSupabaseSessionMissingError(error)) {
-        console.error("中间件用户验证异常:", error)
-        // 用户认证异常时，区分 API 和页面请求
-        const isApiRequest = pathname.startsWith("/api/")
-        if (isApiRequest) {
-          return attachTraceHeaders(
-            NextResponse.json(
-              {
-                error: "用户未认证",
-                code: "AUTHENTICATION_REQUIRED",
-                timestamp: new Date().toISOString(),
-              },
-              { status: 401 }
-            )
-          )
-        } else {
-          // 页面请求重定向到登录页
-          const loginUrl = new URL("/login", request.url)
-          loginUrl.searchParams.set("redirect", pathname)
-          return attachTraceHeaders(createRedirectResponse(loginUrl.toString(), request))
-        }
       }
     }
-
-    // 检查是否需要认证（/admin 仅要求登录，角色校验由 Server Component / API 负责）
-    const requiresAuth = matchesPath(pathname, PATH_PERMISSIONS.authenticated)
 
     if (!user && requiresAuth) {
       // 未认证用户访问需认证路径
