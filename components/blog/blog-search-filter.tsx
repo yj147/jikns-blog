@@ -76,14 +76,19 @@ export function BlogSearchFilter({ className = "", popularTags }: BlogSearchFilt
 
       const cleanQuery = sanitizeSearchQuery(searchQuery)
       const [sortBy, sortOrder] = selectedSort.split("-")
+      const normalizedTag = selectedTag.trim()
+      const isDefault =
+        cleanQuery === "" && normalizedTag === "" && selectedSort === "publishedAt-desc"
 
-      const url = createBlogListUrl({
-        q: cleanQuery,
-        tag: selectedTag,
-        sort: sortBy,
-        order: sortOrder,
-        page: 1, // 搜索时重置到第一页
-      })
+      const url = isDefault
+        ? "/blog"
+        : createBlogListUrl({
+            q: cleanQuery || undefined,
+            tag: normalizedTag || undefined,
+            sort: sortBy,
+            order: sortOrder,
+            page: 1, // 搜索时重置到第一页
+          })
 
       pushIfChanged(url)
     },
@@ -96,14 +101,19 @@ export function BlogSearchFilter({ className = "", popularTags }: BlogSearchFilt
       const normalizedTag = tag ?? ""
       setSelectedTag(normalizedTag)
       const [sortBy, sortOrder] = selectedSort.split("-")
+      const cleanQuery = sanitizeSearchQuery(query)
+      const isDefault =
+        cleanQuery === "" && normalizedTag.trim() === "" && selectedSort === "publishedAt-desc"
 
-      const url = createBlogListUrl({
-        q: query,
-        tag: normalizedTag || undefined,
-        sort: sortBy,
-        order: sortOrder,
-        page: 1,
-      })
+      const url = isDefault
+        ? "/blog"
+        : createBlogListUrl({
+            q: cleanQuery || undefined,
+            tag: normalizedTag.trim() || undefined,
+            sort: sortBy,
+            order: sortOrder,
+            page: 1,
+          })
 
       pushIfChanged(url)
     },
@@ -115,14 +125,20 @@ export function BlogSearchFilter({ className = "", popularTags }: BlogSearchFilt
     (sortValue: string) => {
       setSelectedSort(sortValue)
       const [sortBy, sortOrder] = sortValue.split("-")
+      const cleanQuery = sanitizeSearchQuery(query)
+      const normalizedTag = selectedTag.trim()
+      const isDefault =
+        cleanQuery === "" && normalizedTag === "" && sortValue === "publishedAt-desc"
 
-      const url = createBlogListUrl({
-        q: query,
-        tag: selectedTag,
-        sort: sortBy,
-        order: sortOrder,
-        page: 1,
-      })
+      const url = isDefault
+        ? "/blog"
+        : createBlogListUrl({
+            q: cleanQuery || undefined,
+            tag: normalizedTag || undefined,
+            sort: sortBy,
+            order: sortOrder,
+            page: 1,
+          })
 
       pushIfChanged(url)
     },
