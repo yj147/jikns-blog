@@ -444,36 +444,26 @@ export async function signActivityListItems(
 ): Promise<ActivityListItem[]> {
   if (items.length === 0) return []
 
-  const avatarInputs = Array.from(
+  const signInputs = Array.from(
     new Set(
       items
-        .map((item) => item.author.avatarUrl)
+        .flatMap((item) => [item.author.avatarUrl, ...item.imageUrls])
         .filter((value): value is string => typeof value === "string" && value.length > 0)
     )
   )
 
-  const imageInputs = Array.from(new Set(items.flatMap((item) => item.imageUrls)))
+  const signedInputs = await createSignedUrls(signInputs)
 
-  const [signedAvatars, signedImages] = await Promise.all([
-    createSignedUrls(avatarInputs),
-    createSignedUrls(imageInputs),
-  ])
-
-  const avatarMap = new Map<string, string>()
-  avatarInputs.forEach((original, index) => {
-    avatarMap.set(original, signedAvatars[index] ?? original)
-  })
-
-  const imageMap = new Map<string, string>()
-  imageInputs.forEach((original, index) => {
-    imageMap.set(original, signedImages[index] ?? original)
+  const signedMap = new Map<string, string>()
+  signInputs.forEach((original, index) => {
+    signedMap.set(original, signedInputs[index] ?? original)
   })
 
   return items.map((item) => {
-    const signedAvatar = item.author.avatarUrl ? avatarMap.get(item.author.avatarUrl) : null
+    const signedAvatar = item.author.avatarUrl ? signedMap.get(item.author.avatarUrl) : null
     return {
       ...item,
-      imageUrls: item.imageUrls.map((url) => imageMap.get(url) ?? url),
+      imageUrls: item.imageUrls.map((url) => signedMap.get(url) ?? url),
       author: {
         ...item.author,
         avatarUrl: signedAvatar ?? item.author.avatarUrl,
