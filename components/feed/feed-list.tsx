@@ -1,12 +1,12 @@
 "use client"
 
-import { forwardRef, useCallback, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Loader2 } from "lucide-react"
 import { ActivityCard } from "@/components/activity-card"
 import { CommentList } from "@/components/activity/comment-list"
 import { LazyActivityCard } from "@/components/feed/lazy-activity-card"
-import { Virtuoso, type ListProps } from "@/components/common/virtual-list"
 import { Button } from "@/components/ui/button"
+import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
 import type { User as DatabaseUser } from "@/lib/generated/prisma"
 import { cn } from "@/lib/utils"
 import type { ActivityLikeState, ActivityWithAuthor } from "@/types/activity"
@@ -54,10 +54,20 @@ export function FeedList({
   const hasEffectiveActivities = hasDisplayActivities || initialActivities.length > 0
   const effectiveActivities = hasDisplayActivities ? activities : initialActivities
 
+  const [sentinelRef, isSentinelVisible] = useIntersectionObserver<HTMLDivElement>({
+    rootMargin: "400px",
+  })
+
   const handleEndReached = useCallback(() => {
     if (!hasMore || isLoading) return
     onLoadMore()
   }, [hasMore, isLoading, onLoadMore])
+
+  useEffect(() => {
+    if (!isSentinelVisible) return
+    if (typeof window !== "undefined" && window.scrollY === 0) return
+    handleEndReached()
+  }, [handleEndReached, isSentinelVisible])
 
   const handleComment = useCallback((id: string) => {
     setExpandedComments((prev) => {
@@ -166,35 +176,19 @@ export function FeedList({
 
   return (
     <>
-      <Virtuoso
-        useWindowScroll
-        data={effectiveActivities}
-        itemContent={renderItem}
-        endReached={handleEndReached}
-        computeItemKey={(_index: number, activity: ActivityWithAuthor) => activity.id}
-        increaseViewportBy={{ top: 200, bottom: 400 }}
-        components={{
-          List: forwardRef<HTMLDivElement, ListProps & { className?: string }>(
-            function FeedListContainer({ className, ...props }, ref) {
-              return (
-                <div
-                  {...props}
-                  ref={ref}
-                  className={cn("divide-border min-h-[50vh] divide-y", className)}
-                />
-              )
-            }
-          ),
-        }}
-      />
-      {hasMore && baseActivitiesCount > 0 && (
-        <div className="border-border flex justify-center border-t py-8">
+      <div className="divide-border min-h-[50vh] divide-y">
+        {effectiveActivities.map((activity, index) => renderItem(index, activity))}
+      </div>
+
+      {hasMore && baseActivitiesCount > 0 ? (
+        <div className="border-border flex flex-col items-center gap-6 border-t py-8">
+          <div ref={sentinelRef} aria-hidden className="h-1 w-full" />
           <Button variant="outline" onClick={onLoadMore} disabled={isLoading}>
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             加载更多
           </Button>
         </div>
-      )}
+      ) : null}
     </>
   )
 }
