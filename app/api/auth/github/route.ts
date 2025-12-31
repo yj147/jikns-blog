@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { createRouteHandlerClient } from "@/lib/supabase"
-import { validateRedirectUrl, generateOAuthState, setOAuthStateCookie } from "@/lib/auth"
+import { generateOAuthState, setOAuthStateCookie, validateRedirectUrl } from "@/lib/auth"
 import { RateLimiter } from "@/lib/security"
 import { authLogger } from "@/lib/utils/logger"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
@@ -35,22 +35,22 @@ async function handlePost(request: NextRequest) {
     // 验证重定向URL安全性
     const safeRedirectTo = validateRedirectUrl(redirectTo) ? redirectTo : "/"
 
+    const stateToken = generateOAuthState()
+
     // 创建 Supabase 客户端
     const supabase = await createRouteHandlerClient()
-    // 生成 state 并构建 OAuth 重定向 URL
-    const stateToken = generateOAuthState()
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
-    const callbackUrl = `${baseUrl}/auth/callback`
-    const finalCallbackUrl =
-      safeRedirectTo !== "/"
-        ? `${callbackUrl}?redirect_to=${encodeURIComponent(safeRedirectTo)}`
-        : callbackUrl
+    // 构建 OAuth 重定向 URL
+    const baseUrl = new URL(request.url).origin
+    const callbackUrl = new URL(`${baseUrl}/auth/callback`)
+    if (safeRedirectTo !== "/") {
+      callbackUrl.searchParams.set("redirect_to", safeRedirectTo)
+    }
 
     // 使用 Supabase 启动 GitHub OAuth
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "github",
       options: {
-        redirectTo: finalCallbackUrl,
+        redirectTo: callbackUrl.toString(),
         scopes: "read:user user:email", // 请求基本用户信息和邮箱权限
         queryParams: { state: stateToken.state },
       },
@@ -91,7 +91,7 @@ async function handlePost(request: NextRequest) {
         { status: 500 }
       )
     }
-    // 返回OAuth重定向URL并写入 state Cookie
+    // 返回 OAuth 重定向 URL
     const response = NextResponse.json(
       {
         success: true,
@@ -128,22 +128,22 @@ async function handleGet(request: NextRequest) {
     // 验证重定向URL安全性
     const safeRedirectTo = validateRedirectUrl(redirectTo) ? redirectTo : "/"
 
+    const stateToken = generateOAuthState()
+
     // 创建 Supabase 客户端
     const supabase = await createRouteHandlerClient()
-    // 生成 state 并构建回调URL
-    const stateToken = generateOAuthState()
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
-    const callbackUrl = `${baseUrl}/auth/callback`
-    const finalCallbackUrl =
-      safeRedirectTo !== "/"
-        ? `${callbackUrl}?redirect_to=${encodeURIComponent(safeRedirectTo)}`
-        : callbackUrl
+    // 构建回调 URL
+    const baseUrl = new URL(request.url).origin
+    const callbackUrl = new URL(`${baseUrl}/auth/callback`)
+    if (safeRedirectTo !== "/") {
+      callbackUrl.searchParams.set("redirect_to", safeRedirectTo)
+    }
 
     // 启动OAuth并直接重定向
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "github",
       options: {
-        redirectTo: finalCallbackUrl,
+        redirectTo: callbackUrl.toString(),
         scopes: "read:user user:email",
         queryParams: { state: stateToken.state },
       },
@@ -154,7 +154,7 @@ async function handleGet(request: NextRequest) {
       return NextResponse.redirect(new URL(`/login?error=oauth_start_failed`, request.url))
     }
 
-    // 直接重定向到GitHub OAuth页面并写入 state Cookie
+    // 直接重定向到 GitHub OAuth 页面（写入 state cookie 用于回调校验）
     const response = NextResponse.redirect(data.url)
     setOAuthStateCookie(response, stateToken)
     return response

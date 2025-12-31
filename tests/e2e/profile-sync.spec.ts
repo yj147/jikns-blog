@@ -7,7 +7,6 @@ import { test, expect, Page } from "@playwright/test"
 import { generateOAuthState } from "@/lib/auth/oauth-state"
 
 const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3999"
-process.env.OAUTH_STATE_SECRET = process.env.OAUTH_STATE_SECRET || "test-oauth-state-e2e"
 
 async function gotoCallbackWithState(page: Page, url: string) {
   const stateToken = generateOAuthState()
@@ -22,7 +21,7 @@ async function gotoCallbackWithState(page: Page, url: string) {
   await page.context().addCookies([
     {
       name: "oauth_state",
-      value: `${stateToken.state}.${stateToken.issuedAt}.${stateToken.signature}`,
+      value: `${stateToken.state}.${stateToken.issuedAt}`,
       url: `${SITE_ORIGIN}/auth/callback`,
       httpOnly: true,
       secure: SITE_ORIGIN.startsWith("https"),

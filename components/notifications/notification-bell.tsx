@@ -34,11 +34,22 @@ export function NotificationBell() {
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
   const [realtimeNotifications, setRealtimeNotifications] = useState<NotificationView[]>([])
+  const [idlePrefetchEnabled, setIdlePrefetchEnabled] = useState(false)
+
+  useEffect(() => {
+    if (!user) {
+      setIdlePrefetchEnabled(false)
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => setIdlePrefetchEnabled(true), 1500)
+    return () => window.clearTimeout(timeoutId)
+  }, [user])
 
   const { data, mutate, isLoading } = useSWR<NotificationApiResponse>(
-    user ? "/api/notifications?limit=5" : null,
+    user && (open || idlePrefetchEnabled) ? "/api/notifications?limit=5" : null,
     fetcher,
-    { refreshInterval: 45000 }
+    { refreshInterval: open ? 45000 : 0 }
   )
 
   const swrNotifications = useMemo(() => data?.data.items ?? [], [data?.data.items])

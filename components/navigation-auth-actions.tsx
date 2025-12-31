@@ -1,7 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import useSWR from "swr"
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -19,21 +18,8 @@ import NotificationBell from "@/components/notifications/notification-bell"
 
 export default function AuthActions() {
   const { user, loading } = useAuth()
-  const { data: apiUser, isLoading: apiLoading } = useSWR(
-    user ? null : "/api/user",
-    async (url: string) => {
-      const response = await fetch(url, { credentials: "include" })
-      if (!response.ok) return null
-      const { user: fetchedUser } = await response.json()
-      return fetchedUser ?? null
-    },
-    { revalidateOnFocus: false }
-  )
 
-  const effectiveUser = user ?? apiUser ?? null
-  const effectiveLoading = loading || apiLoading
-
-  if (effectiveLoading) {
+  if (loading) {
     return (
       <div className="flex items-center space-x-4">
         <div className="bg-muted h-8 w-8 animate-pulse rounded-full" />
@@ -41,15 +27,15 @@ export default function AuthActions() {
     )
   }
 
-  if (!effectiveUser) {
+  if (!user) {
     return (
       <div className="hidden items-center space-x-3 sm:flex">
-        <Link href="/login">
+        <Link href="/login" prefetch={false}>
           <Button variant="ghost" size="sm">
             登录
           </Button>
         </Link>
-        <Link href="/register">
+        <Link href="/register" prefetch={false}>
           <Button size="sm">注册</Button>
         </Link>
       </div>
@@ -59,7 +45,7 @@ export default function AuthActions() {
   return (
     <div className="hidden items-center space-x-4 sm:flex">
       <NotificationBell />
-      <ClientUserMenu user={effectiveUser} />
+      <ClientUserMenu user={user} />
     </div>
   )
 }
@@ -106,13 +92,13 @@ function ClientUserMenu({ user }: { user: any }) {
         </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link href="/profile" className="flex items-center">
+          <Link href="/profile" prefetch={false} className="flex items-center">
             <User className="mr-2 h-4 w-4" />
             <span>个人资料</span>
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href="/settings" className="flex items-center">
+          <Link href="/settings" prefetch={false} className="flex items-center">
             <Settings className="mr-2 h-4 w-4" />
             <span>设置</span>
           </Link>
@@ -121,7 +107,7 @@ function ClientUserMenu({ user }: { user: any }) {
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link href="/admin" className="flex items-center text-blue-600">
+              <Link href="/admin" prefetch={false} className="flex items-center text-blue-600">
                 <Shield className="mr-2 h-4 w-4" />
                 <span>管理后台</span>
               </Link>

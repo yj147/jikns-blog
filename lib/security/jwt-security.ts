@@ -18,14 +18,22 @@ import { logger } from "../utils/logger"
  * JWT 安全管理类
  */
 export class JWTSecurity {
-  private static readonly DEFAULT_CONFIG: JWTConfig = {
-    accessTokenSecret: JWTSecurity.requireEnv("JWT_ACCESS_SECRET"),
-    refreshTokenSecret: JWTSecurity.requireEnv("JWT_REFRESH_SECRET"),
-    accessTokenExpiresIn: 15 * 60, // 15 分钟
-    refreshTokenExpiresIn: 7 * 24 * 60 * 60, // 7 天
-    issuer: "jikns-blog",
-    audience: "jikns-blog",
-    algorithm: "HS256",
+  private static defaultConfig: JWTConfig | null = null
+
+  static get DEFAULT_CONFIG(): JWTConfig {
+    if (this.defaultConfig) return this.defaultConfig
+
+    this.defaultConfig = {
+      accessTokenSecret: JWTSecurity.requireEnv("JWT_ACCESS_SECRET"),
+      refreshTokenSecret: JWTSecurity.requireEnv("JWT_REFRESH_SECRET"),
+      accessTokenExpiresIn: 15 * 60, // 15 分钟
+      refreshTokenExpiresIn: 7 * 24 * 60 * 60, // 7 天
+      issuer: "jikns-blog",
+      audience: "jikns-blog",
+      algorithm: "HS256",
+    }
+
+    return this.defaultConfig
   }
 
   private static requireEnv(key: string): string {

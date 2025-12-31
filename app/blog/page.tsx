@@ -23,6 +23,8 @@ import { logger } from "@/lib/utils/logger"
 import { Sparkles, Newspaper } from "lucide-react"
 import { BlogListClient } from "@/components/blog/blog-list-client"
 
+export const revalidate = 60
+
 // 页面参数接口
 interface BlogPageProps {
   searchParams: Promise<BlogPageSearchParams>

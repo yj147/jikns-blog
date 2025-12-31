@@ -39,20 +39,34 @@ interface SuggestedUsersResponse {
   }
 }
 
+interface UseSuggestedUsersOptions {
+  enabled?: boolean
+}
+
 // API 请求工具
 const fetcher = async (url: string): Promise<SuggestedUsersResponse> => {
   const res = await fetch(url)
+  if (res.status === 401 || res.status === 403) {
+    return { success: false, data: [] }
+  }
   if (!res.ok) {
-    const error = await res.json()
-    throw new Error(error.error?.message || "获取推荐用户失败")
+    let message = "获取推荐用户失败"
+    try {
+      const error = await res.json()
+      message = error?.error?.message || error?.message || message
+    } catch {
+      // ignore non-json error
+    }
+    throw new Error(message)
   }
   return res.json()
 }
 
 // 获取推荐用户的 Hook
-export function useSuggestedUsers(limit: number = 5) {
+export function useSuggestedUsers(limit: number = 5, options?: UseSuggestedUsersOptions) {
+  const enabled = options?.enabled !== false
   const { data, error, isLoading, mutate } = useSWR<SuggestedUsersResponse>(
-    `/api/users/suggested?limit=${limit}`,
+    enabled ? `/api/users/suggested?limit=${limit}` : null,
     fetcher,
     {
       revalidateOnFocus: false,

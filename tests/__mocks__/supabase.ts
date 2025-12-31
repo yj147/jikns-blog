@@ -228,6 +228,14 @@ function buildServiceRoleClient() {
           data: { signedUrl: `https://storage.test/signed/${path}?e=${expiresIn}` },
           error: null,
         })),
+        createSignedUrls: vi.fn(async (paths: string[], expiresIn: number) => ({
+          data: paths.map((path) => ({
+            error: null,
+            path,
+            signedUrl: `https://storage.test/signed/${path}?e=${expiresIn}`,
+          })),
+          error: null,
+        })),
       })),
     },
   }

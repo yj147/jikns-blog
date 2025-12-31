@@ -17,13 +17,15 @@ export function HeroSection() {
         </div>
         <div className="flex gap-3">
           <Button asChild className="font-semibold shadow-md">
-            <Link href="/login">
+            <Link href="/login" prefetch={false}>
               加入社区
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
           </Button>
           <Button variant="outline" asChild className="bg-background/50">
-            <Link href="/about">了解更多</Link>
+            <Link href="/about" prefetch={false}>
+              了解更多
+            </Link>
           </Button>
         </div>
       </div>

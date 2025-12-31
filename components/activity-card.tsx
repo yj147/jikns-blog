@@ -85,7 +85,7 @@ function ActivityCardComponent(props: ActivityCardProps) {
 
       <div className="flex gap-4">
         <div className="shrink-0">
-          <Link href={`/profile/${activity.author.id ?? "#"}`}>
+          <Link href={`/profile/${activity.author.id ?? "#"}`} prefetch={false}>
             <Avatar className="h-10 w-10 transition-opacity hover:opacity-90">
               <AvatarImage src={avatarUrl} alt={authorName} />
               <AvatarFallback>{authorName.charAt(0).toUpperCase()}</AvatarFallback>
@@ -98,6 +98,7 @@ function ActivityCardComponent(props: ActivityCardProps) {
             <div className="flex items-center gap-1 text-[15px]">
               <Link
                 href={`/profile/${activity.author.id ?? "#"}`}
+                prefetch={false}
                 className="text-foreground font-bold hover:underline"
               >
                 {authorName}

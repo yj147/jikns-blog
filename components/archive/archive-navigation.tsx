@@ -35,14 +35,6 @@ export default function ArchiveNavigation({ years, currentYear }: ArchiveNavigat
     return () => window.removeEventListener("scroll", handleScroll)
   }, [isMobile])
 
-  useEffect(() => {
-    const toPrefetch = years.slice(0, Math.min(4, years.length))
-    toPrefetch.forEach((item) => {
-      const href = `/archive/${item.year}`
-      void router.prefetch(href)
-    })
-  }, [years, router])
-
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
@@ -83,7 +75,7 @@ export default function ArchiveNavigation({ years, currentYear }: ArchiveNavigat
                   asChild={currentYear !== yearItem.year && currentYear !== undefined}
                 >
                   {currentYear !== yearItem.year && currentYear !== undefined ? (
-                    <Link href={`/archive/${yearItem.year}`}>
+                    <Link href={`/archive/${yearItem.year}`} prefetch={false}>
                       {yearItem.year} ({yearItem.count})
                     </Link>
                   ) : (

@@ -167,7 +167,7 @@ export function PopularTags({
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              <Link href={`/tags/${tag.slug}`}>
+              <Link href={`/tags/${tag.slug}`} prefetch={false}>
                 <Badge
                   variant="outline"
                   className="hover:bg-primary hover:text-primary-foreground cursor-pointer transition-all hover:shadow-md"

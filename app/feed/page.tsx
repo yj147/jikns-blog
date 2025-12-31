@@ -1,6 +1,6 @@
 import FeedPageClient from "@/components/feed/feed-page-client"
+import { getOptionalViewer } from "@/lib/auth/session"
 import { getFeatureFlags } from "@/lib/config/client-feature-flags"
-import { getCurrentUser } from "@/lib/auth"
 import { listActivities } from "@/lib/repos/activity-repo"
 import type { ActivityWithAuthor } from "@/types/activity"
 import { signActivityListItems } from "@/lib/storage/signed-url"
@@ -8,7 +8,7 @@ import { signActivityListItems } from "@/lib/storage/signed-url"
 const INITIAL_LIMIT = 10
 type FeedTab = "latest" | "trending" | "following"
 
-export const revalidate = 60
+export const dynamic = "force-dynamic"
 
 export default async function FeedPage({
   searchParams,
@@ -16,17 +16,16 @@ export default async function FeedPage({
   searchParams: Promise<{ highlight?: string | string[] }>
 }) {
   const featureFlags = await getFeatureFlags()
-  const currentUser = await getCurrentUser()
+  const viewer = await getOptionalViewer()
+  const viewerId = viewer?.id ?? null
   const resolvedParams = await searchParams
   const highlightParam = resolvedParams?.highlight
   const highlightActivityId = Array.isArray(highlightParam)
     ? highlightParam[0]
     : highlightParam || undefined
 
-  const initialTab: FeedTab =
-    featureFlags.feedFollowingStrict && currentUser ? "following" : "latest"
-
-  const initialResult = await fetchInitialActivities(initialTab, currentUser?.id ?? null)
+  const initialTab: FeedTab = featureFlags.feedFollowingStrict && viewerId ? "following" : "latest"
+  const initialResult = await fetchInitialActivities(initialTab, viewerId)
 
   return (
     <FeedPageClient
@@ -50,6 +49,7 @@ async function fetchInitialActivities(orderBy: FeedTab, userId: string | null) {
       orderBy,
       limit: INITIAL_LIMIT,
       followingUserId: orderBy === "following" ? userId : null,
+      includeTotalCount: false,
     })
     const signed = await signActivityListItems(result.items)
 
@@ -65,7 +65,7 @@ async function fetchInitialActivities(orderBy: FeedTab, userId: string | null) {
       activities: [] as ActivityWithAuthor[],
       hasMore: false,
       nextCursor: null,
-      totalCount: 0,
+      totalCount: null,
     }
   }
 }

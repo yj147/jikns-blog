@@ -1,8 +1,6 @@
 import { Toaster } from "@/components/ui/sonner"
-import { AuthStateListener } from "@/components/auth-state-listener"
 import ErrorBoundary from "@/components/error-boundary"
 import NavigationServer from "@/components/navigation-server"
-import { CSRFToken } from "@/components/security/csrf-token"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "./providers/auth-provider"
 import { SwrProvider } from "./providers/swr-provider"
@@ -20,6 +18,9 @@ import type React from "react"
 export const metadata: Metadata = {
   title: "现代博客平台",
   description: "集博客与社交于一体的现代化平台",
+  icons: {
+    icon: "/placeholder-logo.svg",
+  },
 }
 
 export default function RootLayout({
@@ -43,8 +44,6 @@ export default function RootLayout({
           >
             <ErrorBoundary>
               <AuthProvider>
-                <AuthStateListener />
-                <CSRFToken hidden />
                 <NavigationServer />
                 <main>{children}</main>
               </AuthProvider>

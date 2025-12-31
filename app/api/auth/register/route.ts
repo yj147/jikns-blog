@@ -96,6 +96,7 @@ async function handlePost(request: NextRequest) {
     }
 
     const { email, password, name, redirectTo } = validationResult.data
+    const baseUrl = new URL(request.url).origin
 
     // 创建 Supabase 客户端
     const supabase = await createRouteHandlerClient()
@@ -109,8 +110,8 @@ async function handlePost(request: NextRequest) {
           name: name,
         },
         emailRedirectTo: redirectTo
-          ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?redirect_to=${encodeURIComponent(redirectTo)}`
-          : `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
+          ? `${baseUrl}/auth/callback?redirect_to=${encodeURIComponent(redirectTo)}`
+          : `${baseUrl}/auth/callback`,
       },
     })
 

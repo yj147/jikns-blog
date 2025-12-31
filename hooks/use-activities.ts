@@ -47,6 +47,8 @@ export function useActivities(
   params?: Partial<ActivityQueryParams>,
   options: UseActivitiesOptions = {}
 ): UseActivitiesState {
+  const hasFallbackData = (options.initialPages?.length ?? 0) > 0
+
   const getKey: SWRInfiniteKeyLoader<ActivityApiResponse<ActivityWithAuthor[]>> = (
     pageIndex,
     previousPageData
@@ -126,9 +128,7 @@ export function useActivities(
     revalidateAll: false,
     parallel: false,
     fallbackData: options.initialPages,
-    revalidateOnMount: true,
-    revalidateOnFocus: true,
-    revalidateOnReconnect: true,
+    revalidateOnMount: !hasFallbackData,
   })
 
   // 处理数据

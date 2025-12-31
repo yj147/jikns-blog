@@ -12,13 +12,14 @@ interface UseFeedStateOptions {
   initialActivities: ActivityWithAuthor[]
   initialPagination: {
     limit: number
-    total: number
+    total: number | null
     hasMore: boolean
     nextCursor: string | null
   }
   initialTab: FeedTab
   highlightActivityId?: string
   user: DatabaseUser | null
+  isAuthenticated?: boolean
 }
 
 export function useFeedState({
@@ -27,6 +28,7 @@ export function useFeedState({
   initialTab,
   highlightActivityId,
   user,
+  isAuthenticated,
 }: UseFeedStateOptions) {
   const [activeTab, setActiveTab] = useState<FeedTab>(initialTab)
   const [isPending, startTransition] = useTransition()
@@ -36,21 +38,19 @@ export function useFeedState({
   const handledHighlightIdRef = useRef<string | null>(null)
   const [highlightedActivityIds, setHighlightedActivityIds] = useState<Set<string>>(new Set())
 
+  const resolvedIsAuthenticated = isAuthenticated ?? Boolean(user)
+
   const resolvedOrderBy = useMemo(
     () =>
       activeTab === "trending"
         ? "trending"
-        : activeTab === "following" && user
+        : activeTab === "following" && resolvedIsAuthenticated
           ? "following"
           : "latest",
-    [activeTab, user]
+    [activeTab, resolvedIsAuthenticated]
   )
 
   const fallbackPages = useMemo(() => {
-    if (initialActivities.length === 0) {
-      return undefined
-    }
-
     return [
       {
         success: true,
@@ -80,10 +80,10 @@ export function useFeedState({
   )
 
   useEffect(() => {
-    if (!user && activeTab === "following") {
+    if (!resolvedIsAuthenticated && activeTab === "following") {
       setActiveTab("latest")
     }
-  }, [user, activeTab])
+  }, [resolvedIsAuthenticated, activeTab])
 
   useEffect(() => {
     activitiesRef.current = activities

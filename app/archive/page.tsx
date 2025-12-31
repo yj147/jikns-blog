@@ -10,6 +10,8 @@ import ArchiveStats from "@/components/archive/archive-stats"
 import ArchiveNavigation from "@/components/archive/archive-navigation"
 import ArchiveSearch from "@/components/archive/archive-search"
 
+export const revalidate = 60
+
 export const metadata: Metadata = {
   title: "文章归档 | Jikns Blog",
   description: "浏览所有历史文章，按时间线组织",

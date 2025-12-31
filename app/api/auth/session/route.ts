@@ -16,11 +16,16 @@ async function handleGet() {
       error,
     } = await supabase.auth.getSession()
 
-    if (error || !session) {
+    if (error) {
+      authLogger.error("获取会话失败", { module: "api/auth/session" }, error)
       return NextResponse.json(
-        { success: false, error: "unauthenticated", message: "未登录或会话已失效" },
-        { status: 401 }
+        { success: false, error: "session_error", message: "无法获取会话" },
+        { status: 500 }
       )
+    }
+
+    if (!session) {
+      return NextResponse.json({ success: true, session: null, user: null }, { status: 200 })
     }
 
     return NextResponse.json(

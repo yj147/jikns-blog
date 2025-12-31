@@ -244,7 +244,8 @@ describe("useFollowUser", () => {
       },
     })
 
-    const customKeys = ["/api/custom", ["follow-status", "me"] as Key]
+    const followKey: Key = ["follow-status", "me"]
+    const customKeys = ["/api/custom", followKey]
 
     const { result } = renderHook(() =>
       useFollowUser({
@@ -260,8 +261,12 @@ describe("useFollowUser", () => {
       expect(mutateMock).toHaveBeenCalled()
     })
     const calledKeys = mutateMock.mock.calls.map(([key]) => key)
-    customKeys.forEach((key) => {
-      expect(calledKeys).toContainEqual(key)
-    })
+
+    expect(calledKeys).toContainEqual("/api/custom")
+
+    const matchers = calledKeys.filter(
+      (key): key is (key: Key) => boolean => typeof key === "function"
+    )
+    expect(matchers.some((matcher) => matcher(followKey))).toBe(true)
   })
 })

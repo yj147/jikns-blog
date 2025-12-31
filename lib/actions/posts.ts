@@ -16,7 +16,7 @@ import { createUniqueSmartSlug } from "@/lib/utils/slug-english"
 import { logger } from "@/lib/utils/logger"
 import { AuditEventType, auditLogger } from "@/lib/audit-log"
 import { getServerContext } from "@/lib/server-context"
-import { createSignedUrlIfNeeded, signAvatarUrl } from "@/lib/storage/signed-url"
+import { createSignedUrlIfNeeded, createSignedUrls, signAvatarUrl } from "@/lib/storage/signed-url"
 
 function resolveErrorCode(error: unknown, fallback: string): string {
   if (error instanceof Error) {
@@ -91,18 +91,17 @@ async function signPostContent(
     return content
   }
 
-  const replacements = await Promise.all(
-    matches.map(async (original) => {
-      const signed = await createSignedUrlIfNeeded(
-        original,
-        POST_IMAGE_SIGN_EXPIRES_IN,
-        "post-images"
-      )
-      return [original, signed ?? original] as const
-    })
-  )
+  const signedUrls = await createSignedUrls(matches, POST_IMAGE_SIGN_EXPIRES_IN, "post-images")
 
-  return replacements.reduce((acc, [original, signed]) => acc.replaceAll(original, signed), content)
+  const replacementMap = new Map<string, string>()
+  matches.forEach((original, index) => {
+    replacementMap.set(original, signedUrls[index] ?? original)
+  })
+
+  return matches.reduce(
+    (acc, original) => acc.replaceAll(original, replacementMap.get(original) ?? original),
+    content
+  )
 }
 
 async function recordPostAudit(params: {
@@ -657,16 +656,40 @@ export async function getPosts(
       prisma.post.count({ where }),
     ])
 
-    // 签名媒体 URL
-    const signedAvatars = await Promise.all(
-      posts.map((post) => signAvatarUrl(post.author.avatarUrl))
+    const avatarInputs = Array.from(
+      new Set(
+        posts
+          .map((post) => post.author.avatarUrl)
+          .filter((value): value is string => typeof value === "string" && value.length > 0)
+      )
     )
-    const signedCoverImages = await Promise.all(
-      posts.map((post) => signPostCoverImage(post.coverImage))
+    const coverInputs = Array.from(
+      new Set(
+        posts
+          .map((post) => post.coverImage)
+          .filter((value): value is string => typeof value === "string" && value.length > 0)
+      )
     )
 
+    const [signedAvatars, signedCoverImages] = await Promise.all([
+      avatarInputs.length > 0 ? createSignedUrls(avatarInputs) : Promise.resolve([]),
+      coverInputs.length > 0
+        ? createSignedUrls(coverInputs, POST_IMAGE_SIGN_EXPIRES_IN, "post-images")
+        : Promise.resolve([]),
+    ])
+
+    const avatarMap = new Map<string, string>()
+    avatarInputs.forEach((original, index) => {
+      avatarMap.set(original, signedAvatars[index] ?? original)
+    })
+
+    const coverMap = new Map<string, string>()
+    coverInputs.forEach((original, index) => {
+      coverMap.set(original, signedCoverImages[index] ?? original)
+    })
+
     // 格式化响应数据
-    const data: PostListResponse[] = posts.map((post, index) => ({
+    const data: PostListResponse[] = posts.map((post) => ({
       id: post.id,
       slug: post.slug,
       title: post.title,
@@ -674,13 +697,15 @@ export async function getPosts(
       published: post.published,
       isPinned: post.isPinned,
       coverImage: post.coverImage,
-      signedCoverImage: signedCoverImages[index],
+      signedCoverImage: post.coverImage ? (coverMap.get(post.coverImage) ?? post.coverImage) : null,
       viewCount: post.viewCount,
       publishedAt: post.publishedAt?.toISOString() || null,
       createdAt: post.createdAt.toISOString(),
       author: {
         ...post.author,
-        avatarUrl: signedAvatars[index] ?? post.author.avatarUrl,
+        avatarUrl: post.author.avatarUrl
+          ? (avatarMap.get(post.author.avatarUrl) ?? post.author.avatarUrl)
+          : null,
       },
       tags: post.tags.map((pt) => pt.tag),
       stats: {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Key } from "swr"
 import type { FollowError } from "@/lib/interactions/follow-client"
 import {
@@ -33,18 +33,21 @@ export function createFollowUserHook({ toggle, mutate, toast, logger }: FollowHo
     initialFollowing,
   }: UseFollowUserOptions = {}) {
     const initialList = useMemo(() => normaliseFollowing(initialFollowing), [initialFollowing])
+    const initialFingerprint = useMemo(() => initialList.slice().sort().join("|"), [initialList])
 
     const [following, setFollowing] = useState<string[]>(initialList)
     const [error, setError] = useState<FollowError | null>(null)
-    const [isPending, startTransition] = useTransition()
     const [isSubmitting, setIsSubmitting] = useState(false)
     const isSubmittingRef = useRef(false)
     const inFlightPromiseRef = useRef<Promise<FollowActionResult> | null>(null)
     const inFlightUserRef = useRef<string | null>(null)
+    const lastInitialFingerprintRef = useRef<string | null>(null)
 
     useEffect(() => {
+      if (lastInitialFingerprintRef.current === initialFingerprint) return
+      lastInitialFingerprintRef.current = initialFingerprint
       setFollowing(initialList)
-    }, [initialList])
+    }, [initialFingerprint, initialList])
 
     const safeMutate = useCallback(
       (matcher: Key | ((key: Key) => boolean)) => {
@@ -76,10 +79,6 @@ export function createFollowUserHook({ toggle, mutate, toast, logger }: FollowHo
     const refreshCachesIfNeeded = useCallback(
       (shouldRefresh: boolean) => {
         if (!shouldRefresh) return
-        // 在测试环境中完全跳过缓存刷新,避免 act() 无限等待
-        if (typeof process !== "undefined" && process.env.NODE_ENV === "test") {
-          return
-        }
         refreshCaches().catch((cacheError) => {
           logger.warn("刷新关注缓存失败", { error: cacheError })
         })
@@ -276,7 +275,7 @@ export function createFollowUserHook({ toggle, mutate, toast, logger }: FollowHo
       unfollowUser,
       toggleFollow,
       isFollowing,
-      isLoading: isPending || isSubmitting,
+      isLoading: isSubmitting,
       error,
       clearError,
       followingUsers: followingSet,

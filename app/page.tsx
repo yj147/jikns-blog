@@ -57,11 +57,11 @@ export default function HomePage() {
               <div className="text-muted-foreground mt-6 text-xs">
                 <p>&copy; 2025 现代博客平台. All rights reserved.</p>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <Link href="/privacy" className="hover:underline">
+                  <Link href="/privacy" prefetch={false} className="hover:underline">
                     隐私政策
                   </Link>
                   <span>·</span>
-                  <Link href="/terms" className="hover:underline">
+                  <Link href="/terms" prefetch={false} className="hover:underline">
                     服务条款
                   </Link>
                 </div>

@@ -45,7 +45,7 @@ export function TagCard({ tag, index = 0 }: TagCardProps) {
       transition={{ duration: 0.3, delay: index * 0.05 }}
       whileHover={{ scale: 1.05 }}
     >
-      <Link href={`/tags/${tag.slug}`}>
+      <Link href={`/tags/${tag.slug}`} prefetch={false}>
         <Card className="group relative h-full overflow-hidden border-2 transition-all duration-300 hover:shadow-lg">
           {/* 背景装饰 */}
           <div

@@ -119,8 +119,7 @@ function createUnauthorizedResponse(
 ): NextResponse {
   const isApiRequest = request.nextUrl.pathname.startsWith("/api/")
 
-  if (isApiRequest && reason !== "AUTHENTICATION_REQUIRED") {
-    // API 请求返回 JSON 错误响应
+  if (isApiRequest) {
     return NextResponse.json(
       {
         error: getErrorMessage(reason),
@@ -131,7 +130,7 @@ function createUnauthorizedResponse(
     )
   }
 
-  if (isApiRequest && reason === "AUTHENTICATION_REQUIRED") {
+  if (reason === "AUTHENTICATION_REQUIRED") {
     const loginUrl = new URL("/login", request.url)
     loginUrl.searchParams.set("redirect", request.nextUrl.pathname)
     return NextResponse.redirect(loginUrl)

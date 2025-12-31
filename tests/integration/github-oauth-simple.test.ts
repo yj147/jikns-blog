@@ -66,7 +66,6 @@ vi.mock("next/headers", () => ({
 describe("GitHub OAuth 简化集成测试", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    process.env.OAUTH_STATE_SECRET = "test-oauth-state-secret"
 
     // 设置默认Mock行为
     mockSignInWithOAuth.mockResolvedValue({
@@ -207,10 +206,7 @@ describe("GitHub OAuth 简化集成测试", () => {
 
       const stateToken = generateOAuthState()
       const headers = new Headers()
-      headers.set(
-        "cookie",
-        `oauth_state=${stateToken.state}.${stateToken.issuedAt}.${stateToken.signature}`
-      )
+      headers.set("cookie", `oauth_state=${stateToken.state}.${stateToken.issuedAt}`)
       const request = new NextRequest(
         new URL(`http://localhost:3000/auth/callback?code=test-code&state=${stateToken.state}`),
         { headers }

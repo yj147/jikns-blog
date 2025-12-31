@@ -7,15 +7,11 @@ const TEN_MINUTES_MS = 10 * 60 * 1000
 
 function createRequestWithStateCookie(token: ReturnType<typeof generateOAuthState>) {
   const headers = new Headers()
-  headers.set("cookie", `oauth_state=${token.state}.${token.issuedAt}.${token.signature}`)
+  headers.set("cookie", `oauth_state=${token.state}.${token.issuedAt}`)
   return new NextRequest(new URL(CALLBACK_URL), { headers })
 }
 
 describe("OAuth state 校验", () => {
-  beforeEach(() => {
-    process.env.OAUTH_STATE_SECRET = "test-oauth-state-secret"
-  })
-
   afterEach(() => {
     vi.useRealTimers()
   })

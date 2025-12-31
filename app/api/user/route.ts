@@ -29,13 +29,6 @@ async function handleGet() {
       )
     }
 
-    // 优先同步 Supabase 数据到数据库，保证 name/avatar 最新
-    try {
-      await syncUserFromAuth(authUser)
-    } catch (syncError) {
-      authLogger.error("同步用户资料失败", { userId: authUser.id }, syncError)
-    }
-
     // 尝试从数据库获取用户信息
     let user = null
     let dbError = null
@@ -68,6 +61,40 @@ async function handleGet() {
     } catch (dbErrorCaught) {
       authLogger.error("获取用户信息时数据库操作失败", { userId: authUser.id }, dbErrorCaught)
       dbError = dbErrorCaught
+    }
+
+    if (!user && !dbError) {
+      try {
+        await syncUserFromAuth(authUser)
+      } catch (syncError) {
+        authLogger.error("同步用户资料失败", { userId: authUser.id }, syncError)
+      }
+
+      try {
+        user = await prisma.user.findUnique({
+          where: { id: authUser.id },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            avatarUrl: true,
+            coverImage: true,
+            bio: true,
+            socialLinks: true,
+            location: true,
+            phone: true,
+            notificationPreferences: true,
+            privacySettings: true,
+            role: true,
+            status: true,
+            createdAt: true,
+            lastLoginAt: true,
+          },
+        })
+      } catch (dbErrorCaught) {
+        authLogger.error("同步用户后读取数据库失败", { userId: authUser.id }, dbErrorCaught)
+        dbError = dbErrorCaught
+      }
     }
 
     const metadata = authUser.user_metadata || {}
@@ -114,13 +141,15 @@ async function handleGet() {
       }
     }
 
-    const avatarSignedUrl = await signAvatarUrl(user.avatarUrl || fallbackAvatar)
+    const [avatarSignedUrl, coverSignedUrl] = await Promise.all([
+      signAvatarUrl(user.avatarUrl || fallbackAvatar),
+      signCoverImageUrl(user.coverImage),
+    ])
     if (avatarSignedUrl) {
       user.avatarUrl = avatarSignedUrl
       ;(user as any).avatarSignedUrl = avatarSignedUrl
     }
 
-    const coverSignedUrl = await signCoverImageUrl(user.coverImage)
     if (coverSignedUrl) {
       user.coverImage = coverSignedUrl
       ;(user as any).coverImageSignedUrl = coverSignedUrl

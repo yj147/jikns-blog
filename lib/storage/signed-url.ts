@@ -13,19 +13,50 @@ const ACTIVITY_IMAGES_BUCKET = "activity-images"
 const POST_IMAGES_BUCKET = "post-images"
 const DEFAULT_BUCKET = ACTIVITY_IMAGES_BUCKET
 const SIGNABLE_BUCKETS = new Set<string>([ACTIVITY_IMAGES_BUCKET, POST_IMAGES_BUCKET])
+const SIGNED_URL_CACHE_MAX_ENTRIES = 500
+const SIGNED_URL_CACHE_MARGIN_SECONDS = 5
 
 type StorageTarget = {
   bucket: string
   path: string
 }
 
+type SignedUrlCacheEntry = {
+  value: string
+  expiresAt: number
+}
+
 let cachedServiceClient: ReturnType<typeof createServiceRoleClient> | null = null
+const signedUrlCache = new Map<string, SignedUrlCacheEntry>()
+const signedUrlInFlight = new Map<string, Promise<string | null>>()
 
 function getServiceClient() {
   if (!cachedServiceClient) {
     cachedServiceClient = createServiceRoleClient()
   }
   return cachedServiceClient
+}
+
+function getCacheTtlMs(expiresInSeconds: number) {
+  const ttlSeconds = Math.max(0, expiresInSeconds - SIGNED_URL_CACHE_MARGIN_SECONDS)
+  return ttlSeconds * 1000
+}
+
+function pruneSignedUrlCache() {
+  if (signedUrlCache.size <= SIGNED_URL_CACHE_MAX_ENTRIES) return
+
+  const now = Date.now()
+  for (const [key, entry] of signedUrlCache) {
+    if (entry.expiresAt <= now) {
+      signedUrlCache.delete(key)
+    }
+  }
+
+  while (signedUrlCache.size > SIGNED_URL_CACHE_MAX_ENTRIES) {
+    const firstKey = signedUrlCache.keys().next().value
+    if (typeof firstKey !== "string") break
+    signedUrlCache.delete(firstKey)
+  }
 }
 
 /**
@@ -117,34 +148,69 @@ function isSignableBucket(bucket: string) {
 }
 
 async function signSingle(target: StorageTarget, expiresInSeconds = DEFAULT_EXPIRES_IN_SECONDS) {
-  try {
-    if (!isSignableBucket(target.bucket)) {
-      return null
+  const normalizedPath = normalizePath(target.bucket, target.path)
+  const cacheKey = `${target.bucket}:${normalizedPath}:${expiresInSeconds}`
+  const cacheTtlMs = getCacheTtlMs(expiresInSeconds)
+
+  if (cacheTtlMs > 0) {
+    const cached = signedUrlCache.get(cacheKey)
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value
     }
 
-    const supabase = getServiceClient()
-    const { data, error } = await supabase.storage
-      .from(target.bucket)
-      .createSignedUrl(normalizePath(target.bucket, target.path), expiresInSeconds)
-
-    if (error || !data?.signedUrl) {
-      logger.warn("签名 URL 生成失败", {
-        bucket: target.bucket,
-        path: target.path,
-        error: error?.message,
-      })
-      return null
+    const inFlight = signedUrlInFlight.get(cacheKey)
+    if (inFlight) {
+      return inFlight
     }
-
-    return data.signedUrl
-  } catch (error) {
-    logger.error(
-      "签名 URL 生成异常",
-      { bucket: target.bucket, path: target.path, expiresInSeconds },
-      error
-    )
-    return null
   }
+
+  const request = (async () => {
+    try {
+      if (!isSignableBucket(target.bucket)) {
+        return null
+      }
+
+      const supabase = getServiceClient()
+      const { data, error } = await supabase.storage
+        .from(target.bucket)
+        .createSignedUrl(normalizedPath, expiresInSeconds)
+
+      if (error || !data?.signedUrl) {
+        logger.warn("签名 URL 生成失败", {
+          bucket: target.bucket,
+          path: target.path,
+          error: error?.message,
+        })
+        return null
+      }
+
+      if (cacheTtlMs > 0) {
+        pruneSignedUrlCache()
+        signedUrlCache.set(cacheKey, {
+          value: data.signedUrl,
+          expiresAt: Date.now() + cacheTtlMs,
+        })
+      }
+
+      return data.signedUrl
+    } catch (error) {
+      logger.error(
+        "签名 URL 生成异常",
+        { bucket: target.bucket, path: target.path, expiresInSeconds },
+        error
+      )
+      return null
+    }
+  })()
+
+  if (cacheTtlMs > 0) {
+    signedUrlInFlight.set(cacheKey, request)
+    request.finally(() => {
+      signedUrlInFlight.delete(cacheKey)
+    })
+  }
+
+  return request
 }
 
 /**
@@ -166,26 +232,151 @@ export async function createSignedUrlIfNeeded(
  * 批量生成签名 URL，自动去重
  */
 export async function createSignedUrls(
-  inputs: Array<string | null | undefined>,
+  inputs: string[],
   expiresInSeconds = DEFAULT_EXPIRES_IN_SECONDS,
   defaultBucket = DEFAULT_BUCKET
 ): Promise<string[]> {
-  const cache = new Map<string, Promise<string | null>>()
+  if (inputs.length === 0) return []
 
-  const tasks = inputs.map(async (value) => {
-    const target = parseStorageTarget(value, defaultBucket)
-    if (!target) return value ?? null
+  const cacheTtlMs = getCacheTtlMs(expiresInSeconds)
+  const now = Date.now()
+  const resolved = inputs.slice()
 
-    const cacheKey = `${target.bucket}:${target.path}:${expiresInSeconds}`
-    if (!cache.has(cacheKey)) {
-      cache.set(cacheKey, signSingle(target, expiresInSeconds))
+  type PendingEntry = {
+    bucket: string
+    path: string
+    cacheKey: string
+    indices: number[]
+  }
+
+  const pendingByKey = new Map<string, PendingEntry>()
+  const awaitingByKey = new Map<string, { promise: Promise<string | null>; indices: number[] }>()
+
+  for (let index = 0; index < inputs.length; index += 1) {
+    const value = inputs[index]
+    if (!value) {
+      continue
     }
-    const signed = await cache.get(cacheKey)!
-    return signed ?? value ?? null
-  })
 
-  const results = await Promise.all(tasks)
-  return results.filter((item): item is string => Boolean(item))
+    const target = parseStorageTarget(value, defaultBucket)
+    if (!target || !isSignableBucket(target.bucket)) {
+      continue
+    }
+
+    const normalizedPath = normalizePath(target.bucket, target.path)
+    const cacheKey = `${target.bucket}:${normalizedPath}:${expiresInSeconds}`
+
+    if (cacheTtlMs > 0) {
+      const cached = signedUrlCache.get(cacheKey)
+      if (cached && cached.expiresAt > now) {
+        resolved[index] = cached.value
+        continue
+      }
+
+      const inFlight = signedUrlInFlight.get(cacheKey)
+      if (inFlight) {
+        const existing = awaitingByKey.get(cacheKey)
+        if (existing) {
+          existing.indices.push(index)
+        } else {
+          awaitingByKey.set(cacheKey, { promise: inFlight, indices: [index] })
+        }
+        continue
+      }
+    }
+
+    const existing = pendingByKey.get(cacheKey)
+    if (existing) {
+      existing.indices.push(index)
+      continue
+    }
+
+    pendingByKey.set(cacheKey, {
+      bucket: target.bucket,
+      path: normalizedPath,
+      cacheKey,
+      indices: [index],
+    })
+  }
+
+  if (pendingByKey.size > 0) {
+    const supabase = getServiceClient()
+    const pendingBuckets = new Map<string, PendingEntry[]>()
+
+    for (const entry of pendingByKey.values()) {
+      const bucketEntries = pendingBuckets.get(entry.bucket)
+      if (bucketEntries) {
+        bucketEntries.push(entry)
+      } else {
+        pendingBuckets.set(entry.bucket, [entry])
+      }
+    }
+
+    await Promise.all(
+      [...pendingBuckets.entries()].map(async ([bucket, entries]) => {
+        const paths = entries.map((entry) => entry.path)
+
+        try {
+          const { data, error } = await supabase.storage
+            .from(bucket)
+            .createSignedUrls(paths, expiresInSeconds)
+
+          if (error || !data) {
+            logger.warn("批量签名 URL 失败", { bucket, error: error?.message })
+            return
+          }
+
+          const signedByPath = new Map<string, string | null>()
+          data.forEach((item) => {
+            if (!item?.path) return
+            signedByPath.set(item.path, typeof item.signedUrl === "string" ? item.signedUrl : null)
+          })
+
+          if (cacheTtlMs > 0) {
+            pruneSignedUrlCache()
+          }
+
+          entries.forEach((entry) => {
+            const signed = signedByPath.get(entry.path) ?? null
+
+            if (cacheTtlMs > 0 && signed) {
+              signedUrlCache.set(entry.cacheKey, {
+                value: signed,
+                expiresAt: now + cacheTtlMs,
+              })
+            }
+
+            entry.indices.forEach((index) => {
+              if (signed) {
+                resolved[index] = signed
+              }
+            })
+          })
+        } catch (error) {
+          logger.error(
+            "批量签名 URL 异常",
+            { bucket, count: paths.length, expiresInSeconds },
+            error
+          )
+        }
+      })
+    )
+  }
+
+  if (awaitingByKey.size > 0) {
+    await Promise.all(
+      [...awaitingByKey.values()].map(async ({ promise, indices }) => {
+        const signed = await promise.catch(() => null)
+        indices.forEach((index) => {
+          if (signed) {
+            resolved[index] = signed
+          }
+        })
+      })
+    )
+  }
+
+  return resolved
 }
 
 /**
@@ -251,9 +442,48 @@ export async function signActivityListItem(item: ActivityListItem): Promise<Acti
 export async function signActivityListItems(
   items: ActivityListItem[]
 ): Promise<ActivityListItem[]> {
-  return Promise.all(items.map((item) => signActivityListItem(item)))
+  if (items.length === 0) return []
+
+  const avatarInputs = Array.from(
+    new Set(
+      items
+        .map((item) => item.author.avatarUrl)
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+    )
+  )
+
+  const imageInputs = Array.from(new Set(items.flatMap((item) => item.imageUrls)))
+
+  const [signedAvatars, signedImages] = await Promise.all([
+    createSignedUrls(avatarInputs),
+    createSignedUrls(imageInputs),
+  ])
+
+  const avatarMap = new Map<string, string>()
+  avatarInputs.forEach((original, index) => {
+    avatarMap.set(original, signedAvatars[index] ?? original)
+  })
+
+  const imageMap = new Map<string, string>()
+  imageInputs.forEach((original, index) => {
+    imageMap.set(original, signedImages[index] ?? original)
+  })
+
+  return items.map((item) => {
+    const signedAvatar = item.author.avatarUrl ? avatarMap.get(item.author.avatarUrl) : null
+    return {
+      ...item,
+      imageUrls: item.imageUrls.map((url) => imageMap.get(url) ?? url),
+      author: {
+        ...item.author,
+        avatarUrl: signedAvatar ?? item.author.avatarUrl,
+      },
+    }
+  })
 }
 
 export function resetSignedUrlCache() {
   cachedServiceClient = null
+  signedUrlCache.clear()
+  signedUrlInFlight.clear()
 }

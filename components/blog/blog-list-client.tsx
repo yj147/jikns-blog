@@ -107,18 +107,18 @@ export function BlogListClient({
   const orderBy = sortBy && ALLOWED_SORTS.has(sortBy) ? sortBy : "publishedAt"
 
   const initialPage = useMemo<PostsApiResponse | undefined>(() => {
-    if (!initialPosts || initialPosts.length === 0) return undefined
+    const safeInitialPosts = initialPosts ?? []
 
     const nextCursor = initialPagination.nextCursor ?? (initialPagination.hasNext ? "2" : null)
     const totalPages = Math.max(
       1,
-      Math.ceil((initialPagination.total || initialPosts.length) / PAGE_SIZE)
+      Math.ceil((initialPagination.total || safeInitialPosts.length) / PAGE_SIZE)
     )
 
     return {
       success: true,
       data: {
-        posts: initialPosts,
+        posts: safeInitialPosts,
         pagination: {
           currentPage: 1,
           totalPages,
@@ -170,6 +170,7 @@ export function BlogListClient({
       fetcher,
       {
         fallbackData: initialPage ? [initialPage] : undefined,
+        revalidateOnMount: initialPage ? false : true,
         revalidateOnFocus: false,
         revalidateFirstPage: false,
         revalidateIfStale: false,

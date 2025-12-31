@@ -38,7 +38,7 @@ export function BlogPostCard({ post, index = 0 }: BlogPostCardProps) {
       {/* 1. 头部：作者信息 */}
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link href={`/profile/${post.author.id ?? "#"}`}>
+          <Link href={`/profile/${post.author.id ?? "#"}`} prefetch={false}>
             <Avatar className="ring-background h-10 w-10 cursor-pointer ring-2 transition-opacity hover:opacity-90">
               <AvatarImage src={post.author.avatarUrl || ""} alt={post.author.name || "用户"} />
               <AvatarFallback className="bg-primary/10 text-primary">
@@ -49,6 +49,7 @@ export function BlogPostCard({ post, index = 0 }: BlogPostCardProps) {
           <div className="flex flex-col leading-none">
             <Link
               href={`/profile/${post.author.id ?? "#"}`}
+              prefetch={false}
               className="text-foreground text-base font-bold hover:underline"
             >
               {post.author.name || "匿名用户"}
@@ -68,7 +69,7 @@ export function BlogPostCard({ post, index = 0 }: BlogPostCardProps) {
 
       {/* 2. 内容区：标题 + 摘要 */}
       <div className="mb-4">
-        <Link href={`/blog/${post.slug}`} className="group block space-y-2">
+        <Link href={`/blog/${post.slug}`} prefetch={false} className="group block space-y-2">
           <h3 className="text-foreground group-hover:text-primary text-lg font-bold leading-snug transition-colors sm:text-xl">
             {post.title}
           </h3>
@@ -83,7 +84,7 @@ export function BlogPostCard({ post, index = 0 }: BlogPostCardProps) {
       {/* 3. 媒体区：大图 */}
       {coverImageUrl && (
         <div className="border-border/50 bg-muted/30 mb-4 overflow-hidden rounded-xl border">
-          <Link href={`/blog/${post.slug}`}>
+          <Link href={`/blog/${post.slug}`} prefetch={false}>
             <div className="relative aspect-[2/1] w-full">
               <Image
                 src={coverImageUrl}
@@ -104,6 +105,7 @@ export function BlogPostCard({ post, index = 0 }: BlogPostCardProps) {
             <Link
               key={tag.slug}
               href={`/blog?tag=${tag.slug}`}
+              prefetch={false}
               onClick={(e) => e.stopPropagation()}
             >
               <span className="text-primary hover:text-primary/80 text-sm hover:underline">

@@ -5,11 +5,13 @@
  */
 
 import { createRouteHandlerClient } from "@/lib/supabase"
-import { syncUserFromAuth, validateRedirectUrl, validateOAuthState } from "@/lib/auth"
+import { syncUserFromAuth, validateOAuthState, validateRedirectUrl } from "@/lib/auth"
 import { revalidateUserProfile } from "@/lib/actions/auth"
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { authLogger } from "@/lib/utils/logger"
+
+const AUTH_SESSION_SYNC_COOKIE = "auth_session_sync"
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
@@ -19,23 +21,27 @@ export async function GET(request: NextRequest) {
   const stateParam = requestUrl.searchParams.get("state")
   const error = requestUrl.searchParams.get("error")
   const errorDescription = requestUrl.searchParams.get("error_description")
+  const shouldValidateState =
+    (typeof stateParam === "string" && stateParam.length > 0) ||
+    Boolean(request.cookies.get("oauth_state")?.value)
+
   // 处理 OAuth 认证错误
   if (error) {
     const errorMsg = errorDescription || error
     authLogger.error("OAuth 认证错误", { error, error_description: errorMsg })
-    const stateValidation = validateOAuthState(request, stateParam)
     const response = NextResponse.redirect(
       new URL(`/login?error=oauth_error&message=${encodeURIComponent(errorMsg)}`, requestUrl.origin)
     )
-    stateValidation.clearCookie(response)
+    if (shouldValidateState) {
+      validateOAuthState(request, stateParam).clearCookie(response)
+    }
     return response
   }
 
   // 处理授权码交换会话
   if (code) {
-    const stateValidation = validateOAuthState(request, stateParam)
-
-    if (!stateValidation.isValid) {
+    const stateValidation = shouldValidateState ? validateOAuthState(request, stateParam) : null
+    if (stateValidation && !stateValidation.isValid) {
       const redirectUrl = new URL(
         `/login?error=oauth_state_invalid&reason=${stateValidation.reason}`,
         requestUrl.origin
@@ -74,7 +80,7 @@ export async function GET(request: NextRequest) {
             requestUrl.origin
           )
         )
-        stateValidation.clearCookie(response)
+        stateValidation?.clearCookie(response)
         return response
       }
 
@@ -112,7 +118,17 @@ export async function GET(request: NextRequest) {
           const finalRedirect = validateRedirectUrl(redirectPath) ? redirectPath : "/"
 
           const response = NextResponse.redirect(new URL(finalRedirect, requestUrl.origin))
-          stateValidation.clearCookie(response)
+          stateValidation?.clearCookie(response)
+          // 提示客户端在下一次渲染时从服务端 Cookie 同步 Supabase session（仅短暂有效）
+          response.cookies.set({
+            name: AUTH_SESSION_SYNC_COOKIE,
+            value: "1",
+            httpOnly: false,
+            sameSite: "lax",
+            secure: requestUrl.protocol === "https:",
+            path: "/",
+            maxAge: 60,
+          })
           return response
         } catch (syncError) {
           authLogger.error("用户数据同步失败", { userId: session.user.id }, syncError)
@@ -126,7 +142,7 @@ export async function GET(request: NextRequest) {
               requestUrl.origin
             )
           )
-          stateValidation.clearCookie(response)
+          stateValidation?.clearCookie(response)
           return response
         }
       } else {
@@ -134,7 +150,7 @@ export async function GET(request: NextRequest) {
         const response = NextResponse.redirect(
           new URL("/login?error=no_user_data", requestUrl.origin)
         )
-        stateValidation.clearCookie(response)
+        stateValidation?.clearCookie(response)
         return response
       }
     } catch (error) {
@@ -145,17 +161,18 @@ export async function GET(request: NextRequest) {
           requestUrl.origin
         )
       )
-      stateValidation.clearCookie(response)
+      if (shouldValidateState) {
+        validateOAuthState(request, stateParam).clearCookie(response)
+      }
       return response
     }
   }
 
   // 没有授权码或错误参数，可能是直接访问回调 URL
   authLogger.warn("认证回调缺少必要参数 (code 或 error)")
-  const fallbackState = validateOAuthState(request, stateParam)
-  const response = NextResponse.redirect(
-    new URL("/login?error=missing_callback_params", requestUrl.origin)
-  )
-  fallbackState.clearCookie(response)
+  const response = NextResponse.redirect(new URL("/login?error=missing_code", requestUrl.origin))
+  if (shouldValidateState) {
+    validateOAuthState(request, stateParam).clearCookie(response)
+  }
   return response
 }

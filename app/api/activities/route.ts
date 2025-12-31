@@ -114,6 +114,7 @@ async function handleGet(request: NextRequest) {
       publishedTo: queryParams.dateTo || undefined,
       followingUserId,
       includeBannedAuthors: viewer?.role === "ADMIN",
+      includeTotalCount: false,
     })
 
     const signedItems = await signActivityListItems(repoResult.items)
