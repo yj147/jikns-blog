@@ -111,6 +111,9 @@ export default function FeedPageClient({
     isAuthenticated,
   })
 
+  const hasInitialSnapshot = activeTab === initialTab
+  const initialActivitiesForTab = hasInitialSnapshot ? initialActivities : []
+
   // 编辑/删除回调
   const handleEdit = useCallback((activity: ActivityWithAuthor) => {
     setEditingActivity(activity)
@@ -173,6 +176,8 @@ export default function FeedPageClient({
 
           <FeedList
             activities={displayActivities}
+            initialActivities={initialActivitiesForTab}
+            hasInitialSnapshot={hasInitialSnapshot}
             activeTab={activeTab}
             highlightedActivityIds={highlightedActivityIds}
             realtimeActivityIds={realtimeActivityIds}

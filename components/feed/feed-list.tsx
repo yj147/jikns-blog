@@ -14,6 +14,8 @@ import type { FeedTab } from "@/components/feed/hooks/use-feed-state"
 
 interface FeedListProps {
   activities: ActivityWithAuthor[]
+  initialActivities: ActivityWithAuthor[]
+  hasInitialSnapshot: boolean
   activeTab: FeedTab
   highlightedActivityIds: Set<string>
   realtimeActivityIds: Set<string>
@@ -31,6 +33,8 @@ interface FeedListProps {
 
 export function FeedList({
   activities,
+  initialActivities,
+  hasInitialSnapshot,
   activeTab,
   highlightedActivityIds,
   realtimeActivityIds,
@@ -46,6 +50,9 @@ export function FeedList({
   baseActivitiesCount,
 }: FeedListProps) {
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set())
+
+  const hasEffectiveActivities = hasDisplayActivities || initialActivities.length > 0
+  const effectiveActivities = hasDisplayActivities ? activities : initialActivities
 
   const handleEndReached = useCallback(() => {
     if (!hasMore || isLoading) return
@@ -77,7 +84,7 @@ export function FeedList({
             "bg-background hover:bg-muted/5 border-border border-b transition-colors",
             isHighlighted && "bg-primary/5",
             isRealtimeItem && "animate-in fade-in slide-in-from-top-4 duration-500",
-            index === activities.length - 1 && "last:border-b-0"
+            index === effectiveActivities.length - 1 && "last:border-b-0"
           )}
         >
           {index === 0 ? (
@@ -116,7 +123,7 @@ export function FeedList({
       )
     },
     [
-      activities.length,
+      effectiveActivities.length,
       expandedComments,
       handleComment,
       highlightedActivityIds,
@@ -129,7 +136,7 @@ export function FeedList({
     ]
   )
 
-  if (isLoading && !hasDisplayActivities) {
+  if (isLoading && !hasEffectiveActivities && !hasInitialSnapshot) {
     return (
       <div className="divide-border min-h-[50vh] divide-y">
         {[...Array(5)].map((_, i) => (
@@ -145,7 +152,7 @@ export function FeedList({
     )
   }
 
-  if (!hasDisplayActivities) {
+  if (!hasEffectiveActivities) {
     return (
       <div className="py-20 text-center">
         <div className="mb-4 text-4xl">📭</div>
@@ -161,7 +168,7 @@ export function FeedList({
     <>
       <Virtuoso
         useWindowScroll
-        data={activities}
+        data={effectiveActivities}
         itemContent={renderItem}
         endReached={handleEndReached}
         computeItemKey={(_index: number, activity: ActivityWithAuthor) => activity.id}
