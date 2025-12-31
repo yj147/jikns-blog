@@ -1,5 +1,6 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useState, useCallback, useMemo, useEffect } from "react"
 import { useAuth } from "@/app/providers/auth-provider"
 import { toast } from "sonner"
@@ -18,6 +19,12 @@ import { useActivities } from "@/hooks/use-activities"
 import { useActivityFilters, MIN_SEARCH_LENGTH } from "@/hooks/use-activity-filters"
 import { ActivityWithAuthor, ActivityOrderBy, ActivityQueryParams } from "@/types/activity"
 import { cn } from "@/lib/utils"
+
+const ActivityDeleteDialog = dynamic(
+  () =>
+    import("@/components/activity/activity-delete-dialog").then((mod) => mod.ActivityDeleteDialog),
+  { ssr: false }
+)
 
 interface ActivityListProps {
   userId?: string
@@ -131,6 +138,7 @@ export function ActivityList({
   className = "",
 }: ActivityListProps) {
   const [editingActivity, setEditingActivity] = useState<ActivityWithAuthor | null>(null)
+  const [deletingActivity, setDeletingActivity] = useState<ActivityWithAuthor | null>(null)
   const { user, canViewFollowing, filterState, activitiesState } = useActivityListController({
     userId,
     orderBy,
@@ -185,6 +193,10 @@ export function ActivityList({
     setEditingActivity(activity)
   }, [])
 
+  const handleDeleteActivity = useCallback((activity: ActivityWithAuthor) => {
+    setDeletingActivity(activity)
+  }, [])
+
   const handleEditComplete = useCallback(
     (activity: ActivityWithAuthor) => {
       setEditingActivity(null)
@@ -193,6 +205,11 @@ export function ActivityList({
     },
     [onActivityUpdate, refresh]
   )
+
+  const handleDeleteComplete = useCallback(() => {
+    setDeletingActivity(null)
+    refresh()
+  }, [refresh])
 
   const handleApplySearch = useCallback(() => {
     const result = applySearch()
@@ -267,6 +284,7 @@ export function ActivityList({
         clearAllFilters={clearAllFilters}
         onRetry={refresh}
         onEdit={handleEditActivity}
+        onDelete={handleDeleteActivity}
       />
 
       <ActivityEditorDialog
@@ -274,6 +292,17 @@ export function ActivityList({
         onDismiss={() => setEditingActivity(null)}
         onSuccess={handleEditComplete}
         canPin={canPinEditing}
+      />
+
+      <ActivityDeleteDialog
+        activity={deletingActivity}
+        open={!!deletingActivity}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeletingActivity(null)
+          }
+        }}
+        onSuccess={handleDeleteComplete}
       />
     </div>
   )
