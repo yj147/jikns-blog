@@ -92,12 +92,20 @@ export function useCommentsData({
 
   const resetList = useCallback(
     async (preserveSize = false) => {
-      if (!preserveSize) {
-        await setSize(1)
+      if (preserveSize) {
+        await mutate()
+        return
       }
+
+      // setSize() 会触发 revalidate；避免 setSize + mutate 导致重复请求
+      if (size !== 1) {
+        await setSize(1)
+        return
+      }
+
       await mutate()
     },
-    [mutate, setSize]
+    [mutate, setSize, size]
   )
 
   const loadMore = useCallback(() => {
