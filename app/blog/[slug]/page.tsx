@@ -21,7 +21,6 @@ import CommentList from "@/components/comments/comment-list"
 import { LikeButton } from "@/components/blog/like-button"
 import { BookmarkButton } from "@/components/blog/bookmark-button"
 import SubscribeForm from "@/components/subscribe-form"
-import CommentCount from "@/components/comments/comment-count"
 import { TableOfContents } from "@/components/blog/table-of-contents"
 import { extractTocItems, type TocItem } from "@/lib/markdown/toc"
 import { cn } from "@/lib/utils"
@@ -163,11 +162,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 />
                 <div className="text-muted-foreground flex items-center gap-1 text-sm">
                   <MessageSquare className="h-4 w-4" />
-                  <CommentCount
-                    targetType="post"
-                    targetId={post.id}
-                    initialCount={post.stats.commentsCount}
-                  />
+                  <span>{formatNumber(post.stats.commentsCount)}</span>
                 </div>
                 <BookmarkButton
                   postId={post.id}
@@ -223,20 +218,11 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 
           {/* 评论区域 */}
           <section className="border-border mt-12 border-t pt-8">
-            <h3 className="mb-6 text-xl font-bold">
-              评论 (
-              <CommentCount
-                targetType="post"
-                targetId={post.id}
-                initialCount={post.stats.commentsCount}
-              />
-              )
-            </h3>
             <CommentList
               targetType="post"
               targetId={post.id}
               showComposer
-              showTitle={false}
+              showTitle
               initialCount={post.stats.commentsCount}
             />
           </section>
