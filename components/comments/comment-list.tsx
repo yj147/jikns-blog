@@ -45,6 +45,7 @@ const CommentList: React.FC<CommentListProps> = ({
   const { user } = useAuth()
   const [replyingTo, setReplyingTo] = useState<string | null>(null)
   const localDeleteIdsRef = useRef<Set<string>>(new Set())
+  const localCreateIdsRef = useRef<Set<string>>(new Set())
 
   const {
     comments,
@@ -109,17 +110,22 @@ const CommentList: React.FC<CommentListProps> = ({
 
   const bumpTotal = useCallback(
     (delta: number) => {
-      mutate((currentPages) => {
-        if (!currentPages) {
-          return currentPages
-        }
-        const safePages = currentPages.filter((page): page is CommentsApiResponse => Boolean(page))
-        return safePages.map((page, index) => {
-          if (index !== 0) return page
-          const next = bumpPaginationTotal(page, delta)
-          return next ?? page
-        })
-      }, false)
+      mutate(
+        (currentPages) => {
+          if (!currentPages) {
+            return currentPages
+          }
+          const safePages = currentPages.filter((page): page is CommentsApiResponse =>
+            Boolean(page)
+          )
+          return safePages.map((page, index) => {
+            if (index !== 0) return page
+            const next = bumpPaginationTotal(page, delta)
+            return next ?? page
+          })
+        },
+        { revalidate: false }
+      )
 
       // 同步动态列表的 commentsCount，避免计数回退
       if (targetType === "activity") {
@@ -156,78 +162,84 @@ const CommentList: React.FC<CommentListProps> = ({
 
   const addTopLevelComment = useCallback(
     (incoming: Comment) => {
-      mutate((currentPages) => {
-        if (!currentPages || currentPages.length === 0) {
-          return [
-            {
-              success: true,
-              data: [incoming],
-              meta: {
-                pagination: {
-                  total: 1,
-                  hasMore: false,
-                  nextCursor: null,
+      mutate(
+        (currentPages) => {
+          if (!currentPages || currentPages.length === 0) {
+            return [
+              {
+                success: true,
+                data: [incoming],
+                meta: {
+                  pagination: {
+                    total: 1,
+                    hasMore: false,
+                    nextCursor: null,
+                  },
                 },
               },
-            },
-          ]
-        }
-
-        const exists = currentPages.some((page) =>
-          page?.data?.some((comment) => comment.id === incoming.id)
-        )
-        if (exists) {
-          return currentPages
-        }
-
-        let updated = false
-        const nextPages = currentPages.map((page, index) => {
-          if (!page?.data) {
-            return page
+            ]
           }
-          if (index === 0) {
-            updated = true
-            return {
-              ...bumpPaginationTotal(page, 1),
-              success: true,
-              data: [incoming, ...(page.data ?? [])],
+
+          const exists = currentPages.some((page) =>
+            page?.data?.some((comment) => comment.id === incoming.id)
+          )
+          if (exists) {
+            return currentPages
+          }
+
+          let updated = false
+          const nextPages = currentPages.map((page, index) => {
+            if (!page?.data) {
+              return page
             }
-          }
-          return page
-        })
+            if (index === 0) {
+              updated = true
+              return {
+                ...bumpPaginationTotal(page, 1),
+                success: true,
+                data: [incoming, ...(page.data ?? [])],
+              }
+            }
+            return page
+          })
 
-        return updated ? nextPages : currentPages
-      }, false)
+          return updated ? nextPages : currentPages
+        },
+        { revalidate: false }
+      )
     },
     [mutate, bumpPaginationTotal]
   )
 
   const removeTopLevelComment = useCallback(
     (commentId: string) => {
-      mutate((currentPages) => {
-        if (!currentPages) {
-          return currentPages
-        }
-
-        let removed = false
-        const nextPages = currentPages.map((page) => {
-          if (!page?.data) {
-            return page
+      mutate(
+        (currentPages) => {
+          if (!currentPages) {
+            return currentPages
           }
-          const filtered = page.data.filter((comment) => comment.id !== commentId)
-          if (filtered.length !== page.data.length) {
-            removed = true
-            return {
-              ...bumpPaginationTotal(page, -1),
-              success: true,
-              data: filtered,
+
+          let removed = false
+          const nextPages = currentPages.map((page) => {
+            if (!page?.data) {
+              return page
             }
-          }
-          return page
-        })
+            const filtered = page.data.filter((comment) => comment.id !== commentId)
+            if (filtered.length !== page.data.length) {
+              removed = true
+              return {
+                ...bumpPaginationTotal(page, -1),
+                success: true,
+                data: filtered,
+              }
+            }
+            return page
+          })
 
-        return removed ? nextPages : currentPages
-      }, false)
+          return removed ? nextPages : currentPages
+        },
+        { revalidate: false }
+      )
     },
     [mutate, bumpPaginationTotal]
   )
@@ -311,6 +323,14 @@ const CommentList: React.FC<CommentListProps> = ({
     async (context?: CommentFormSuccessContext) => {
       const parentId = context?.parentId ?? null
       const incoming = context?.comment ? hydrateAuthor(context.comment) : null
+      const createdId = incoming?.id
+
+      if (createdId) {
+        localCreateIdsRef.current.add(createdId)
+        setTimeout(() => {
+          localCreateIdsRef.current.delete(createdId)
+        }, 30000)
+      }
 
       if (parentId) {
         await resetList(true)
@@ -350,6 +370,11 @@ const CommentList: React.FC<CommentListProps> = ({
   const handleRealtimeInsert = useCallback(
     (incoming: Comment) => {
       const withAuthor = hydrateAuthor(incoming)
+
+      if (localCreateIdsRef.current.has(withAuthor.id)) {
+        localCreateIdsRef.current.delete(withAuthor.id)
+        return
+      }
 
       if (incoming.parentId) {
         prependReply(incoming.parentId, withAuthor)
