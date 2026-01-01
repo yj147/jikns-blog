@@ -45,7 +45,6 @@ const CommentList: React.FC<CommentListProps> = ({
   const { user } = useAuth()
   const [replyingTo, setReplyingTo] = useState<string | null>(null)
   const localDeleteIdsRef = useRef<Set<string>>(new Set())
-  const localCreateIdsRef = useRef<Set<string>>(new Set())
 
   const {
     comments,
@@ -319,62 +318,9 @@ const CommentList: React.FC<CommentListProps> = ({
     ]
   )
 
-  const handleCommentAdded = useCallback(
-    async (context?: CommentFormSuccessContext) => {
-      const parentId = context?.parentId ?? null
-      const incoming = context?.comment ? hydrateAuthor(context.comment) : null
-      const createdId = incoming?.id
-
-      if (createdId) {
-        localCreateIdsRef.current.add(createdId)
-        setTimeout(() => {
-          localCreateIdsRef.current.delete(createdId)
-        }, 30000)
-      }
-
-      if (parentId) {
-        await resetList(true)
-        invalidate(parentId)
-
-        if (isShowing(parentId)) {
-          await loadRepliesForComment(parentId)
-        }
-      } else if (incoming) {
-        addTopLevelComment(incoming)
-        resetReplies()
-      } else {
-        await resetList()
-        resetReplies()
-      }
-
-      if (targetType === "activity") {
-        bumpActivityCounts(targetId, { comments: 1 })
-      }
-      setReplyingTo(null)
-      onCommentAdded?.()
-    },
-    [
-      hydrateAuthor,
-      resetList,
-      invalidate,
-      isShowing,
-      loadRepliesForComment,
-      addTopLevelComment,
-      resetReplies,
-      onCommentAdded,
-      targetType,
-      targetId,
-    ]
-  )
-
   const handleRealtimeInsert = useCallback(
     (incoming: Comment) => {
       const withAuthor = hydrateAuthor(incoming)
-
-      if (localCreateIdsRef.current.has(withAuthor.id)) {
-        localCreateIdsRef.current.delete(withAuthor.id)
-        return
-      }
 
       if (incoming.parentId) {
         prependReply(incoming.parentId, withAuthor)
@@ -437,6 +383,54 @@ const CommentList: React.FC<CommentListProps> = ({
     onInsert: handleRealtimeInsert,
     onDelete: handleRealtimeDelete,
   })
+
+  const handleCommentAdded = useCallback(
+    async (context?: CommentFormSuccessContext) => {
+      const parentId = context?.parentId ?? null
+      const incoming = context?.comment ? hydrateAuthor(context.comment) : null
+      const canUseRealtime = Boolean(isCommentsSubscribed && !commentsRealtimeError)
+
+      if (parentId) {
+        if (!canUseRealtime) {
+          await resetList(true)
+          invalidate(parentId)
+
+          if (isShowing(parentId)) {
+            await loadRepliesForComment(parentId)
+          }
+        }
+      } else if (incoming) {
+        if (!canUseRealtime) {
+          addTopLevelComment(incoming)
+        }
+        resetReplies()
+      } else {
+        await resetList()
+        resetReplies()
+      }
+
+      if (targetType === "activity" && !canUseRealtime) {
+        bumpActivityCounts(targetId, { comments: 1 })
+      }
+
+      setReplyingTo(null)
+      onCommentAdded?.()
+    },
+    [
+      addTopLevelComment,
+      commentsRealtimeError,
+      hydrateAuthor,
+      invalidate,
+      isCommentsSubscribed,
+      isShowing,
+      loadRepliesForComment,
+      onCommentAdded,
+      resetList,
+      resetReplies,
+      targetId,
+      targetType,
+    ]
+  )
 
   if (isInitialLoading) {
     return (
