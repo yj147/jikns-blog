@@ -129,74 +129,6 @@ const CommentList: React.FC<CommentListProps> = ({
     [mutate, bumpPaginationTotal, targetType, targetId]
   )
 
-  const handleDelete = useCallback(
-    async (commentId: string) => {
-      if (!user) {
-        toast({
-          title: "请先登录",
-          variant: "destructive",
-        })
-        return
-      }
-
-      localDeleteIdsRef.current.add(commentId)
-
-      try {
-        await fetchDelete(`/api/comments/${commentId}`)
-        await resetList()
-        resetReplies()
-        onCommentDeleted?.()
-        if (targetType === "activity") {
-          bumpActivityCounts(targetId, { comments: -1 })
-        }
-        toast({ title: "删除成功" })
-
-        setTimeout(() => {
-          localDeleteIdsRef.current.delete(commentId)
-        }, 30000)
-      } catch (err) {
-        localDeleteIdsRef.current.delete(commentId)
-        const message = err instanceof FetchError ? err.message : "删除失败，请稍后重试"
-        toast({ title: message, variant: "destructive" })
-      }
-    },
-    [user, resetList, resetReplies, onCommentDeleted, targetType, targetId]
-  )
-
-  const handleCommentAdded = useCallback(
-    async (context?: CommentFormSuccessContext) => {
-      const parentId = context?.parentId ?? null
-
-      if (parentId) {
-        await resetList(true)
-        invalidate(parentId)
-
-        if (isShowing(parentId)) {
-          await loadRepliesForComment(parentId)
-        }
-      } else {
-        await resetList()
-        resetReplies()
-      }
-
-      if (targetType === "activity") {
-        bumpActivityCounts(targetId, { comments: 1 })
-      }
-      setReplyingTo(null)
-      onCommentAdded?.()
-    },
-    [
-      resetList,
-      invalidate,
-      isShowing,
-      loadRepliesForComment,
-      resetReplies,
-      onCommentAdded,
-      targetType,
-      targetId,
-    ]
-  )
-
   const handleReplyToggle = useCallback(
     (comment: Comment) => {
       toggleReplies(comment)
@@ -300,13 +232,124 @@ const CommentList: React.FC<CommentListProps> = ({
     [mutate, bumpPaginationTotal]
   )
 
+  const handleDelete = useCallback(
+    async (commentId: string) => {
+      if (!user) {
+        toast({
+          title: "请先登录",
+          variant: "destructive",
+        })
+        return
+      }
+
+      localDeleteIdsRef.current.add(commentId)
+
+      try {
+        await fetchDelete(`/api/comments/${commentId}`)
+
+        const isTopLevel = comments.some((comment) => comment.id === commentId)
+
+        if (isTopLevel) {
+          removeTopLevelComment(commentId)
+          resetReplies()
+
+          if (targetType === "activity") {
+            bumpActivityCounts(targetId, { comments: -1 })
+          }
+        } else {
+          removeReply(commentId)
+
+          if (targetType === "activity") {
+            bumpActivityCounts(targetId, { comments: -1 })
+          }
+
+          const parentId =
+            Object.entries(replyCache).find(([, state]) =>
+              state?.data?.some((reply) => reply.id === commentId)
+            )?.[0] ?? null
+
+          await resetList(true)
+
+          if (parentId) {
+            invalidate(parentId)
+            if (isShowing(parentId)) {
+              await loadRepliesForComment(parentId)
+            }
+          }
+        }
+
+        onCommentDeleted?.()
+        toast({ title: "删除成功" })
+
+        setTimeout(() => {
+          localDeleteIdsRef.current.delete(commentId)
+        }, 30000)
+      } catch (err) {
+        localDeleteIdsRef.current.delete(commentId)
+        const message = err instanceof FetchError ? err.message : "删除失败，请稍后重试"
+        toast({ title: message, variant: "destructive" })
+      }
+    },
+    [
+      user,
+      comments,
+      removeTopLevelComment,
+      resetReplies,
+      targetType,
+      targetId,
+      removeReply,
+      onCommentDeleted,
+      replyCache,
+      resetList,
+      invalidate,
+      isShowing,
+      loadRepliesForComment,
+    ]
+  )
+
+  const handleCommentAdded = useCallback(
+    async (context?: CommentFormSuccessContext) => {
+      const parentId = context?.parentId ?? null
+      const incoming = context?.comment ? hydrateAuthor(context.comment) : null
+
+      if (parentId) {
+        await resetList(true)
+        invalidate(parentId)
+
+        if (isShowing(parentId)) {
+          await loadRepliesForComment(parentId)
+        }
+      } else if (incoming) {
+        addTopLevelComment(incoming)
+        resetReplies()
+      } else {
+        await resetList()
+        resetReplies()
+      }
+
+      if (targetType === "activity") {
+        bumpActivityCounts(targetId, { comments: 1 })
+      }
+      setReplyingTo(null)
+      onCommentAdded?.()
+    },
+    [
+      hydrateAuthor,
+      resetList,
+      invalidate,
+      isShowing,
+      loadRepliesForComment,
+      addTopLevelComment,
+      resetReplies,
+      onCommentAdded,
+      targetType,
+      targetId,
+    ]
+  )
+
   const handleRealtimeInsert = useCallback(
     (incoming: Comment) => {
       const withAuthor = hydrateAuthor(incoming)
-
-      if (user && incoming.authorId === user.id) {
-        return
-      }
 
       if (incoming.parentId) {
         prependReply(incoming.parentId, withAuthor)
@@ -317,10 +360,25 @@ const CommentList: React.FC<CommentListProps> = ({
         return
       }
 
+      if (comments.some((comment) => comment.id === withAuthor.id)) {
+        return
+      }
+
       addTopLevelComment(withAuthor)
-      bumpTotal(1)
+      if (targetType === "activity") {
+        bumpActivityCounts(targetId, { comments: 1 })
+      }
     },
-    [addTopLevelComment, prependReply, bumpTotal, hydrateAuthor, loadRepliesForComment, user]
+    [
+      hydrateAuthor,
+      prependReply,
+      bumpTotal,
+      loadRepliesForComment,
+      comments,
+      addTopLevelComment,
+      targetType,
+      targetId,
+    ]
   )
 
   const handleRealtimeDelete = useCallback(
@@ -329,11 +387,22 @@ const CommentList: React.FC<CommentListProps> = ({
         localDeleteIdsRef.current.delete(commentId)
         return
       }
-      removeTopLevelComment(commentId)
+
+      const isTopLevel = comments.some((comment) => comment.id === commentId)
+
+      if (isTopLevel) {
+        removeTopLevelComment(commentId)
+        resetReplies()
+        if (targetType === "activity") {
+          bumpActivityCounts(targetId, { comments: -1 })
+        }
+        return
+      }
+
       removeReply(commentId)
       bumpTotal(-1)
     },
-    [removeReply, removeTopLevelComment, bumpTotal]
+    [comments, removeTopLevelComment, resetReplies, targetType, targetId, removeReply, bumpTotal]
   )
 
   const { isSubscribed: isCommentsSubscribed, error: commentsRealtimeError } = useRealtimeComments({

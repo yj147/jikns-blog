@@ -7,9 +7,11 @@ import { useAuth } from "@/hooks/use-auth"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/hooks/use-toast"
+import type { Comment } from "@/types/comments"
 
 export interface CommentFormSuccessContext {
   parentId?: string | null
+  comment?: Comment
 }
 
 export interface CommentFormProps {
@@ -61,12 +63,14 @@ const CommentForm: React.FC<CommentFormProps> = ({
     setIsSubmitting(true)
 
     try {
-      await fetchPost("/api/comments", {
+      const payload = await fetchPost("/api/comments", {
         content: data.content.trim(),
         targetType,
         targetId,
         parentId,
       })
+
+      const comment = (payload?.data ?? payload) as Comment
 
       toast({
         title: "评论发表成功",
@@ -76,7 +80,7 @@ const CommentForm: React.FC<CommentFormProps> = ({
       reset()
 
       // 调用成功回调
-      onSuccess?.({ parentId: parentId ?? null })
+      onSuccess?.({ parentId: parentId ?? null, comment })
     } catch (error) {
       const message = error instanceof FetchError ? error.message : "发表评论失败，请稍后重试"
 
