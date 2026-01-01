@@ -12,6 +12,7 @@ describe("用户API错误处理迁移测试", () => {
 
     process.env.NEXT_PUBLIC_SUPABASE_URL = "http://localhost:54321"
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "test-anon-key"
+    process.env.METRICS_SAMPLE_RATE = "0"
   })
 
   afterEach(() => {
@@ -28,6 +29,21 @@ describe("用户API错误处理迁移测试", () => {
           }),
         },
       }),
+    }))
+  }
+
+  function mockApiDependencies() {
+    vi.doMock("@/lib/performance-monitor", () => ({
+      performanceMonitor: { recordApiResponse: vi.fn() },
+    }))
+
+    vi.doMock("@/lib/storage/signed-url", () => ({
+      createSignedUrls: vi.fn(async (inputs: string[]) => inputs),
+    }))
+
+    vi.doMock("@/lib/auth", () => ({
+      syncUserFromAuth: vi.fn().mockResolvedValue(undefined),
+      isConfiguredAdminEmail: vi.fn().mockReturnValue(false),
     }))
   }
 
@@ -59,13 +75,22 @@ describe("用户API错误处理迁移测试", () => {
     }))
   }
 
+  function buildRequest(options?: { withSessionCookie?: boolean }) {
+    const headers = new Headers()
+    if (options?.withSessionCookie) {
+      headers.set("cookie", "sb-test-auth-token=fake")
+    }
+    return new Request("http://localhost:3000/api/user", { headers })
+  }
+
   it("应该正确处理未认证用户 - 返回标准化错误格式", async () => {
+    mockApiDependencies()
     mockLogger()
     mockPrisma(() => Promise.resolve(null))
     mockSupabaseWith({ user: null, error: { message: "Not authenticated" } })
 
     const { GET } = await import("@/app/api/user/route")
-    const response = await GET()
+    const response = await GET(buildRequest())
     const data = await response.json()
 
     expect(response.status).toBe(401)
@@ -73,6 +98,7 @@ describe("用户API错误处理迁移测试", () => {
   })
 
   it("应该正确处理认证用户 - 返回用户信息", async () => {
+    mockApiDependencies()
     mockLogger()
 
     const mockUser = {
@@ -102,7 +128,7 @@ describe("用户API错误处理迁移测试", () => {
     mockSupabaseWith({ user: mockUser, error: null })
 
     const { GET } = await import("@/app/api/user/route")
-    const response = await GET()
+    const response = await GET(buildRequest({ withSessionCookie: true }))
     const data = await response.json()
 
     expect(response.status).toBe(200)
@@ -111,6 +137,7 @@ describe("用户API错误处理迁移测试", () => {
   })
 
   it("应该正确处理数据库错误 - 使用回退数据", async () => {
+    mockApiDependencies()
     mockLogger()
 
     const mockUser = {
@@ -125,7 +152,7 @@ describe("用户API错误处理迁移测试", () => {
     mockSupabaseWith({ user: mockUser, error: null })
 
     const { GET } = await import("@/app/api/user/route")
-    const response = await GET()
+    const response = await GET(buildRequest({ withSessionCookie: true }))
     const data = await response.json()
 
     expect(response.status).toBe(200)
@@ -135,6 +162,7 @@ describe("用户API错误处理迁移测试", () => {
   })
 
   it("应该正确处理服务器错误 - 返回标准化错误格式", async () => {
+    mockApiDependencies()
     mockLogger()
     mockPrisma(() => Promise.resolve(null))
 
@@ -143,7 +171,7 @@ describe("用户API错误处理迁移测试", () => {
     }))
 
     const { GET } = await import("@/app/api/user/route")
-    const response = await GET()
+    const response = await GET(buildRequest({ withSessionCookie: true }))
     const data = await response.json()
 
     expect(response.status).toBe(500)
@@ -151,6 +179,7 @@ describe("用户API错误处理迁移测试", () => {
   })
 
   it("应该正确处理新用户创建", async () => {
+    mockApiDependencies()
     mockLogger()
 
     const mockUser = {
@@ -182,7 +211,7 @@ describe("用户API错误处理迁移测试", () => {
     mockSupabaseWith({ user: mockUser, error: null })
 
     const { GET } = await import("@/app/api/user/route")
-    const response = await GET()
+    const response = await GET(buildRequest({ withSessionCookie: true }))
     const data = await response.json()
 
     expect(response.status).toBe(200)

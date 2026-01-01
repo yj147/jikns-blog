@@ -100,7 +100,11 @@ export function ClientUserMenu() {
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <Link href="/admin" className="flex items-center text-blue-600 dark:text-blue-400">
+                <Link
+                  href="/admin"
+                  prefetch={false}
+                  className="flex items-center text-blue-600 dark:text-blue-400"
+                >
                   <Shield className="mr-2 h-4 w-4" />
                   管理后台
                 </Link>

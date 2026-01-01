@@ -57,6 +57,10 @@ vi.mock("@/lib/security/xss-cleaner", () => ({
   cleanXSS: vi.fn((content: string) => content + "_cleaned"),
 }))
 
+vi.mock("@/lib/services/notification", () => ({
+  notify: vi.fn().mockResolvedValue(undefined),
+}))
+
 vi.mock("@/lib/utils/logger", () => ({
   logger: {
     debug: vi.fn(),
@@ -64,6 +68,12 @@ vi.mock("@/lib/utils/logger", () => ({
     error: vi.fn(),
     warn: vi.fn(),
   },
+  createLogger: vi.fn(() => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+  })),
 }))
 
 describe("评论服务测试", () => {
@@ -80,7 +90,7 @@ describe("评论服务测试", () => {
     }
 
     it("应该成功创建文章评论", async () => {
-      const mockPost = { id: "post-1" }
+      const mockPost = { id: "post-1", authorId: "user-1" }
       const mockComment = {
         id: "comment-1",
         content: "Test comment_cleaned",
@@ -91,9 +101,7 @@ describe("评论服务测试", () => {
         author: {
           id: "user-1",
           name: "Test User",
-          email: "test@example.com",
           avatarUrl: "avatar.jpg",
-          role: "USER",
         },
       }
 
@@ -108,7 +116,7 @@ describe("评论服务测试", () => {
       // 验证目标存在性检查
       expect(prisma.post.findUnique).toHaveBeenCalledWith({
         where: { id: "post-1" },
-        select: { id: true },
+        select: { id: true, authorId: true },
       })
 
       // 验证评论创建
@@ -125,8 +133,6 @@ describe("评论服务测试", () => {
               id: true,
               name: true,
               avatarUrl: true,
-              email: true,
-              role: true,
             },
           },
         },
@@ -149,13 +155,13 @@ describe("评论服务测试", () => {
         content: "Test comment_cleaned",
         _count: { replies: 0 },
         author: {
-          email: "test@example.com",
+          id: "user-1",
         },
       })
     })
 
     it("应该成功创建动态评论并更新计数", async () => {
-      const mockActivity = { id: "activity-1", commentsCount: 5 }
+      const mockActivity = { id: "activity-1", commentsCount: 5, authorId: "user-2" }
       const mockComment = {
         id: "comment-2",
         content: "Activity comment_cleaned",
@@ -166,9 +172,7 @@ describe("评论服务测试", () => {
         author: {
           id: "user-2",
           name: "User 2",
-          email: "user2@example.com",
           avatarUrl: null,
-          role: "USER",
         },
       }
 
@@ -187,17 +191,18 @@ describe("评论服务测试", () => {
         isDeleted: false,
         targetType: "activity",
         targetId: "activity-1",
-        author: { email: "user2@example.com" },
+        author: { id: "user-2" },
       })
     })
 
     it("应该成功创建回复评论", async () => {
-      const mockPost = { id: "post-1" }
+      const mockPost = { id: "post-1", authorId: "user-1" }
       const mockParentComment = {
         id: "parent-comment",
         postId: "post-1",
         activityId: null,
         deletedAt: null,
+        authorId: "user-2",
       }
       const mockReply = {
         id: "reply-1",
@@ -210,8 +215,6 @@ describe("评论服务测试", () => {
           id: "user-3",
           name: "User 3",
           avatarUrl: null,
-          email: "user3@example.com",
-          role: "USER",
         },
       }
 
@@ -234,6 +237,7 @@ describe("评论服务测试", () => {
           postId: true,
           activityId: true,
           deletedAt: true,
+          authorId: true,
         },
       })
 
@@ -241,12 +245,13 @@ describe("评论服务测试", () => {
     })
 
     it("应该阻止回复已被软删除的父评论", async () => {
-      const mockPost = { id: "post-1" }
+      const mockPost = { id: "post-1", authorId: "user-1" }
       const deletedParent = {
         id: "parent-comment",
         postId: "post-1",
         activityId: null,
         deletedAt: new Date(),
+        authorId: "user-2",
       }
 
       vi.mocked(prisma.post.findUnique).mockResolvedValue(mockPost as any)
@@ -277,7 +282,7 @@ describe("评论服务测试", () => {
     })
 
     it("应该在父评论不存在时抛出错误", async () => {
-      const mockPost = { id: "post-1" }
+      const mockPost = { id: "post-1", authorId: "user-1" }
 
       vi.mocked(prisma.post.findUnique).mockResolvedValue(mockPost as any)
       vi.mocked(prisma.comment.findUnique).mockResolvedValue(null)
@@ -294,11 +299,13 @@ describe("评论服务测试", () => {
     })
 
     it("应该在父评论不属于同一目标时抛出错误", async () => {
-      const mockPost = { id: "post-1" }
+      const mockPost = { id: "post-1", authorId: "user-1" }
       const mockParentComment = {
         id: "parent-comment",
         postId: "post-2", // 不同的文章
         activityId: null,
+        deletedAt: null,
+        authorId: "user-2",
       }
 
       vi.mocked(prisma.post.findUnique).mockResolvedValue(mockPost as any)
@@ -362,9 +369,7 @@ describe("评论服务测试", () => {
         },
       ]
 
-      vi.mocked(prisma.comment.count)
-        .mockResolvedValueOnce(mockComments.length)
-        .mockResolvedValueOnce(0)
+      vi.mocked(prisma.comment.count).mockResolvedValueOnce(mockComments.length)
       vi.mocked(prisma.comment.findMany).mockResolvedValue(mockComments as any)
 
       const result = await listComments(baseQueryOptions)
@@ -383,8 +388,6 @@ describe("评论服务测试", () => {
               id: true,
               name: true,
               avatarUrl: true,
-              email: true,
-              role: true,
             },
           },
           _count: {
@@ -397,22 +400,20 @@ describe("评论服务测试", () => {
         },
       })
 
-      expect(prisma.comment.count).toHaveBeenNthCalledWith(1, {
+      expect(prisma.comment.count).toHaveBeenCalledWith({
         where: {
           postId: "post-1",
           deletedAt: null,
-          parentId: null,
-        },
-      })
-      expect(prisma.comment.count).toHaveBeenNthCalledWith(2, {
-        where: {
-          postId: "post-1",
-          deletedAt: null,
-          parentId: { not: null },
-          parent: {
-            postId: "post-1",
-            deletedAt: null,
-          },
+          OR: [
+            { parentId: null },
+            {
+              parentId: { not: null },
+              parent: {
+                postId: "post-1",
+                deletedAt: null,
+              },
+            },
+          ],
         },
       })
 
@@ -420,7 +421,6 @@ describe("评论服务测试", () => {
       expect(result.hasMore).toBe(false)
       expect(result.nextCursor).toBeUndefined()
       expect(result.comments[0].isDeleted).toBe(false)
-      expect(result.comments[0].author?.email).toBe("user1@example.com")
       expect(result.comments[0]).toMatchObject({ targetType: "post", targetId: "post-1" })
       expect(result.totalCount).toBe(2)
     })
@@ -435,9 +435,7 @@ describe("评论服务测试", () => {
         createdAt: new Date(2024, 0, 11 - i),
       }))
 
-      vi.mocked(prisma.comment.count)
-        .mockResolvedValueOnce(mockComments.length)
-        .mockResolvedValueOnce(0)
+      vi.mocked(prisma.comment.count).mockResolvedValueOnce(mockComments.length)
       vi.mocked(prisma.comment.findMany).mockResolvedValue(mockComments as any)
 
       const result = await listComments({
@@ -526,9 +524,7 @@ describe("评论服务测试", () => {
         },
       ]
 
-      vi.mocked(prisma.comment.count)
-        .mockResolvedValueOnce(mockTopComments.length)
-        .mockResolvedValueOnce(mockReplies.length)
+      vi.mocked(prisma.comment.count).mockResolvedValueOnce(3)
       vi.mocked(prisma.comment.findMany)
         .mockResolvedValueOnce(mockTopComments as any)
         .mockResolvedValueOnce(mockReplies as any)
@@ -553,8 +549,6 @@ describe("评论服务测试", () => {
               id: true,
               name: true,
               avatarUrl: true,
-              email: true,
-              role: true,
             },
           },
           _count: {
@@ -580,8 +574,6 @@ describe("评论服务测试", () => {
               id: true,
               name: true,
               avatarUrl: true,
-              email: true,
-              role: true,
             },
           },
           _count: {
@@ -639,8 +631,6 @@ describe("评论服务测试", () => {
               id: true,
               name: true,
               avatarUrl: true,
-              email: true,
-              role: true,
             },
           },
           _count: {

@@ -25,6 +25,7 @@ export default function FollowingPage({ params }: FollowingPageProps) {
   const { userId } = use(params)
   const { user: currentUser } = useAuth()
   const [userName, setUserName] = useState<string>("")
+  const [totalFollowing, setTotalFollowing] = useState<number | null>(null)
 
   const {
     items: following,
@@ -41,7 +42,7 @@ export default function FollowingPage({ params }: FollowingPageProps) {
   } = useFollowing(userId, {
     limit: 20,
     autoLoad: true,
-    includeTotal: true, // 请求总数以显示在页面抬头
+    includeTotal: false, // 总数来自 /api/users/[id]/public 的 counts.following，避免 COUNT(*)
   })
 
   // Linus 原则：数据结构驱动设计
@@ -53,10 +54,13 @@ export default function FollowingPage({ params }: FollowingPageProps) {
         if (response.ok) {
           const result = await response.json()
           setUserName(result.data?.name || "用户")
+          const count = result.data?.counts?.following
+          setTotalFollowing(typeof count === "number" ? count : null)
         }
       } catch (error) {
         profileFollowingLogger.error("获取用户信息失败", { userId }, error)
         setUserName("用户")
+        setTotalFollowing(null)
       }
     }
     fetchUserName()
@@ -78,7 +82,9 @@ export default function FollowingPage({ params }: FollowingPageProps) {
             </p>
             {deniedReason === "UNAUTHORIZED" ? (
               <Button asChild>
-                <Link href="/login">登录后重试</Link>
+                <Link href="/login" prefetch={false}>
+                  登录后重试
+                </Link>
               </Button>
             ) : (
               <Button variant="outline" onClick={() => history.back()}>
@@ -113,14 +119,18 @@ export default function FollowingPage({ params }: FollowingPageProps) {
           {/* Header */}
           <div className="mb-6 flex items-center space-x-4">
             <Button variant="ghost" size="sm" asChild>
-              <Link href={`/profile/${userId}`}>
+              <Link href={`/profile/${userId}`} prefetch={false}>
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
             <div>
               <h1 className="text-2xl font-bold">正在关注</h1>
               <p className="text-muted-foreground text-sm">
-                {userName} 关注的 {pagination.total} 位用户
+                {userName} 关注的{" "}
+                {hasMore
+                  ? (totalFollowing ?? pagination.total ?? following.length)
+                  : following.length}{" "}
+                位用户
               </p>
             </div>
           </div>

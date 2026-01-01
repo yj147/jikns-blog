@@ -295,33 +295,69 @@ export async function listAdminPosts(
   const orderBy = resolveOrder(params.sort)
   const skip = (currentPage - 1) * pageSize
 
-  const [posts, matchingCount, totalCount, publishedCount, draftsCount, pinnedCount, tagRecords] =
-    await prisma.$transaction([
-      prisma.post.findMany({
-        where: whereForList,
-        select: ADMIN_POST_SELECT,
-        orderBy,
-        skip,
-        take: pageSize,
-      }),
-      prisma.post.count({ where: whereForList }),
-      prisma.post.count({ where: whereForCounts }),
-      prisma.post.count({ where: { ...whereForCounts, published: true } }),
-      prisma.post.count({ where: { ...whereForCounts, published: false } }),
-      prisma.post.count({ where: { ...whereForCounts, isPinned: true } }),
-      prisma.tag.findMany({
-        where: {
-          posts: {
-            some: {
-              post: whereForTags,
-            },
+  const [posts, groupedCounts, tagRecords] = await prisma.$transaction([
+    prisma.post.findMany({
+      where: whereForList,
+      select: ADMIN_POST_SELECT,
+      orderBy,
+      skip,
+      take: pageSize,
+    }),
+    prisma.post.groupBy({
+      by: ["published", "isPinned"] as const,
+      where: whereForCounts,
+      orderBy: [{ published: "asc" }, { isPinned: "asc" }],
+      _count: { _all: true } as const,
+    }),
+    prisma.tag.findMany({
+      where: {
+        posts: {
+          some: {
+            post: whereForTags,
           },
         },
-        select: { name: true },
-        orderBy: { name: "asc" },
-        take: 32,
-      }),
-    ])
+      },
+      select: { name: true },
+      orderBy: { name: "asc" },
+      take: 32,
+    }),
+  ])
+
+  let totalCount = 0
+  let publishedCount = 0
+  let draftsCount = 0
+  let pinnedCount = 0
+
+  const groupedCountsSafe = groupedCounts as Array<{
+    published: boolean
+    isPinned: boolean
+    _count: { _all: number }
+  }>
+
+  for (const group of groupedCountsSafe) {
+    const count = group._count._all
+    totalCount += count
+
+    if (group.published) {
+      publishedCount += count
+    } else {
+      draftsCount += count
+    }
+
+    if (group.isPinned) {
+      pinnedCount += count
+    }
+  }
+
+  const status = params.status ?? "all"
+  let matchingCount = totalCount
+  if (status === "published") {
+    matchingCount = publishedCount
+  } else if (status === "draft") {
+    matchingCount = draftsCount
+  } else if (status === "pinned") {
+    matchingCount = pinnedCount
+  }
 
   const totalPages = Math.max(Math.ceil(matchingCount / pageSize), 1)
 

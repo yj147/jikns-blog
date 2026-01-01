@@ -105,7 +105,9 @@ export function AdminOnly({
 
           <div className="flex w-full flex-col gap-2 sm:flex-row">
             <Button asChild className="flex-1">
-              <Link href="/login">管理员登录</Link>
+              <Link href="/login" prefetch={false}>
+                管理员登录
+              </Link>
             </Button>
 
             <Button asChild variant="outline" className="flex-1">

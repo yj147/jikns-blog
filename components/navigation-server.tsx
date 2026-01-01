@@ -2,6 +2,7 @@ import Link from "next/link"
 import { Suspense } from "react"
 import { PenTool } from "lucide-react"
 
+import { ClientOnly } from "@/components/client-only"
 import { navigationItems } from "./navigation-links"
 import NavigationInteractive from "./navigation-interactive"
 import NavigationSearch from "./navigation-search"
@@ -47,7 +48,17 @@ export async function NavigationServer() {
               <NavigationSearch className="w-full" />
             </Suspense>
           </div>
-          <NavigationInteractive />
+          <ClientOnly
+            fallback={
+              <div className="flex items-center gap-3" aria-hidden>
+                <div className="bg-muted h-10 w-10 rounded-full" />
+                <div className="bg-muted h-10 w-10 rounded-full md:hidden" />
+                <div className="bg-muted h-10 w-24 rounded-full" />
+              </div>
+            }
+          >
+            <NavigationInteractive />
+          </ClientOnly>
         </div>
       </div>
     </header>

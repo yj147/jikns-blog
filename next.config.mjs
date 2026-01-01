@@ -182,14 +182,6 @@ const nextConfig = {
     minimumCacheTTL: 60,
     remotePatterns: supabaseRemotePatterns,
   },
-  async rewrites() {
-    return [
-      {
-        source: "/favicon.ico",
-        destination: "/placeholder-logo.svg",
-      },
-    ]
-  },
   // 安全头部配置
   async headers() {
     return [

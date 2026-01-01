@@ -4,7 +4,6 @@ import { memo } from "react"
 import { ArchiveYear } from "@/lib/actions/archive"
 import ArchiveMonthGroup from "./archive-month-group"
 import { ChevronRight, Calendar } from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 
 interface ArchiveYearGroupProps {
@@ -35,36 +34,30 @@ function ArchiveYearGroupComponent({ yearData, isExpanded, onToggle }: ArchiveYe
         <Calendar className="text-muted-foreground h-5 w-5" />
         <h2 className="text-xl font-bold">{yearData.year} 年</h2>
         <span className="text-muted-foreground text-sm">({yearData.totalCount} 篇)</span>
-        <motion.div animate={{ rotate: isExpanded ? 90 : 0 }} transition={{ duration: 0.2 }}>
-          <ChevronRight className="h-4 w-4" />
-        </motion.div>
+        <ChevronRight
+          className={cn("h-4 w-4 transition-transform duration-200", isExpanded && "rotate-90")}
+        />
       </button>
 
       {/* 月份列表 */}
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="overflow-hidden"
-            id={panelId}
-            role="region"
-            aria-label={`${yearData.year} 年份文章`}
-          >
-            <div className="ml-8 mt-4 space-y-4">
-              {yearData.months.map((monthData) => (
-                <ArchiveMonthGroup
-                  key={`${yearData.year}-${monthData.month}`}
-                  year={yearData.year}
-                  monthData={monthData}
-                />
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {isExpanded && (
+        <div
+          className="overflow-hidden"
+          id={panelId}
+          role="region"
+          aria-label={`${yearData.year} 年份文章`}
+        >
+          <div className="ml-8 mt-4 space-y-4">
+            {yearData.months.map((monthData) => (
+              <ArchiveMonthGroup
+                key={`${yearData.year}-${monthData.month}`}
+                year={yearData.year}
+                monthData={monthData}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

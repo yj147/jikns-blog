@@ -6,18 +6,13 @@
 import { Suspense } from "react"
 import { Metadata } from "next"
 import { getPosts } from "@/lib/actions/posts"
-import { getPopularTags } from "@/lib/actions/tags"
+import { getPopularTags } from "@/lib/actions/tags/queries-cacheable"
 import { BlogSearchFilter } from "@/components/blog/blog-search-filter"
 import { TagFilter } from "@/components/blog/tag-filter"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { BlogPageSearchParams, PostListItem } from "@/types/blog"
-import {
-  generatePageTitle,
-  generatePageDescription,
-  parseSearchParams,
-} from "@/lib/utils/blog-helpers"
+import { PostListItem } from "@/types/blog"
 import Link from "next/link"
 import { logger } from "@/lib/utils/logger"
 import { Sparkles, Newspaper } from "lucide-react"
@@ -25,44 +20,25 @@ import { BlogListClient } from "@/components/blog/blog-list-client"
 
 export const revalidate = 60
 
-// 页面参数接口
-interface BlogPageProps {
-  searchParams: Promise<BlogPageSearchParams>
-}
-
-// 生成页面元数据
-export async function generateMetadata({ searchParams }: BlogPageProps): Promise<Metadata> {
-  const params = await searchParams
-  const { q, tag, page } = parseSearchParams(new URLSearchParams(params as any))
-
-  const title = generatePageTitle("博客动态", q, tag, page)
-  const description = generatePageDescription(q, tag)
-
-  return {
-    title,
-    description,
-    openGraph: {
-      title,
-      description,
-      type: "website",
-    },
-  }
+export const metadata: Metadata = {
+  title: "博客动态",
+  description: "浏览最新发布的博客文章",
+  openGraph: {
+    title: "博客动态",
+    description: "浏览最新发布的博客文章",
+    type: "website",
+  },
 }
 
 // 博客列表页面主组件
-export default async function BlogPage({ searchParams }: BlogPageProps) {
-  const params = await searchParams
-  const { page, q, tag, sort } = parseSearchParams(new URLSearchParams(params as any))
-
+export default async function BlogPage() {
   // 获取博客文章数据与热门标签
   const [result, popularTagsResult] = await Promise.all([
     getPosts({
-      page,
+      page: 1,
       limit: 10,
-      q: q || undefined,
-      tag: tag || undefined,
       published: true,
-      orderBy: sort === "viewCount" ? "viewCount" : "publishedAt",
+      orderBy: "publishedAt",
       order: "desc",
     }),
     getPopularTags(12),
@@ -103,12 +79,10 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
             <div className="flex items-center justify-between">
               <h1 className="flex items-center gap-2 text-xl font-bold">
                 <Newspaper className="text-primary h-5 w-5" />
-                {q ? `搜索: ${q}` : tag ? `标签: ${tag}` : "博客动态"}
+                博客动态
               </h1>
               {/* Mobile Search Toggle or simple info could go here */}
-              <span className="text-muted-foreground text-xs font-medium">
-                {pagination.total} 篇文章
-              </span>
+              <span className="text-muted-foreground text-xs font-medium">最新发布</span>
             </div>
 
             {/* Compact Filter Bar */}
@@ -121,17 +95,16 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
 
           {/* Posts Feed */}
           <div className="min-h-[50vh]">
-            <BlogListClient
-              initialPosts={posts}
-              initialPagination={{
-                total: pagination.total,
-                hasNext: pagination.hasNext,
-                nextCursor: pagination.hasNext ? String((pagination.page ?? 1) + 1) : null,
-              }}
-              searchQuery={q || undefined}
-              tagFilter={tag || undefined}
-              sortBy={sort || undefined}
-            />
+            <Suspense fallback={<div className="space-y-4 p-4" />}>
+              <BlogListClient
+                initialPosts={posts}
+                initialPagination={{
+                  total: pagination.total,
+                  hasNext: pagination.hasNext,
+                  nextCursor: pagination.hasNext ? String((pagination.page ?? 1) + 1) : null,
+                }}
+              />
+            </Suspense>
           </div>
         </main>
 
@@ -147,11 +120,15 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <TagFilter
-                  className="p-0 shadow-none"
-                  limit={popularTags?.length ?? 12}
-                  initialTags={popularTags}
-                />
+                <Suspense
+                  fallback={<div className="bg-muted h-32 w-full animate-pulse rounded-xl" />}
+                >
+                  <TagFilter
+                    className="p-0 shadow-none"
+                    limit={popularTags?.length ?? 12}
+                    initialTags={popularTags}
+                  />
+                </Suspense>
               </CardContent>
             </Card>
 
@@ -162,7 +139,15 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  <Input placeholder="your@email.com" type="email" className="bg-background" />
+                  <Input
+                    id="blog-newsletter-email"
+                    name="email"
+                    placeholder="your@email.com"
+                    type="email"
+                    autoComplete="email"
+                    aria-label="邮箱"
+                    className="bg-background"
+                  />
                   <Button className="w-full font-bold">订阅周刊</Button>
                   <p className="text-muted-foreground text-center text-xs">
                     每周一发送，随时取消订阅

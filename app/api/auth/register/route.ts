@@ -12,6 +12,27 @@ import { getSetting, type RegistrationToggle } from "@/lib/services/system-setti
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 import { getClientIp } from "@/lib/api/get-client-ip"
 
+function resolveAuthBaseUrl(request: NextRequest): string {
+  const requestOrigin = new URL(request.url).origin
+
+  if (process.env.VERCEL_ENV !== "preview") {
+    return requestOrigin
+  }
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
+  if (!siteUrl) return requestOrigin
+
+  try {
+    const siteOrigin = new URL(siteUrl).origin
+    if (siteOrigin.startsWith("http://localhost") || siteOrigin.startsWith("http://127.0.0.1")) {
+      return requestOrigin
+    }
+    return siteOrigin
+  } catch {
+    return requestOrigin
+  }
+}
+
 // 注册请求验证 Schema
 const RegisterSchema = z
   .object({
@@ -96,7 +117,7 @@ async function handlePost(request: NextRequest) {
     }
 
     const { email, password, name, redirectTo } = validationResult.data
-    const baseUrl = new URL(request.url).origin
+    const baseUrl = resolveAuthBaseUrl(request)
 
     // 创建 Supabase 客户端
     const supabase = await createRouteHandlerClient()

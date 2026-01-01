@@ -89,6 +89,20 @@ export function useFeedState({
     activitiesRef.current = activities
   }, [activities])
 
+  const prependActivity = useCallback((activity: ActivityWithAuthor) => {
+    setRealtimeActivities((prev) => {
+      if (prev.some((item) => item.id === activity.id)) {
+        return prev
+      }
+
+      if (activitiesRef.current.some((item) => item.id === activity.id)) {
+        return prev
+      }
+
+      return [activity, ...prev].slice(0, 10)
+    })
+  }, [])
+
   // 当 activities 变化时，清理已存在于主列表中的实时活动
   // 使用 activities.length 作为依赖，避免每次渲染都触发
   const activitiesLengthRef = useRef(activities.length)
@@ -259,6 +273,7 @@ export function useFeedState({
 
   const { isSubscribed: isRealtimeSubscribed, error: realtimeActivitiesError } =
     useRealtimeActivities({
+      enabled: resolvedIsAuthenticated,
       onInsert: handleRealtimeActivityInsert,
       onUpdate: handleRealtimeActivityUpdate,
       onDelete: handleRealtimeActivityDelete,
@@ -341,6 +356,7 @@ export function useFeedState({
     isPending,
     isRealtimeSubscribed,
     loadMore,
+    prependActivity,
     realtimeActivityIds,
     realtimeActivitiesError,
     refresh,

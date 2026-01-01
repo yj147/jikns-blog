@@ -4,7 +4,6 @@ import { memo, useState } from "react"
 import { ArchiveMonth } from "@/lib/actions/archive"
 import ArchivePostItem from "./archive-post-item"
 import { ChevronRight } from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 
@@ -35,9 +34,9 @@ function ArchiveMonthGroupComponent({ year, monthData }: ArchiveMonthGroupProps)
           aria-expanded={isExpanded}
           aria-controls={panelId}
         >
-          <motion.div animate={{ rotate: isExpanded ? 90 : 0 }} transition={{ duration: 0.2 }}>
-            <ChevronRight className="h-3 w-3" />
-          </motion.div>
+          <ChevronRight
+            className={cn("h-3 w-3 transition-transform duration-200", isExpanded && "rotate-90")}
+          />
           <h3 className="font-medium">{monthData.monthName}</h3>
           <span className="text-muted-foreground text-sm">({monthData.count} 篇)</span>
         </button>
@@ -53,36 +52,30 @@ function ArchiveMonthGroupComponent({ year, monthData }: ArchiveMonthGroupProps)
       </div>
 
       {/* 文章列表 */}
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="overflow-hidden"
-            id={panelId}
-            role="region"
-            aria-label={`${year} 年 ${monthData.monthName} 文章列表`}
-          >
-            <div className="ml-4 mt-3 space-y-2">
-              {monthData.posts.map((post) => (
-                <ArchivePostItem key={post.id} post={post} />
-              ))}
-              {remainingCount > 0 && (
-                <Link
-                  href={`/archive/${year}/${monthData.month.toString().padStart(2, "0")}`}
-                  prefetch={false}
-                  className="text-muted-foreground hover:text-primary block pl-8 text-sm transition-colors"
-                  aria-label={`查看 ${year} 年 ${monthData.monthName}的更多文章`}
-                >
-                  查看更多 ({remainingCount} 篇) →
-                </Link>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {isExpanded && (
+        <div
+          className="overflow-hidden"
+          id={panelId}
+          role="region"
+          aria-label={`${year} 年 ${monthData.monthName} 文章列表`}
+        >
+          <div className="ml-4 mt-3 space-y-2">
+            {monthData.posts.map((post) => (
+              <ArchivePostItem key={post.id} post={post} />
+            ))}
+            {remainingCount > 0 && (
+              <Link
+                href={`/archive/${year}/${monthData.month.toString().padStart(2, "0")}`}
+                prefetch={false}
+                className="text-muted-foreground hover:text-primary block pl-8 text-sm transition-colors"
+                aria-label={`查看 ${year} 年 ${monthData.monthName}的更多文章`}
+              >
+                查看更多 ({remainingCount} 篇) →
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -12,7 +12,18 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Hash, X, Loader2, AlertCircle } from "lucide-react"
-import { getPopularTags } from "@/lib/actions/tags"
+import { fetchJson } from "@/lib/api/fetch-json"
+
+type TagsApiResponse = {
+  success: boolean
+  data?: {
+    tags?: PopularTag[]
+  }
+  error?: {
+    message?: string
+    details?: unknown
+  }
+}
 
 export interface PopularTag {
   id: string
@@ -98,7 +109,12 @@ export function TagFilter({
     setRetryAfter(null)
 
     try {
-      const result = await getPopularTags(limit)
+      const params = new URLSearchParams()
+      params.set("page", "1")
+      params.set("limit", String(limit))
+      params.set("orderBy", "postsCount")
+      params.set("order", "desc")
+      const result = await fetchJson<TagsApiResponse>(`/api/tags?${params.toString()}`)
       if (result.success && result.data?.tags) {
         if (!mountedRef.current) return
         setTags(result.data.tags)

@@ -329,9 +329,24 @@ const CommentList: React.FC<CommentListProps> = ({
   if (isInitialLoading) {
     return (
       <div className={`space-y-4 ${className}`} data-testid="loading-skeleton">
-        <div className="animate-pulse">
-          <div className="mb-4 h-20 rounded bg-gray-200" />
-          <div className="mb-4 h-16 rounded bg-gray-200" />
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="flex animate-pulse items-start gap-3">
+              <div className="h-10 w-10 flex-shrink-0 rounded-full bg-gray-200" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="h-4 w-40 rounded bg-gray-200" />
+                <div className="h-4 w-full rounded bg-gray-200" />
+                <div className="h-4 w-5/6 rounded bg-gray-200" />
+              </div>
+            </div>
+          ))}
+
+          {showComposer && (
+            <div className="animate-pulse space-y-2 pt-4">
+              <div className="h-24 w-full rounded bg-gray-200" />
+              <div className="h-9 w-28 rounded bg-gray-200" />
+            </div>
+          )}
         </div>
       </div>
     )

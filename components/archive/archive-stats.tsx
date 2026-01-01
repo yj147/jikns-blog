@@ -4,7 +4,6 @@ import { memo, useMemo } from "react"
 import { ArchiveStats as ArchiveStatsType } from "@/lib/actions/archive"
 import { Card, CardContent } from "@/components/ui/card"
 import { FileText, Calendar, TrendingUp, Clock } from "lucide-react"
-import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 
 interface ArchiveStatsProps {
@@ -17,10 +16,15 @@ function ArchiveStatsComponent({ stats }: ArchiveStatsProps) {
       return "暂无数据"
     }
 
-    const oldest = new Date(stats.oldestPost)
-    const newest = new Date(stats.newestPost)
+    const oldestDate = new Date(stats.oldestPost)
+    const newestDate = new Date(stats.newestPost)
 
-    return `${oldest.getFullYear()}年${oldest.getMonth() + 1}月 - ${newest.getFullYear()}年${newest.getMonth() + 1}月`
+    const oldestYear = oldestDate.getUTCFullYear()
+    const oldestMonth = oldestDate.getUTCMonth() + 1
+    const newestYear = newestDate.getUTCFullYear()
+    const newestMonth = newestDate.getUTCMonth() + 1
+
+    return `${oldestYear}年${oldestMonth}月 - ${newestYear}年${newestMonth}月`
   }, [stats.oldestPost, stats.newestPost])
 
   const averagePerYear = useMemo(() => {
@@ -65,14 +69,8 @@ function ArchiveStatsComponent({ stats }: ArchiveStatsProps) {
 
   return (
     <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
-      {statItems.map((item, index) => (
-        <motion.div
-          key={item.label}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: index * 0.1 }}
-          className={item.wide ? "md:col-span-3" : ""}
-        >
+      {statItems.map((item) => (
+        <div key={item.label} className={item.wide ? "md:col-span-3" : ""}>
           <Card className="border-none shadow-sm transition-shadow hover:shadow-md">
             <CardContent className="flex items-center gap-4 p-4">
               <div className={cn("rounded-lg p-3", item.bgColor)}>
@@ -84,7 +82,7 @@ function ArchiveStatsComponent({ stats }: ArchiveStatsProps) {
               </div>
             </CardContent>
           </Card>
-        </motion.div>
+        </div>
       ))}
     </div>
   )

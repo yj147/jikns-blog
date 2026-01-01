@@ -7,7 +7,7 @@ import ArchiveSearch from "@/components/archive/archive-search"
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 
-export const dynamic = "force-dynamic"
+export const revalidate = 60
 
 interface PageProps {
   params: {

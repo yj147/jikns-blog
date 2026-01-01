@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
-import type { AuthenticatedUser } from "@/lib/auth/session"
+import { getOptionalViewer, type AuthenticatedUser } from "@/lib/auth/session"
+import { revalidateTag, unstable_cache } from "next/cache"
 import {
   ActivityWithAuthor,
   activityQuerySchema,
@@ -17,7 +18,6 @@ import {
 } from "@/lib/api/unified-response"
 import { handleApiError } from "@/lib/api/error-handler"
 import { listActivities, type ActivityListItem } from "@/lib/repos/activity-repo"
-import { getBatchLikeStatus } from "@/lib/interactions/likes"
 import { ActivityPermissions } from "@/lib/permissions/activity-permissions"
 import { rateLimitCheckForAction } from "@/lib/rate-limit/activity-limits"
 import { auditLogger, getClientIP, getClientUserAgent } from "@/lib/audit-log"
@@ -31,22 +31,34 @@ import { generateRequestId } from "@/lib/utils/request-id"
 const DEFAULT_RATE_LIMIT_MESSAGE = "请求过于频繁，请稍后再试"
 
 async function handleGet(request: NextRequest) {
+  const totalStart = performance.now()
+  let viewerMs = 0
+  let rateMs = 0
+  let repoMs = 0
+  let signMs = 0
+  let likeMs = 0
+  let mapMs = 0
+
   try {
-    let user: Awaited<ReturnType<typeof getCurrentUser>> | null = null
+    const viewerStart = performance.now()
+    let viewer: AuthenticatedUser | null = null
     try {
-      user = await getCurrentUser()
+      viewer = await getOptionalViewer({ request })
     } catch (error) {
-      logger.warn("getCurrentUser failed, falling back to anonymous viewer", {
+      logger.warn("getOptionalViewer failed, falling back to anonymous viewer", {
         error: error instanceof Error ? error.message : String(error),
       })
-      user = null
+      viewer = null
     }
-    const viewer = toAuthenticatedUser(user)
+    viewerMs = performance.now() - viewerStart
+
     const ipAddress = getClientIP(request) ?? undefined
+    const rateStart = performance.now()
     const rateLimit = await rateLimitCheckForAction("read", {
-      userId: user?.id ?? null,
+      userId: viewer?.id ?? null,
       ip: ipAddress,
     })
+    rateMs = performance.now() - rateStart
     if (!rateLimit.success) {
       return createErrorResponse(
         ErrorCode.RATE_LIMIT_EXCEEDED,
@@ -97,10 +109,19 @@ async function handleGet(request: NextRequest) {
         orderBy: queryParams.orderBy,
       })
 
-      return respondWithFixture(fixtureResult, viewer, resolvedFixtureName, queryParams)
+      const response = respondWithFixture(fixtureResult, viewer, resolvedFixtureName, queryParams)
+      const totalMs = performance.now() - totalStart
+      response.headers.set(
+        "Server-Timing",
+        `viewer;dur=${viewerMs.toFixed(1)}, rate;dur=${rateMs.toFixed(1)}, total;dur=${totalMs.toFixed(1)}`
+      )
+      response.headers.set("x-perf-viewer-ms", viewerMs.toFixed(1))
+      response.headers.set("x-perf-rate-ms", rateMs.toFixed(1))
+      response.headers.set("x-perf-total-ms", totalMs.toFixed(1))
+      return response
     }
 
-    const repoResult = await listActivities({
+    const repoArgs = {
       page: queryParams.page,
       limit: queryParams.limit,
       orderBy: queryParams.orderBy,
@@ -115,29 +136,95 @@ async function handleGet(request: NextRequest) {
       followingUserId,
       includeBannedAuthors: viewer?.role === "ADMIN",
       includeTotalCount: false,
-    })
-
-    const signedItems = await signActivityListItems(repoResult.items)
-
-    let likeStatusMap: Map<
-      string,
-      {
-        isLiked: boolean
-        count: number
-      }
-    > | null = null
-
-    if (user && repoResult.items.length > 0) {
-      likeStatusMap = await getBatchLikeStatus(
-        "activity",
-        repoResult.items.map((item) => item.id),
-        user.id
-      )
     }
 
+    const repoStart = performance.now()
+    const shouldCacheRepo = process.env.NODE_ENV === "production"
+    const tagsKey = repoArgs.tags?.join(",") ?? ""
+    const repoCacheKey = [
+      "api-activities",
+      repoArgs.orderBy ?? "latest",
+      String(repoArgs.page ?? 1),
+      String(repoArgs.limit ?? 20),
+      repoArgs.cursor ?? "",
+      repoArgs.authorId ?? "",
+      repoArgs.isPinned === undefined ? "" : repoArgs.isPinned ? "1" : "0",
+      repoArgs.hasImages === undefined ? "" : repoArgs.hasImages ? "1" : "0",
+      repoArgs.searchTerm ?? "",
+      tagsKey,
+      repoArgs.publishedFrom ? repoArgs.publishedFrom.toISOString() : "",
+      repoArgs.publishedTo ? repoArgs.publishedTo.toISOString() : "",
+      repoArgs.followingUserId ?? "",
+      repoArgs.includeBannedAuthors ? "admin" : "user",
+    ]
+
+    const repoResult = await (shouldCacheRepo
+      ? unstable_cache(() => listActivities(repoArgs), repoCacheKey, {
+          revalidate: 15,
+          tags: ["activities:list"],
+        })()
+      : listActivities(repoArgs))
+    repoMs = performance.now() - repoStart
+
+    const itemIds = repoResult.items.map((item) => item.id)
+    const signStart = performance.now()
+    const signedItemsPromise = signActivityListItems(repoResult.items).then((items) => {
+      signMs = performance.now() - signStart
+      return items
+    })
+    const likeStart = performance.now()
+    const likeStatusPromise = (async () => {
+      if (!viewer || itemIds.length === 0) {
+        return null
+      }
+
+      const shouldCacheLikes = process.env.NODE_ENV === "production"
+      const likedKey = itemIds.slice().sort().join(",")
+      const likes = await (shouldCacheLikes
+        ? unstable_cache(
+            () =>
+              prisma.like.findMany({
+                where: {
+                  authorId: viewer.id,
+                  activityId: { in: itemIds },
+                },
+                select: { activityId: true },
+              }),
+            ["api-activity-liked", viewer.id, likedKey],
+            { revalidate: 10, tags: [`likes:user:${viewer.id}`] }
+          )()
+        : prisma.like.findMany({
+            where: {
+              authorId: viewer.id,
+              activityId: { in: itemIds },
+            },
+            select: { activityId: true },
+          }))
+
+      const likedIds = new Set(
+        likes
+          .map((like) => like.activityId)
+          .filter((id): id is string => typeof id === "string" && id.length > 0)
+      )
+
+      const map = new Map<string, { isLiked?: boolean; count?: number }>()
+      likedIds.forEach((id) => {
+        map.set(id, { isLiked: true })
+      })
+
+      return map
+    })().then((map) => {
+      likeMs = performance.now() - likeStart
+      return map
+    })
+
+    const [signedItems, likeStatusMap] = await Promise.all([signedItemsPromise, likeStatusPromise])
+
+    const mapStart = performance.now()
     const data: ActivityWithAuthor[] = signedItems.map((item) =>
       mapActivityResponse(item, viewer, likeStatusMap?.get(item.id) ?? null)
     )
+    mapMs = performance.now() - mapStart
 
     const pagination: PaginationMeta = {
       page: queryParams.page,
@@ -147,10 +234,31 @@ async function handleGet(request: NextRequest) {
       nextCursor: repoResult.nextCursor ?? null,
     }
 
-    return createSuccessResponse(data, {
+    const response = createSuccessResponse(data, {
       pagination,
       filters: repoResult.appliedFilters ?? undefined,
     })
+    const totalMs = performance.now() - totalStart
+    response.headers.set(
+      "Server-Timing",
+      [
+        `viewer;dur=${viewerMs.toFixed(1)}`,
+        `rate;dur=${rateMs.toFixed(1)}`,
+        `repo;dur=${repoMs.toFixed(1)}`,
+        `sign;dur=${signMs.toFixed(1)}`,
+        `like;dur=${likeMs.toFixed(1)}`,
+        `map;dur=${mapMs.toFixed(1)}`,
+        `total;dur=${totalMs.toFixed(1)}`,
+      ].join(", ")
+    )
+    response.headers.set("x-perf-viewer-ms", viewerMs.toFixed(1))
+    response.headers.set("x-perf-rate-ms", rateMs.toFixed(1))
+    response.headers.set("x-perf-repo-ms", repoMs.toFixed(1))
+    response.headers.set("x-perf-sign-ms", signMs.toFixed(1))
+    response.headers.set("x-perf-like-ms", likeMs.toFixed(1))
+    response.headers.set("x-perf-map-ms", mapMs.toFixed(1))
+    response.headers.set("x-perf-total-ms", totalMs.toFixed(1))
+    return response
   } catch (error) {
     return handleApiError(error)
   }
@@ -274,6 +382,8 @@ async function handlePost(request: NextRequest) {
         pinGranted: canPin && requestedPin,
       },
     })
+
+    revalidateTag("activities:list")
 
     const listItem: ActivityListItem = {
       id: created.id,
@@ -441,6 +551,8 @@ async function handleDelete(request: NextRequest) {
         wasPinned: activity.isPinned,
       },
     })
+
+    revalidateTag("activities:list")
 
     return createSuccessResponse({
       id: activity.id,

@@ -3,35 +3,18 @@
  * 连接真实数据的文章详情展示页面
  */
 
-import { Suspense } from "react"
+import { Suspense, cache } from "react"
 import { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { getPost } from "@/lib/actions/posts"
-import { getCurrentUser } from "@/lib/actions/auth"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { FollowButton } from "@/components/follow"
-import { prisma } from "@/lib/prisma"
-import {
-  ArrowLeft,
-  Calendar,
-  Clock,
-  Eye,
-  Share2,
-  ThumbsUp,
-  MessageSquare,
-  UserPlus,
-} from "lucide-react"
+import { ArrowLeft, Share2, MessageSquare } from "lucide-react"
 import { PostDetail } from "@/types/blog"
-import {
-  formatDate,
-  formatRelativeTime,
-  calculateReadTime,
-  formatNumber,
-} from "@/lib/utils/blog-helpers"
+import { formatRelativeTime, calculateReadTime, formatNumber } from "@/lib/utils/blog-helpers"
 import { interactionStyles } from "@/lib/styles/interaction-styles"
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer"
 import CommentList from "@/components/comments/comment-list"
@@ -39,65 +22,26 @@ import { LikeButton } from "@/components/blog/like-button"
 import { BookmarkButton } from "@/components/blog/bookmark-button"
 import SubscribeForm from "@/components/subscribe-form"
 import CommentCount from "@/components/comments/comment-count"
-import { TableOfContents, TocItem } from "@/components/blog/table-of-contents"
+import { TableOfContents } from "@/components/blog/table-of-contents"
+import { extractTocItems, type TocItem } from "@/lib/markdown/toc"
 import { cn } from "@/lib/utils"
+import { PostAuthorFollowAction } from "@/components/blog/post-author-follow-action"
+import { PostViewTracker } from "@/components/blog/post-view-tracker"
 
-// 强制动态渲染，避免缓存新文章的 404 响应
-export const dynamic = "force-dynamic"
+export const revalidate = 300
+export const dynamic = "force-static"
 
 // 页面参数接口
 interface BlogPostPageProps {
   params: Promise<{ slug: string }>
 }
 
-// 简单的 ID 生成器，需要与 rehype-slug 的逻辑尽量保持一致
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[\s\W-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-}
-
-function extractHeadings(content: string): TocItem[] {
-  const regex = /^(#{2,3})\s+(.+)$/gm
-  const headings: TocItem[] = []
-  const seenIds = new Map<string, number>()
-  let match
-
-  while ((match = regex.exec(content)) !== null) {
-    const level = match[1].length
-    const text = match[2].trim()
-    let id = slugify(text)
-
-    // Fallback for empty slugs (e.g. only special chars)
-    if (!id) {
-      id = `heading`
-    }
-
-    // Ensure uniqueness
-    if (seenIds.has(id)) {
-      const count = seenIds.get(id)!
-      seenIds.set(id, count + 1)
-      id = `${id}-${count}`
-    } else {
-      seenIds.set(id, 1)
-    }
-
-    headings.push({
-      id,
-      text,
-      level,
-    })
-  }
-
-  return headings
-}
+const getPostCached = cache(async (slug: string) => getPost(slug))
 
 // 生成页面元数据
 export async function generateMetadata({ params }: BlogPostPageProps): Promise<Metadata> {
   const { slug } = await params
-  const result = await getPost(slug)
+  const result = await getPostCached(slug)
 
   if (!result.success || !result.data) {
     return {
@@ -138,7 +82,7 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
 export default async function BlogPostPage({ params }: BlogPostPageProps) {
   const { slug } = await params
 
-  const [result, currentUser] = await Promise.all([getPost(slug), getCurrentUser()])
+  const result = await getPostCached(slug)
 
   // 处理文章不存在的情况
   if (!result.success || !result.data) {
@@ -152,36 +96,12 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
     notFound()
   }
 
-  const isOwnPost = currentUser?.id === post.author.id
-
-  // 异步增加浏览量（不阻塞首屏渲染）
-  void prisma.post
-    .update({
-      where: { id: post.id },
-      data: { viewCount: { increment: 1 } },
-    })
-    .catch(() => null)
-
-  let viewerFollowsAuthor = false
-
-  if (currentUser && !isOwnPost) {
-    const existingFollow = await prisma.follow.findUnique({
-      where: {
-        followerId_followingId: {
-          followerId: currentUser.id,
-          followingId: post.author.id,
-        },
-      },
-      select: { followerId: true },
-    })
-    viewerFollowsAuthor = !!existingFollow
-  }
-
   const content = post.contentSigned ?? post.content
-  const toc = extractHeadings(content)
+  const toc = extractTocItems(content)
 
   return (
     <div className="bg-background min-h-screen">
+      <PostViewTracker postId={post.id} />
       <div className="container mx-auto grid grid-cols-1 gap-8 px-4 py-8 lg:grid-cols-12">
         {/* Back Button Area - Optional, maybe top left? */}
 
@@ -286,22 +206,12 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 <div className="flex-1 space-y-1">
                   <div className="flex items-center justify-between">
                     <h3 className="text-lg font-bold">{post.author.name || "匿名用户"}</h3>
-                    {!isOwnPost &&
-                      (currentUser ? (
-                        <FollowButton
-                          targetUserId={post.author.id}
-                          size="sm"
-                          initialFollowing={viewerFollowsAuthor}
-                          className="rounded-full"
-                        />
-                      ) : (
-                        <Button variant="outline" size="sm" className="rounded-full" asChild>
-                          <Link href="/login">
-                            <UserPlus className="mr-1 h-3 w-3" />
-                            登录后关注
-                          </Link>
-                        </Button>
-                      ))}
+                    <PostAuthorFollowAction
+                      authorId={post.author.id}
+                      authorName={post.author.name}
+                      size="sm"
+                      className="rounded-full"
+                    />
                   </div>
                   {post.author.bio && (
                     <p className="text-muted-foreground text-sm">{post.author.bio}</p>

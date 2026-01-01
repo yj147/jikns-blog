@@ -7,7 +7,6 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { motion } from "framer-motion"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { MessageCircle, Heart, BarChart2, Share2, MoreHorizontal } from "lucide-react"
@@ -22,19 +21,14 @@ interface BlogPostCardProps {
   index?: number
 }
 
-export function BlogPostCard({ post, index = 0 }: BlogPostCardProps) {
+export function BlogPostCard({ post }: BlogPostCardProps) {
   const coverSource = post.signedCoverImage ?? post.coverImage ?? undefined
   const coverImageUrl =
     coverSource &&
     (getOptimizedImageUrl(coverSource, { width: 800, height: 400, quality: 80 }) ?? coverSource)
 
   return (
-    <motion.article
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: index * 0.05 }}
-      className="border-border bg-background hover:bg-muted/5 border-b px-4 py-6 transition-colors sm:px-6 sm:py-8"
-    >
+    <article className="border-border bg-background hover:bg-muted/5 border-b px-4 py-6 transition-colors sm:px-6 sm:py-8">
       {/* 1. 头部：作者信息 */}
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -55,7 +49,7 @@ export function BlogPostCard({ post, index = 0 }: BlogPostCardProps) {
               {post.author.name || "匿名用户"}
             </Link>
             <div className="text-muted-foreground mt-1 flex items-center gap-1 text-xs">
-              <span>{formatRelativeTime(post.publishedAt)}</span>
+              <span suppressHydrationWarning>{formatRelativeTime(post.publishedAt)}</span>
               <span>·</span>
               <span>{calculateReadTime(post.contentLength)}</span>
             </div>
@@ -161,6 +155,6 @@ export function BlogPostCard({ post, index = 0 }: BlogPostCardProps) {
           <Share2 className="h-5 w-5" />
         </Button>
       </div>
-    </motion.article>
+    </article>
   )
 }

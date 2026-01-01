@@ -53,6 +53,7 @@ vi.mock("@/lib/interactions", async () => {
 vi.mock("@/lib/audit-log", () => ({
   auditLogger: {
     logEvent: vi.fn().mockResolvedValue(undefined),
+    logEventAsync: vi.fn(),
   },
   getClientIP: vi.fn(() => "127.0.0.1"),
   getClientUserAgent: vi.fn(() => "vitest-agent"),
@@ -108,6 +109,10 @@ describe("评论API路由契约测试", () => {
       null,
     ])
     mockGenerateRequestId.mockImplementation(() => "req-test-id")
+    vi.mocked(deleteCommentService).mockResolvedValue({
+      targetType: "post",
+      targetId: POST_ID,
+    } as any)
   })
 
   describe("GET /api/comments - 公开访问", () => {
@@ -457,7 +462,10 @@ describe("评论API路由契约测试", () => {
 
   describe("DELETE /api/comments/[id] - 需要认证", () => {
     it("应该允许作者删除自己的评论（软删除）", async () => {
-      vi.mocked(deleteCommentService).mockResolvedValue(undefined)
+      vi.mocked(deleteCommentService).mockResolvedValue({
+        targetType: "post",
+        targetId: POST_ID,
+      } as any)
 
       const request = new NextRequest(`http://localhost:3000/api/comments/${COMMENT_ID}`, {
         method: "DELETE",
@@ -483,7 +491,10 @@ describe("评论API路由契约测试", () => {
 
       mockAssertPolicy.mockResolvedValueOnce([adminUser as any, null])
 
-      vi.mocked(deleteCommentService).mockResolvedValue(undefined)
+      vi.mocked(deleteCommentService).mockResolvedValue({
+        targetType: "post",
+        targetId: POST_ID,
+      } as any)
 
       const request = new NextRequest(`http://localhost:3000/api/comments/${COMMENT_ID}`, {
         method: "DELETE",
@@ -562,7 +573,10 @@ describe("评论API路由契约测试", () => {
 
       mockAssertPolicy.mockResolvedValueOnce([adminUser as any, null])
 
-      vi.mocked(deleteCommentService).mockResolvedValue(undefined)
+      vi.mocked(deleteCommentService).mockResolvedValue({
+        targetType: "post",
+        targetId: POST_ID,
+      } as any)
 
       const request = new NextRequest(`http://localhost:3000/api/comments/${COMMENT_ID}`, {
         method: "DELETE",

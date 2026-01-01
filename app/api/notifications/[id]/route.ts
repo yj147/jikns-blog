@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server"
+import { revalidateTag } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { assertPolicy, generateRequestId, type AuthenticatedUser } from "@/lib/auth/session"
 import { createSuccessResponse, createErrorResponse, ErrorCode } from "@/lib/api/unified-response"
@@ -67,6 +68,8 @@ async function handlePatch(request: NextRequest, { params }: { params: Promise<{
         readAt: new Date(),
       },
     })
+
+    revalidateTag(`notifications:user:${user.id}`)
 
     const unreadCount = await getUnreadCount(user.id)
 

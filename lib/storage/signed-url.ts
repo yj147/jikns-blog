@@ -5,6 +5,7 @@
  */
 
 import { createServiceRoleClient } from "@/lib/supabase"
+import { unstable_cache } from "next/cache"
 import { logger } from "@/lib/utils/logger"
 import type { ActivityListItem } from "@/lib/repos/activity-repo"
 
@@ -15,6 +16,7 @@ const DEFAULT_BUCKET = ACTIVITY_IMAGES_BUCKET
 const SIGNABLE_BUCKETS = new Set<string>([ACTIVITY_IMAGES_BUCKET, POST_IMAGES_BUCKET])
 const SIGNED_URL_CACHE_MAX_ENTRIES = 500
 const SIGNED_URL_CACHE_MARGIN_SECONDS = 5
+const SHOULD_USE_PERSISTENT_CACHE = process.env.NODE_ENV === "production"
 
 type StorageTarget = {
   bucket: string
@@ -147,6 +149,23 @@ function isSignableBucket(bucket: string) {
   return SIGNABLE_BUCKETS.has(bucket)
 }
 
+async function createSignedUrl(
+  target: StorageTarget,
+  normalizedPath: string,
+  expiresInSeconds: number
+): Promise<string> {
+  const supabase = getServiceClient()
+  const { data, error } = await supabase.storage
+    .from(target.bucket)
+    .createSignedUrl(normalizedPath, expiresInSeconds)
+
+  if (error || !data?.signedUrl) {
+    throw new Error(error?.message || "签名 URL 生成失败")
+  }
+
+  return data.signedUrl
+}
+
 async function signSingle(target: StorageTarget, expiresInSeconds = DEFAULT_EXPIRES_IN_SECONDS) {
   const normalizedPath = normalizePath(target.bucket, target.path)
   const cacheKey = `${target.bucket}:${normalizedPath}:${expiresInSeconds}`
@@ -170,35 +189,31 @@ async function signSingle(target: StorageTarget, expiresInSeconds = DEFAULT_EXPI
         return null
       }
 
-      const supabase = getServiceClient()
-      const { data, error } = await supabase.storage
-        .from(target.bucket)
-        .createSignedUrl(normalizedPath, expiresInSeconds)
-
-      if (error || !data?.signedUrl) {
-        logger.warn("签名 URL 生成失败", {
-          bucket: target.bucket,
-          path: target.path,
-          error: error?.message,
-        })
-        return null
-      }
+      const revalidateSeconds = cacheTtlMs > 0 ? Math.max(0, Math.floor(cacheTtlMs / 1000)) : 0
+      const signed =
+        SHOULD_USE_PERSISTENT_CACHE && revalidateSeconds > 0
+          ? await unstable_cache(
+              async () => createSignedUrl(target, normalizedPath, expiresInSeconds),
+              ["signed-url", target.bucket, normalizedPath, String(expiresInSeconds)],
+              { revalidate: revalidateSeconds }
+            )()
+          : await createSignedUrl(target, normalizedPath, expiresInSeconds)
 
       if (cacheTtlMs > 0) {
         pruneSignedUrlCache()
         signedUrlCache.set(cacheKey, {
-          value: data.signedUrl,
+          value: signed,
           expiresAt: Date.now() + cacheTtlMs,
         })
       }
 
-      return data.signedUrl
+      return signed
     } catch (error) {
-      logger.error(
-        "签名 URL 生成异常",
-        { bucket: target.bucket, path: target.path, expiresInSeconds },
-        error
-      )
+      logger.warn("签名 URL 生成失败", {
+        bucket: target.bucket,
+        path: target.path,
+        error: error instanceof Error ? error.message : String(error),
+      })
       return null
     }
   })()
@@ -239,29 +254,18 @@ export async function createSignedUrls(
   if (inputs.length === 0) return []
 
   const cacheTtlMs = getCacheTtlMs(expiresInSeconds)
-  const now = Date.now()
   const resolved = inputs.slice()
+  const now = Date.now()
 
-  type PendingEntry = {
-    bucket: string
-    path: string
-    cacheKey: string
-    indices: number[]
-  }
-
+  type PendingEntry = { target: StorageTarget; indices: number[] }
   const pendingByKey = new Map<string, PendingEntry>()
-  const awaitingByKey = new Map<string, { promise: Promise<string | null>; indices: number[] }>()
 
   for (let index = 0; index < inputs.length; index += 1) {
     const value = inputs[index]
-    if (!value) {
-      continue
-    }
+    if (!value) continue
 
     const target = parseStorageTarget(value, defaultBucket)
-    if (!target || !isSignableBucket(target.bucket)) {
-      continue
-    }
+    if (!target || !isSignableBucket(target.bucket)) continue
 
     const normalizedPath = normalizePath(target.bucket, target.path)
     const cacheKey = `${target.bucket}:${normalizedPath}:${expiresInSeconds}`
@@ -270,17 +274,6 @@ export async function createSignedUrls(
       const cached = signedUrlCache.get(cacheKey)
       if (cached && cached.expiresAt > now) {
         resolved[index] = cached.value
-        continue
-      }
-
-      const inFlight = signedUrlInFlight.get(cacheKey)
-      if (inFlight) {
-        const existing = awaitingByKey.get(cacheKey)
-        if (existing) {
-          existing.indices.push(index)
-        } else {
-          awaitingByKey.set(cacheKey, { promise: inFlight, indices: [index] })
-        }
         continue
       }
     }
@@ -292,89 +285,20 @@ export async function createSignedUrls(
     }
 
     pendingByKey.set(cacheKey, {
-      bucket: target.bucket,
-      path: normalizedPath,
-      cacheKey,
+      target: { bucket: target.bucket, path: normalizedPath },
       indices: [index],
     })
   }
 
-  if (pendingByKey.size > 0) {
-    const supabase = getServiceClient()
-    const pendingBuckets = new Map<string, PendingEntry[]>()
-
-    for (const entry of pendingByKey.values()) {
-      const bucketEntries = pendingBuckets.get(entry.bucket)
-      if (bucketEntries) {
-        bucketEntries.push(entry)
-      } else {
-        pendingBuckets.set(entry.bucket, [entry])
-      }
-    }
-
-    await Promise.all(
-      [...pendingBuckets.entries()].map(async ([bucket, entries]) => {
-        const paths = entries.map((entry) => entry.path)
-
-        try {
-          const { data, error } = await supabase.storage
-            .from(bucket)
-            .createSignedUrls(paths, expiresInSeconds)
-
-          if (error || !data) {
-            logger.warn("批量签名 URL 失败", { bucket, error: error?.message })
-            return
-          }
-
-          const signedByPath = new Map<string, string | null>()
-          data.forEach((item) => {
-            if (!item?.path) return
-            signedByPath.set(item.path, typeof item.signedUrl === "string" ? item.signedUrl : null)
-          })
-
-          if (cacheTtlMs > 0) {
-            pruneSignedUrlCache()
-          }
-
-          entries.forEach((entry) => {
-            const signed = signedByPath.get(entry.path) ?? null
-
-            if (cacheTtlMs > 0 && signed) {
-              signedUrlCache.set(entry.cacheKey, {
-                value: signed,
-                expiresAt: now + cacheTtlMs,
-              })
-            }
-
-            entry.indices.forEach((index) => {
-              if (signed) {
-                resolved[index] = signed
-              }
-            })
-          })
-        } catch (error) {
-          logger.error(
-            "批量签名 URL 异常",
-            { bucket, count: paths.length, expiresInSeconds },
-            error
-          )
-        }
+  await Promise.all(
+    [...pendingByKey.values()].map(async ({ target, indices }) => {
+      const signed = await signSingle(target, expiresInSeconds)
+      if (!signed) return
+      indices.forEach((index) => {
+        resolved[index] = signed
       })
-    )
-  }
-
-  if (awaitingByKey.size > 0) {
-    await Promise.all(
-      [...awaitingByKey.values()].map(async ({ promise, indices }) => {
-        const signed = await promise.catch(() => null)
-        indices.forEach((index) => {
-          if (signed) {
-            resolved[index] = signed
-          }
-        })
-      })
-    )
-  }
+    })
+  )
 
   return resolved
 }

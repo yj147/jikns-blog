@@ -26,7 +26,17 @@ type NotificationApiResponse = {
   data: NotificationListPayload
 }
 
-const fetcher = (url: string) => fetchJson<NotificationApiResponse>(url)
+type NotificationUnreadCountPayload = {
+  unreadCount: number
+}
+
+type NotificationUnreadCountApiResponse = {
+  success: boolean
+  data: NotificationUnreadCountPayload
+}
+
+const listFetcher = (url: string) => fetchJson<NotificationApiResponse>(url)
+const unreadFetcher = (url: string) => fetchJson<NotificationUnreadCountApiResponse>(url)
 
 export function NotificationBell() {
   const { user, loading, supabase } = useAuth()
@@ -34,22 +44,40 @@ export function NotificationBell() {
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
   const [realtimeNotifications, setRealtimeNotifications] = useState<NotificationView[]>([])
-  const [idlePrefetchEnabled, setIdlePrefetchEnabled] = useState(false)
+  const [idleFetchEnabled, setIdleFetchEnabled] = useState(false)
 
   useEffect(() => {
     if (!user) {
-      setIdlePrefetchEnabled(false)
+      setIdleFetchEnabled(false)
       return
     }
 
-    const timeoutId = window.setTimeout(() => setIdlePrefetchEnabled(true), 1500)
+    if (idleFetchEnabled) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => setIdleFetchEnabled(true), 1500)
     return () => window.clearTimeout(timeoutId)
-  }, [user])
+  }, [user, idleFetchEnabled])
+
+  const { data: unreadData, mutate: mutateUnread } = useSWR<NotificationUnreadCountApiResponse>(
+    user && idleFetchEnabled ? "/api/notifications/unread-count" : null,
+    unreadFetcher,
+    {
+      refreshInterval: 0,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    }
+  )
 
   const { data, mutate, isLoading } = useSWR<NotificationApiResponse>(
-    user && (open || idlePrefetchEnabled) ? "/api/notifications?limit=5" : null,
-    fetcher,
-    { refreshInterval: open ? 45000 : 0 }
+    user && open ? "/api/notifications?limit=5" : null,
+    listFetcher,
+    {
+      refreshInterval: 0,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    }
   )
 
   const swrNotifications = useMemo(() => data?.data.items ?? [], [data?.data.items])
@@ -75,7 +103,7 @@ export function NotificationBell() {
 
   useRealtimeNotifications({
     userId: user?.id,
-    enabled: Boolean(user),
+    enabled: Boolean(user && open),
     onInsert: handleRealtimeInsert,
     supabase,
   })
@@ -118,7 +146,8 @@ export function NotificationBell() {
     [realtimeNotifications, baseUnreadIds]
   )
 
-  const unreadCount = (data?.data.unreadCount ?? 0) + realtimeUnreadDelta
+  const baseUnreadCount = data?.data.unreadCount ?? unreadData?.data.unreadCount ?? 0
+  const unreadCount = baseUnreadCount + realtimeUnreadDelta
 
   if (loading) {
     return <div className="bg-muted h-8 w-8 animate-pulse rounded-full" />
@@ -140,7 +169,7 @@ export function NotificationBell() {
         method: "PATCH",
         body: JSON.stringify({ ids }),
       })
-      await mutate()
+      await Promise.all([mutate(), mutateUnread()])
       const markTime = new Date().toISOString()
       const idSet = new Set(ids)
       setRealtimeNotifications((prev) =>
@@ -155,7 +184,7 @@ export function NotificationBell() {
   const handleMarkSingle = async (id: string) => {
     try {
       await fetchJson(`/api/notifications/${id}`, { method: "PATCH" })
-      await mutate()
+      await Promise.all([mutate(), mutateUnread()])
       const markTime = new Date().toISOString()
       setRealtimeNotifications((prev) =>
         prev.map((item) => (item.id === id ? { ...item, readAt: markTime } : item))

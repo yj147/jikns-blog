@@ -106,7 +106,9 @@ const CommentItemComponent = function CommentItem({
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <span className="font-medium">{displayName}</span>
-              <span className="text-sm text-gray-500">{formattedDate}</span>
+              <span className="text-sm text-gray-500" suppressHydrationWarning>
+                {formattedDate}
+              </span>
             </div>
 
             {allowDelete && !isDeleted && (

@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server"
+import { revalidateTag } from "next/cache"
 import { deleteComment, CommentServiceError, CommentErrorCode } from "@/lib/interactions"
 import { createSuccessResponse, createErrorResponse, ErrorCode } from "@/lib/api/unified-response"
 import { handleApiError } from "@/lib/api/error-handler"
@@ -98,9 +99,11 @@ async function handleDelete(request: NextRequest, { params }: { params: { id: st
       })
     }
 
-    await measureOperation("delete", async () => {
+    const target = await measureOperation("delete", async () => {
       return await deleteComment(commentId, user.id, user.role === "ADMIN")
     })
+
+    revalidateTag(`comments:${target.targetType}:${target.targetId}`)
 
     await auditLogger.logEvent({
       action: "DELETE_COMMENT",

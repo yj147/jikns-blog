@@ -12,6 +12,7 @@ import type { Session, SupabaseClient } from "@supabase/supabase-js"
 import type { User as DatabaseUser } from "@/lib/generated/prisma"
 
 const AUTH_SESSION_SYNC_COOKIE = "auth_session_sync"
+const USER_PROFILE_CACHE_TTL_MS = 60_000
 
 function consumeClientCookie(name: string): boolean {
   if (typeof document === "undefined") return false
@@ -157,7 +158,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const dbUser = await userProfileRequestRef.current
-    userProfileCacheRef.current = { user: dbUser, expiresAt: Date.now() + 5_000 }
+    userProfileCacheRef.current = {
+      user: dbUser,
+      expiresAt: Date.now() + USER_PROFILE_CACHE_TTL_MS,
+    }
     setUser(dbUser)
     return dbUser
   }

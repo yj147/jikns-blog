@@ -2,6 +2,7 @@
 
 import { Suspense } from "react"
 import dynamic from "next/dynamic"
+import { useIsMobile } from "@/components/ui/use-mobile"
 
 const ThemeToggle = dynamic(() => import("./theme-toggle"), {
   ssr: false,
@@ -24,12 +25,13 @@ const AuthActions = dynamic(() => import("./navigation-auth-actions"), {
 })
 
 export default function NavigationInteractive() {
+  const isMobile = useIsMobile()
   return (
     <Suspense fallback={<div className="bg-muted h-10 w-10 rounded-full" />}>
       <div className="flex items-center gap-3">
         <ThemeToggle />
         <NavigationClient />
-        <MobileNavigation />
+        {isMobile ? <MobileNavigation /> : null}
         <AuthActions />
       </div>
     </Suspense>

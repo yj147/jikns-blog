@@ -92,7 +92,7 @@ function ActivityCard({ data, query }: { data: SearchActivityHit; query: string 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm">
               <span className="font-bold">{data.authorName || "匿名用户"}</span>
-              <span className="text-muted-foreground">
+              <span className="text-muted-foreground" suppressHydrationWarning>
                 · {created ? formatRelativeTime(created) : ""}
               </span>
             </div>

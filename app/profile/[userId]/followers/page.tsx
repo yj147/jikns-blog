@@ -24,6 +24,7 @@ interface FollowersPageProps {
 export default function FollowersPage({ params }: FollowersPageProps) {
   const { user: currentUser } = useAuth()
   const [userName, setUserName] = useState<string>("")
+  const [totalFollowers, setTotalFollowers] = useState<number | null>(null)
 
   const {
     items: followers,
@@ -40,7 +41,7 @@ export default function FollowersPage({ params }: FollowersPageProps) {
   } = useFollowers(params.userId, {
     limit: 20,
     autoLoad: true,
-    includeTotal: true, // 请求总数以显示在页面抬头
+    includeTotal: false, // 总数来自 /api/users/[id]/public 的 counts.followers，避免 COUNT(*)
   })
 
   const followerIds = useMemo(() => followers.map((follower) => follower.id), [followers])
@@ -55,10 +56,13 @@ export default function FollowersPage({ params }: FollowersPageProps) {
         if (response.ok) {
           const result = await response.json()
           setUserName(result.data?.name || "用户")
+          const count = result.data?.counts?.followers
+          setTotalFollowers(typeof count === "number" ? count : null)
         }
       } catch (error) {
         profileFollowersLogger.error("获取用户信息失败", { userId: params.userId }, error)
         setUserName("用户")
+        setTotalFollowers(null)
       }
     }
     fetchUserName()
@@ -80,7 +84,9 @@ export default function FollowersPage({ params }: FollowersPageProps) {
             </p>
             {deniedReason === "UNAUTHORIZED" ? (
               <Button asChild>
-                <Link href="/login">登录后重试</Link>
+                <Link href="/login" prefetch={false}>
+                  登录后重试
+                </Link>
               </Button>
             ) : (
               <Button variant="outline" onClick={() => history.back()}>
@@ -115,14 +121,18 @@ export default function FollowersPage({ params }: FollowersPageProps) {
           {/* Header */}
           <div className="mb-6 flex items-center space-x-4">
             <Button variant="ghost" size="sm" asChild>
-              <Link href={`/profile/${params.userId}`}>
+              <Link href={`/profile/${params.userId}`} prefetch={false}>
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
             <div>
               <h1 className="text-2xl font-bold">粉丝</h1>
               <p className="text-muted-foreground text-sm">
-                {userName} 的 {pagination.total} 位关注者
+                {userName} 的{" "}
+                {hasMore
+                  ? (totalFollowers ?? pagination.total ?? followers.length)
+                  : followers.length}{" "}
+                位关注者
               </p>
             </div>
           </div>

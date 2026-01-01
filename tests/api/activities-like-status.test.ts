@@ -8,9 +8,13 @@ import { GET } from "@/app/api/activities/route"
 import { vi } from "vitest"
 
 // Mock dependencies
-vi.mock("@/lib/auth", () => ({
-  getCurrentUser: vi.fn(),
-}))
+vi.mock("@/lib/auth/session", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/auth/session")>("@/lib/auth/session")
+  return {
+    ...actual,
+    getOptionalViewer: vi.fn(),
+  }
+})
 
 vi.mock("@/lib/repos/activity-repo", () => ({
   listActivities: vi.fn(),
@@ -20,7 +24,7 @@ vi.mock("@/lib/interactions/likes", () => ({
   getBatchLikeStatus: vi.fn(),
 }))
 
-import { getCurrentUser } from "@/lib/auth"
+import { getOptionalViewer } from "@/lib/auth/session"
 import { listActivities } from "@/lib/repos/activity-repo"
 import { getBatchLikeStatus } from "@/lib/interactions/likes"
 
@@ -52,10 +56,13 @@ describe("GET /api/activities - 点赞状态注入", () => {
 
   it("应该为登录用户注入点赞状态", async () => {
     // Mock 当前用户
-    vi.mocked(getCurrentUser).mockResolvedValueOnce({
+    vi.mocked(getOptionalViewer).mockResolvedValueOnce({
       id: "user-123",
       email: "test@example.com",
       role: "USER",
+      status: "ACTIVE",
+      name: "Test User",
+      avatarUrl: null,
     } as any)
 
     // Mock 活动列表
@@ -100,7 +107,7 @@ describe("GET /api/activities - 点赞状态注入", () => {
     const data = await response.json()
 
     // 验证调用
-    expect(getCurrentUser).toHaveBeenCalled()
+    expect(getOptionalViewer).toHaveBeenCalled()
     expect(listActivities).toHaveBeenCalled()
     expect(getBatchLikeStatus).toHaveBeenCalledWith("activity", ["act-1", "act-2"], "user-123")
 
@@ -128,7 +135,7 @@ describe("GET /api/activities - 点赞状态注入", () => {
 
   it("未登录用户不应查询点赞状态", async () => {
     // Mock 无用户
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(null)
+    vi.mocked(getOptionalViewer).mockResolvedValueOnce(null)
 
     // Mock 活动列表
     const mockActivities = [createMockActivity()]
@@ -154,7 +161,7 @@ describe("GET /api/activities - 点赞状态注入", () => {
     const data = await response.json()
 
     // 验证不调用点赞状态查询
-    expect(getCurrentUser).toHaveBeenCalled()
+    expect(getOptionalViewer).toHaveBeenCalled()
     expect(listActivities).toHaveBeenCalled()
     expect(getBatchLikeStatus).not.toHaveBeenCalled()
 
@@ -170,11 +177,13 @@ describe("GET /api/activities - 点赞状态注入", () => {
   })
 
   it("作者本人应获得编辑删除权限", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce({
+    vi.mocked(getOptionalViewer).mockResolvedValueOnce({
       id: "author-1",
       email: "owner@example.com",
       role: "USER",
       status: "ACTIVE",
+      name: "Owner",
+      avatarUrl: null,
     } as any)
 
     const mockActivity = createMockActivity({
@@ -212,10 +221,13 @@ describe("GET /api/activities - 点赞状态注入", () => {
 
   it("空列表不应查询点赞状态", async () => {
     // Mock 用户
-    vi.mocked(getCurrentUser).mockResolvedValueOnce({
+    vi.mocked(getOptionalViewer).mockResolvedValueOnce({
       id: "user-123",
       email: "test@example.com",
       role: "USER",
+      status: "ACTIVE",
+      name: "Test User",
+      avatarUrl: null,
     } as any)
 
     // Mock 空列表
@@ -248,7 +260,7 @@ describe("GET /api/activities - 点赞状态注入", () => {
   })
 
   it("应该正确处理游标分页参数", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(null)
+    vi.mocked(getOptionalViewer).mockResolvedValueOnce(null)
 
     vi.mocked(listActivities).mockResolvedValueOnce({
       items: [],

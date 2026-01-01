@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   title: "现代博客平台",
   description: "集博客与社交于一体的现代化平台",
   icons: {
-    icon: "/placeholder-logo.svg",
+    icon: "/placeholder-logo.png",
   },
 }
 

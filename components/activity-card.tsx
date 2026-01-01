@@ -114,7 +114,10 @@ function ActivityCardComponent(props: ActivityCardProps) {
               )}
               {authorUsername && <span className="text-muted-foreground">{authorUsername}</span>}
               <span className="text-muted-foreground">·</span>
-              <span className="text-muted-foreground cursor-pointer hover:underline">
+              <span
+                className="text-muted-foreground cursor-pointer hover:underline"
+                suppressHydrationWarning
+              >
                 {timestampLabel}
               </span>
             </div>

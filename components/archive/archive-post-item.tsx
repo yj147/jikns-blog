@@ -11,6 +11,12 @@ interface ArchivePostItemProps {
 }
 
 function ArchivePostItemComponent({ post }: ArchivePostItemProps) {
+  const publishedLabel = new Date(post.publishedAt).toLocaleDateString("zh-CN", {
+    timeZone: "UTC",
+    month: "2-digit",
+    day: "2-digit",
+  })
+
   return (
     <article className="group relative py-1 pl-8">
       {/* 连接线 */}
@@ -21,10 +27,7 @@ function ArchivePostItemComponent({ post }: ArchivePostItemProps) {
         {/* 日期 */}
         <time className="text-muted-foreground flex items-center gap-1 whitespace-nowrap text-sm">
           <Calendar className="h-3 w-3" />
-          {new Date(post.publishedAt).toLocaleDateString("zh-CN", {
-            month: "2-digit",
-            day: "2-digit",
-          })}
+          {publishedLabel}
         </time>
 
         {/* 标题和摘要 */}

@@ -175,11 +175,15 @@ export function BlogSearchFilter({ className = "", popularTags }: BlogSearchFilt
         <div className="relative flex-1">
           <Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transform" />
           <Input
+            id="blog-search-query"
+            name="q"
+            type="search"
             placeholder="搜索文章标题、内容..."
             className="pl-10 pr-10"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             maxLength={100}
+            aria-label="搜索文章"
           />
           {query && (
             <Button

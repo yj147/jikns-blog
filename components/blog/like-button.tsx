@@ -6,7 +6,7 @@
  * 支持查询状态、切换点赞、乐观更新和错误回滚
  */
 
-import { useCallback } from "react"
+import { useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Heart } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
@@ -15,6 +15,7 @@ import { fetchGet, fetchPost, FetchError } from "@/lib/api/fetch-json"
 import { useInteractionToggle } from "@/hooks/use-interaction-toggle"
 import { useInteractionErrorToast } from "@/hooks/use-interaction-error-toast"
 import type { LikeTargetType } from "@/lib/interactions/likes"
+import { useAuth } from "@/hooks/use-auth"
 
 interface LikeButtonProps {
   targetId: string
@@ -39,6 +40,7 @@ export function LikeButton({
   showCount = true,
   onLikeChange,
 }: LikeButtonProps) {
+  const { user } = useAuth()
   const { toast } = useToast()
   const targetLabel = targetType === "post" ? "文章" : "动态"
   const handleToggleError = useInteractionErrorToast(`点赞${targetLabel}`)
@@ -80,18 +82,23 @@ export function LikeButton({
     [initialCount]
   )
 
-  const { status, isLoading, isToggling, toggle } = useInteractionToggle({
+  const { status, isLoading, isToggling, toggle, fetchStatus } = useInteractionToggle({
     initialIsActive: initialIsLiked ?? false,
     initialCount,
     fetcher: fetchLikeStatus,
     toggler: toggleLikeRequest,
-    shouldFetchOnMount: initialIsLiked === undefined,
+    shouldFetchOnMount: false,
     externalIsActive: initialIsLiked,
     externalCount: initialCount,
     onStatusChange: onLikeChange,
     onFetchError: handleFetchError,
     onToggleError: handleToggleError,
   })
+
+  useEffect(() => {
+    if (!user || initialIsLiked !== undefined) return
+    fetchStatus()
+  }, [user, initialIsLiked, fetchStatus])
 
   const handleToggle = useCallback(async () => {
     const result = await toggle()

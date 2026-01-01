@@ -1,7 +1,8 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { FeedHeader } from "@/components/feed/feed-header"
 import { FeedList } from "@/components/feed/feed-list"
@@ -73,11 +74,15 @@ export default function FeedPageClient({
   initialActivities,
   initialPagination,
   initialTab,
-  highlightActivityId,
+  highlightActivityId: highlightActivityIdProp,
 }: FeedPageClientProps) {
   const { user, session } = useAuth()
   const canPinComposer = user?.role === "ADMIN"
   const isAuthenticated = Boolean(session?.user)
+  const searchParams = useSearchParams()
+  const highlightActivityId = useMemo(() => {
+    return highlightActivityIdProp ?? searchParams.get("highlight") ?? undefined
+  }, [highlightActivityIdProp, searchParams])
 
   // 编辑/删除对话框状态
   const [editingActivity, setEditingActivity] = useState<ActivityWithAuthor | null>(null)
@@ -102,6 +107,7 @@ export default function FeedPageClient({
     refresh,
     resolvedOrderBy,
     error,
+    prependActivity,
   } = useFeedState({
     initialActivities,
     initialPagination,
@@ -113,6 +119,56 @@ export default function FeedPageClient({
 
   const hasInitialSnapshot = activeTab === initialTab
   const initialActivitiesForTab = hasInitialSnapshot ? initialActivities : []
+  const requestedHighlightRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!highlightActivityId) {
+      requestedHighlightRef.current = null
+      return
+    }
+
+    if (displayActivities.some((activity) => activity.id === highlightActivityId)) {
+      requestedHighlightRef.current = highlightActivityId
+      return
+    }
+
+    if (requestedHighlightRef.current === highlightActivityId) {
+      return
+    }
+    requestedHighlightRef.current = highlightActivityId
+
+    const controller = new AbortController()
+    void (async () => {
+      try {
+        const response = await fetch(`/api/activities/${highlightActivityId}`, {
+          method: "GET",
+          signal: controller.signal,
+          cache: "no-store",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        })
+
+        if (!response.ok) {
+          return
+        }
+
+        const payload = await response.json()
+        const activity = payload?.data as ActivityWithAuthor | undefined
+        if (!activity?.id) {
+          return
+        }
+
+        prependActivity(activity)
+      } catch (error) {
+        if ((error as Error).name === "AbortError") {
+          return
+        }
+      }
+    })()
+
+    return () => controller.abort()
+  }, [displayActivities, highlightActivityId, prependActivity])
 
   // 编辑/删除回调
   const handleEdit = useCallback((activity: ActivityWithAuthor) => {

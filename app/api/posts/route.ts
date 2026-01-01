@@ -17,12 +17,14 @@ import { apiLogger } from "@/lib/utils/logger"
 import { featureFlags } from "@/lib/config/feature-flags"
 import { recordPostsPublicEmailAudit } from "@/lib/observability/posts-public-email-audit"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
+import { createSignedUrls } from "@/lib/storage/signed-url"
 
 /**
  * 获取公开文章列表
  */
 const DEFAULT_LIMIT = 10
 const MAX_LIMIT = 100
+const POST_IMAGE_SIGN_EXPIRES_IN = 60 * 60 // 1 hour
 const ALLOWED_ORDER_FIELDS = ["publishedAt", "createdAt", "viewCount"] as const
 const ALLOWED_ORDER_DIRECTIONS = ["asc", "desc"] as const
 
@@ -36,6 +38,7 @@ interface ParamViolation {
 }
 
 async function handleGet(request: NextRequest) {
+  const totalStart = performance.now()
   try {
     const { searchParams } = request.nextUrl
     const rawPage = searchParams.get("page")
@@ -217,7 +220,12 @@ async function handleGet(request: NextRequest) {
       title: true,
       excerpt: true,
       slug: true,
+      published: true,
+      isPinned: true,
+      coverImage: true,
+      viewCount: true,
       publishedAt: true,
+      createdAt: true,
       author: {
         select: authorSelect,
       },
@@ -235,6 +243,7 @@ async function handleGet(request: NextRequest) {
               id: true,
               name: true,
               slug: true,
+              color: true,
             },
           },
         },
@@ -248,6 +257,7 @@ async function handleGet(request: NextRequest) {
       },
     } satisfies Prisma.PostSelect
 
+    const dbStart = performance.now()
     const [posts, totalCount] = await Promise.all([
       prisma.post.findMany({
         where,
@@ -258,6 +268,69 @@ async function handleGet(request: NextRequest) {
       }),
       prisma.post.count({ where }),
     ])
+    const dbMs = performance.now() - dbStart
+
+    const avatarInputs = Array.from(
+      new Set(
+        posts
+          .map((post) => post.author.avatarUrl)
+          .filter((value): value is string => typeof value === "string" && value.length > 0)
+      )
+    )
+
+    const coverInputs = Array.from(
+      new Set(
+        posts
+          .map((post) => post.coverImage)
+          .filter((value): value is string => typeof value === "string" && value.length > 0)
+      )
+    )
+
+    const signStart = performance.now()
+    const [signedAvatars, signedCoverImages] = await Promise.all([
+      avatarInputs.length > 0 ? createSignedUrls(avatarInputs) : Promise.resolve([]),
+      coverInputs.length > 0
+        ? createSignedUrls(coverInputs, POST_IMAGE_SIGN_EXPIRES_IN, "post-images")
+        : Promise.resolve([]),
+    ])
+    const signMs = performance.now() - signStart
+
+    const avatarMap = new Map<string, string>()
+    avatarInputs.forEach((original, index) => {
+      avatarMap.set(original, signedAvatars[index] ?? original)
+    })
+
+    const coverMap = new Map<string, string>()
+    coverInputs.forEach((original, index) => {
+      coverMap.set(original, signedCoverImages[index] ?? original)
+    })
+
+    const normalizedPosts = posts.map((post) => ({
+      id: post.id,
+      slug: post.slug,
+      title: post.title,
+      excerpt: post.excerpt,
+      published: post.published,
+      isPinned: post.isPinned,
+      coverImage: post.coverImage,
+      signedCoverImage: post.coverImage ? (coverMap.get(post.coverImage) ?? post.coverImage) : null,
+      viewCount: post.viewCount,
+      publishedAt: post.publishedAt?.toISOString() || null,
+      createdAt: post.createdAt.toISOString(),
+      author: {
+        ...post.author,
+        avatarUrl: post.author.avatarUrl
+          ? (avatarMap.get(post.author.avatarUrl) ?? post.author.avatarUrl)
+          : null,
+      },
+      tags: post.tags.map((pt) => pt.tag),
+      stats: {
+        commentsCount: post._count.comments,
+        likesCount: post._count.likes,
+        bookmarksCount: post._count.bookmarks,
+      },
+      contentLength: 0,
+    }))
 
     if (auditEnabled && !hideAuthorEmail && posts.length > 0) {
       const auditPayload = {
@@ -300,9 +373,9 @@ async function handleGet(request: NextRequest) {
       nextCursor: page < totalPages ? String(page + 1) : null,
     }
 
-    return createSuccessResponse(
+    const response = createSuccessResponse(
       {
-        posts,
+        posts: normalizedPosts,
         pagination: {
           currentPage: page,
           totalPages,
@@ -314,6 +387,16 @@ async function handleGet(request: NextRequest) {
       },
       { pagination, requestId }
     )
+
+    const totalMs = performance.now() - totalStart
+    response.headers.set(
+      "Server-Timing",
+      `db;dur=${dbMs.toFixed(1)}, sign;dur=${signMs.toFixed(1)}, total;dur=${totalMs.toFixed(1)}`
+    )
+    response.headers.set("x-perf-db-ms", dbMs.toFixed(1))
+    response.headers.set("x-perf-sign-ms", signMs.toFixed(1))
+    response.headers.set("x-perf-total-ms", totalMs.toFixed(1))
+    return response
   } catch (error) {
     apiLogger.error("获取文章列表失败", {
       error,

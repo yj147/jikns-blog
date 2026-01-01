@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server"
+import { revalidateTag, unstable_cache } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { NotificationType, type User } from "@/lib/generated/prisma"
 import { assertPolicy, generateRequestId, type AuthenticatedUser } from "@/lib/auth/session"
@@ -7,12 +8,13 @@ import { handleApiError } from "@/lib/api/error-handler"
 import { mapAuthErrorCode } from "@/lib/api/auth-error-mapper"
 import { getClientIP, getClientUserAgent } from "@/lib/audit-log"
 import { logger } from "@/lib/utils/logger"
-import { signAvatarUrl } from "@/lib/storage/signed-url"
+import { createSignedUrls } from "@/lib/storage/signed-url"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 
 const DEFAULT_LIMIT = 20
 const MAX_LIMIT = 50
 const VALID_TYPES = new Set<NotificationType>(Object.values(NotificationType))
+const NOTIFICATIONS_CACHE_SECONDS = 10
 
 type NotificationView = {
   id: string
@@ -116,16 +118,28 @@ function mapNotification(record: any): NotificationView {
 }
 
 async function getUnreadStats(recipientId: string, filterType?: NotificationType) {
-  const [total, filtered] = await Promise.all([
-    prisma.notification.count({
-      where: { recipientId, readAt: null },
-    }),
-    prisma.notification.count({
-      where: { recipientId, readAt: null, ...(filterType ? { type: filterType } : {}) },
-    }),
-  ])
+  const loadStats = async () => {
+    const [total, filtered] = await Promise.all([
+      prisma.notification.count({
+        where: { recipientId, readAt: null },
+      }),
+      prisma.notification.count({
+        where: { recipientId, readAt: null, ...(filterType ? { type: filterType } : {}) },
+      }),
+    ])
 
-  return { total, filtered }
+    return { total, filtered }
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    return await loadStats()
+  }
+
+  return await unstable_cache(
+    loadStats,
+    ["api-notifications-unread-stats", recipientId, filterType ?? "all"],
+    { revalidate: NOTIFICATIONS_CACHE_SECONDS, tags: [`notifications:user:${recipientId}`] }
+  )()
 }
 
 function parseType(raw: string | null): NotificationType | undefined {
@@ -178,38 +192,58 @@ function toResponseUser(user: AuthenticatedUser): Partial<User> {
 async function signNotificationAvatars(
   notifications: NotificationView[]
 ): Promise<NotificationView[]> {
-  return Promise.all(
-    notifications.map(async (notification) => {
-      const signedAvatar = await signAvatarUrl(notification.actor?.avatarUrl ?? null)
+  if (notifications.length === 0) return notifications
 
-      if (!notification.actor) {
-        return notification
-      }
-
-      return {
-        ...notification,
-        actor: {
-          ...notification.actor,
-          avatarUrl: signedAvatar ?? notification.actor.avatarUrl,
-        },
-      }
-    })
+  const avatarInputs = Array.from(
+    new Set(
+      notifications
+        .map((notification) => notification.actor?.avatarUrl)
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+    )
   )
+
+  if (avatarInputs.length === 0) return notifications
+
+  const signed = await createSignedUrls(avatarInputs)
+  const signedMap = new Map<string, string>()
+  avatarInputs.forEach((original, index) => {
+    signedMap.set(original, signed[index] ?? original)
+  })
+
+  return notifications.map((notification) => {
+    const originalAvatar = notification.actor?.avatarUrl
+    if (!originalAvatar) return notification
+    return {
+      ...notification,
+      actor: {
+        ...notification.actor,
+        avatarUrl: signedMap.get(originalAvatar) ?? originalAvatar,
+      },
+    }
+  })
 }
 
 async function handleGet(request: NextRequest) {
+  const totalStart = performance.now()
   const requestId = generateRequestId()
   const searchParams = request.nextUrl.searchParams
   const ip = getClientIP(request) ?? undefined
   const ua = getClientUserAgent(request) ?? undefined
+  let policyMs = 0
+  let statsMs = 0
+  let queryMs = 0
+  let mapMs = 0
+  let signMs = 0
 
   try {
+    const policyStart = performance.now()
     const [user, authError] = await assertPolicy("user-active", {
       path: request.nextUrl.pathname,
       requestId,
       ip,
       ua,
     })
+    policyMs = performance.now() - policyStart
 
     if (authError || !user) {
       const errorCode = authError ? mapAuthErrorCode(authError) : ErrorCode.UNAUTHORIZED
@@ -236,41 +270,59 @@ async function handleGet(request: NextRequest) {
       ...(ids.length ? { id: { in: ids } } : {}),
     }
 
-    const notifications = await prisma.notification.findMany({
-      where,
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      ...(ids.length
-        ? {}
-        : {
-            take: limit + 1,
-            ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-          }),
-      include: {
-        actor: {
-          select: {
-            id: true,
-            name: true,
-            avatarUrl: true,
-            email: true,
-          },
-        },
-        post: {
-          select: {
-            id: true,
-            title: true,
-            slug: true,
-          },
-        },
-        comment: {
-          select: {
-            id: true,
-            content: true,
-            postId: true,
-            activityId: true,
-          },
-        },
-      },
+    const statsStart = performance.now()
+    const statsPromise = getUnreadStats(user.id, type).then((stats) => {
+      statsMs = performance.now() - statsStart
+      return stats
     })
+
+    const queryStart = performance.now()
+    const loadNotifications = () =>
+      prisma.notification.findMany({
+        where,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        ...(ids.length
+          ? {}
+          : {
+              take: limit + 1,
+              ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+            }),
+        include: {
+          actor: {
+            select: {
+              id: true,
+              name: true,
+              avatarUrl: true,
+              email: true,
+            },
+          },
+          post: {
+            select: {
+              id: true,
+              title: true,
+              slug: true,
+            },
+          },
+          comment: {
+            select: {
+              id: true,
+              content: true,
+              postId: true,
+              activityId: true,
+            },
+          },
+        },
+      })
+
+    const notifications =
+      process.env.NODE_ENV === "production" && !ids.length
+        ? await unstable_cache(
+            loadNotifications,
+            ["api-notifications-list", user.id, type ?? "all", cursor ?? "", String(limit)],
+            { revalidate: NOTIFICATIONS_CACHE_SECONDS, tags: [`notifications:user:${user.id}`] }
+          )()
+        : await loadNotifications()
+    queryMs = performance.now() - queryStart
 
     const hasMore = !ids.length && notifications.length > limit
     const items = ids.length
@@ -279,10 +331,19 @@ async function handleGet(request: NextRequest) {
         ? notifications.slice(0, limit)
         : notifications
     const nextCursor = !ids.length && hasMore ? (items[items.length - 1]?.id ?? null) : null
-    const stats = await getUnreadStats(user.id, type)
-    const signedItems = await signNotificationAvatars(items.map(mapNotification))
 
-    return createSuccessResponse(
+    const mapStart = performance.now()
+    const mappedItems = items.map(mapNotification)
+    mapMs = performance.now() - mapStart
+
+    const signStart = performance.now()
+    const signedItemsPromise = signNotificationAvatars(mappedItems).then((signed) => {
+      signMs = performance.now() - signStart
+      return signed
+    })
+    const [stats, signedItems] = await Promise.all([statsPromise, signedItemsPromise])
+
+    const response = createSuccessResponse(
       {
         items: signedItems,
         pagination: {
@@ -300,6 +361,26 @@ async function handleGet(request: NextRequest) {
         user: toResponseUser(user),
       }
     )
+
+    const totalMs = performance.now() - totalStart
+    response.headers.set(
+      "Server-Timing",
+      [
+        `policy;dur=${policyMs.toFixed(1)}`,
+        `stats;dur=${statsMs.toFixed(1)}`,
+        `query;dur=${queryMs.toFixed(1)}`,
+        `map;dur=${mapMs.toFixed(1)}`,
+        `sign;dur=${signMs.toFixed(1)}`,
+        `total;dur=${totalMs.toFixed(1)}`,
+      ].join(", ")
+    )
+    response.headers.set("x-perf-policy-ms", policyMs.toFixed(1))
+    response.headers.set("x-perf-stats-ms", statsMs.toFixed(1))
+    response.headers.set("x-perf-query-ms", queryMs.toFixed(1))
+    response.headers.set("x-perf-map-ms", mapMs.toFixed(1))
+    response.headers.set("x-perf-sign-ms", signMs.toFixed(1))
+    response.headers.set("x-perf-total-ms", totalMs.toFixed(1))
+    return response
   } catch (error) {
     logger.error("获取通知列表失败", { requestId, error })
     return handleApiError(error)
@@ -357,6 +438,8 @@ async function handlePatch(request: NextRequest) {
         readAt: new Date(),
       },
     })
+
+    revalidateTag(`notifications:user:${user.id}`)
 
     const stats = await getUnreadStats(user.id)
 

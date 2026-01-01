@@ -11,6 +11,27 @@ import { authLogger } from "@/lib/utils/logger"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 import { getClientIp } from "@/lib/api/get-client-ip"
 
+function resolveAuthBaseUrl(request: NextRequest): string {
+  const requestOrigin = new URL(request.url).origin
+
+  if (process.env.VERCEL_ENV !== "preview") {
+    return requestOrigin
+  }
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
+  if (!siteUrl) return requestOrigin
+
+  try {
+    const siteOrigin = new URL(siteUrl).origin
+    if (siteOrigin.startsWith("http://localhost") || siteOrigin.startsWith("http://127.0.0.1")) {
+      return requestOrigin
+    }
+    return siteOrigin
+  } catch {
+    return requestOrigin
+  }
+}
+
 async function handlePost(request: NextRequest) {
   const clientIP = getClientIp(request)
 
@@ -38,7 +59,7 @@ async function handlePost(request: NextRequest) {
     // 创建 Supabase 客户端
     const supabase = await createRouteHandlerClient()
     // 构建 OAuth 重定向 URL
-    const baseUrl = new URL(request.url).origin
+    const baseUrl = resolveAuthBaseUrl(request)
     const callbackUrl = new URL(`${baseUrl}/auth/callback`)
     if (safeRedirectTo !== "/") {
       callbackUrl.searchParams.set("redirect_to", safeRedirectTo)
@@ -127,7 +148,7 @@ async function handleGet(request: NextRequest) {
     // 创建 Supabase 客户端
     const supabase = await createRouteHandlerClient()
     // 构建回调 URL
-    const baseUrl = new URL(request.url).origin
+    const baseUrl = resolveAuthBaseUrl(request)
     const callbackUrl = new URL(`${baseUrl}/auth/callback`)
     if (safeRedirectTo !== "/") {
       callbackUrl.searchParams.set("redirect_to", safeRedirectTo)
