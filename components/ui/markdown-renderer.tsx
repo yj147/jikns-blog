@@ -22,8 +22,28 @@ function extractPlainText(children: ReactNode): string {
 }
 
 function isDangerousUrl(value: string): boolean {
-  const trimmed = value.trim().toLowerCase()
-  return trimmed.startsWith("javascript:") || trimmed.startsWith("vbscript:")
+  const trimmed = value.trim()
+  const lower = trimmed.toLowerCase()
+
+  if (lower.startsWith("javascript:") || lower.startsWith("vbscript:")) {
+    return true
+  }
+
+  if (lower.startsWith("data:") && !lower.startsWith("data:image/")) {
+    return true
+  }
+
+  const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(trimmed)
+  if (
+    hasScheme &&
+    !lower.startsWith("http:") &&
+    !lower.startsWith("https:") &&
+    !lower.startsWith("data:image/")
+  ) {
+    return true
+  }
+
+  return false
 }
 
 export function MarkdownRenderer({
