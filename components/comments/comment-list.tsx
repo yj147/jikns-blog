@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useCallback, useState } from "react"
+import React, { useCallback, useRef, useState } from "react"
 
 import CommentItem from "@/components/comments/comment-item"
 import {
@@ -44,6 +44,7 @@ const CommentList: React.FC<CommentListProps> = ({
 }) => {
   const { user } = useAuth()
   const [replyingTo, setReplyingTo] = useState<string | null>(null)
+  const localDeleteIdsRef = useRef<Set<string>>(new Set())
 
   const {
     comments,
@@ -138,19 +139,28 @@ const CommentList: React.FC<CommentListProps> = ({
         return
       }
 
+      localDeleteIdsRef.current.add(commentId)
+
       try {
         await fetchDelete(`/api/comments/${commentId}`)
         await resetList()
         resetReplies()
         onCommentDeleted?.()
-        bumpTotal(-1)
+        if (targetType === "activity") {
+          bumpActivityCounts(targetId, { comments: -1 })
+        }
         toast({ title: "删除成功" })
+
+        setTimeout(() => {
+          localDeleteIdsRef.current.delete(commentId)
+        }, 30000)
       } catch (err) {
+        localDeleteIdsRef.current.delete(commentId)
         const message = err instanceof FetchError ? err.message : "删除失败，请稍后重试"
         toast({ title: message, variant: "destructive" })
       }
     },
-    [user, resetList, resetReplies, onCommentDeleted, bumpTotal]
+    [user, resetList, resetReplies, onCommentDeleted, targetType, targetId]
   )
 
   const handleCommentAdded = useCallback(
@@ -169,7 +179,9 @@ const CommentList: React.FC<CommentListProps> = ({
         resetReplies()
       }
 
-      bumpTotal(1)
+      if (targetType === "activity") {
+        bumpActivityCounts(targetId, { comments: 1 })
+      }
       setReplyingTo(null)
       onCommentAdded?.()
     },
@@ -180,7 +192,8 @@ const CommentList: React.FC<CommentListProps> = ({
       loadRepliesForComment,
       resetReplies,
       onCommentAdded,
-      bumpTotal,
+      targetType,
+      targetId,
     ]
   )
 
@@ -291,6 +304,10 @@ const CommentList: React.FC<CommentListProps> = ({
     (incoming: Comment) => {
       const withAuthor = hydrateAuthor(incoming)
 
+      if (user && incoming.authorId === user.id) {
+        return
+      }
+
       if (incoming.parentId) {
         prependReply(incoming.parentId, withAuthor)
         bumpTotal(1)
@@ -302,15 +319,16 @@ const CommentList: React.FC<CommentListProps> = ({
 
       addTopLevelComment(withAuthor)
       bumpTotal(1)
-      if (!withAuthor.author) {
-        void mutate(undefined, true)
-      }
     },
-    [addTopLevelComment, prependReply, bumpTotal, hydrateAuthor, loadRepliesForComment, mutate]
+    [addTopLevelComment, prependReply, bumpTotal, hydrateAuthor, loadRepliesForComment, user]
   )
 
   const handleRealtimeDelete = useCallback(
     (commentId: string) => {
+      if (localDeleteIdsRef.current.has(commentId)) {
+        localDeleteIdsRef.current.delete(commentId)
+        return
+      }
       removeTopLevelComment(commentId)
       removeReply(commentId)
       bumpTotal(-1)
