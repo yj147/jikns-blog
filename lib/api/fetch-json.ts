@@ -39,7 +39,19 @@ const ERROR_MESSAGES: Record<number, string> = {
 
 type InflightKey = string
 
-const inflightGetRequests = new Map<InflightKey, Promise<unknown>>()
+type InflightMap = Map<InflightKey, Promise<unknown>>
+
+const inflightGetRequests: InflightMap = (() => {
+  const globalWithMap = globalThis as typeof globalThis & {
+    __jiknsFetchJsonInflightGetRequests?: InflightMap
+  }
+
+  if (!globalWithMap.__jiknsFetchJsonInflightGetRequests) {
+    globalWithMap.__jiknsFetchJsonInflightGetRequests = new Map<InflightKey, Promise<unknown>>()
+  }
+
+  return globalWithMap.__jiknsFetchJsonInflightGetRequests
+})()
 
 function normalizeHeaders(headers: HeadersInit | undefined): string {
   if (!headers) return ""
@@ -64,9 +76,14 @@ function normalizeHeaders(headers: HeadersInit | undefined): string {
     .join("|")
 }
 
-function buildInflightKey(url: string, method: string, options: RequestInit, headers: HeadersInit) {
+function buildInflightKey(
+  url: string,
+  method: string,
+  options: RequestInit,
+  headers: HeadersInit,
+  credentials: RequestCredentials
+) {
   const cache = options.cache ?? ""
-  const credentials = options.credentials ?? ""
   const headerSig = normalizeHeaders(headers)
   return `${method} ${url} cache=${cache} credentials=${credentials} headers=${headerSig}`
 }
@@ -76,6 +93,7 @@ function buildInflightKey(url: string, method: string, options: RequestInit, hea
  */
 export async function fetchJson<T = any>(url: string, options: FetchOptions = {}): Promise<T> {
   const { params, ...fetchOptions } = options
+  const credentials: RequestCredentials = "same-origin"
 
   // 构建 URL 参数
   if (params) {
@@ -110,7 +128,7 @@ export async function fetchJson<T = any>(url: string, options: FetchOptions = {}
       const response = await fetch(url, {
         ...fetchOptions,
         headers,
-        credentials: "same-origin", // 确保携带 cookies
+        credentials, // 确保携带 cookies
       })
 
       // 尝试解析 JSON 响应
@@ -154,7 +172,7 @@ export async function fetchJson<T = any>(url: string, options: FetchOptions = {}
 
   // 同 URL 的并发 GET 请求合并，避免性能优化/状态刷新引发的重复请求
   if (method === "GET" && !fetchOptions.signal) {
-    const key = buildInflightKey(url, method, fetchOptions, headers)
+    const key = buildInflightKey(url, method, fetchOptions, headers, credentials)
     const existing = inflightGetRequests.get(key)
     if (existing) {
       return existing as Promise<T>
