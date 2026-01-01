@@ -7,7 +7,6 @@
 
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react"
-import { motion } from "framer-motion"
 import { PaginationMeta } from "@/types/blog"
 
 interface BlogPaginationProps {
@@ -61,14 +60,9 @@ export function BlogPagination({ pagination, onPageChange, className = "" }: Blo
   }
 
   return (
-    <motion.div
-      className={`flex items-center justify-center space-x-2 ${className}`}
-      initial={{ opacity: 0, y: 30 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6 }}
-    >
+    <div className={`flex items-center justify-center space-x-2 ${className}`}>
       {/* 上一页按钮 */}
-      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+      <div className="transition-transform duration-200 hover:scale-105 active:scale-95">
         <Button
           variant="outline"
           size="sm"
@@ -79,7 +73,7 @@ export function BlogPagination({ pagination, onPageChange, className = "" }: Blo
           <ChevronLeft className="h-4 w-4" />
           <span className="hidden sm:inline">上一页</span>
         </Button>
-      </motion.div>
+      </div>
 
       {/* 页码按钮 */}
       <div className="flex items-center space-x-1">
@@ -95,10 +89,9 @@ export function BlogPagination({ pagination, onPageChange, className = "" }: Blo
           const isActive = pageNum === currentPage
 
           return (
-            <motion.div
+            <div
               key={pageNum}
-              whileHover={{ scale: isActive ? 1 : 1.1 }}
-              whileTap={{ scale: 0.95 }}
+              className={`transition-transform duration-200 active:scale-95 ${isActive ? "" : "hover:scale-110"}`}
             >
               <Button
                 variant={isActive ? "default" : "outline"}
@@ -108,13 +101,13 @@ export function BlogPagination({ pagination, onPageChange, className = "" }: Blo
               >
                 {pageNum}
               </Button>
-            </motion.div>
+            </div>
           )
         })}
       </div>
 
       {/* 下一页按钮 */}
-      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+      <div className="transition-transform duration-200 hover:scale-105 active:scale-95">
         <Button
           variant="outline"
           size="sm"
@@ -125,13 +118,13 @@ export function BlogPagination({ pagination, onPageChange, className = "" }: Blo
           <span className="hidden sm:inline">下一页</span>
           <ChevronRight className="h-4 w-4" />
         </Button>
-      </motion.div>
+      </div>
 
       {/* 页面信息 */}
       <div className="text-muted-foreground ml-4 hidden items-center text-sm lg:flex">
         第 {currentPage} 页，共 {totalPages} 页
       </div>
-    </motion.div>
+    </div>
   )
 }
 
@@ -155,7 +148,7 @@ export function SimplePagination({
 
   return (
     <div className={`flex items-center justify-between ${className}`}>
-      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+      <div className="transition-transform duration-200 hover:scale-105 active:scale-95">
         <Button
           variant="outline"
           onClick={() => onPageChange(currentPage - 1)}
@@ -165,13 +158,13 @@ export function SimplePagination({
           <ChevronLeft className="h-4 w-4" />
           <span>上一页</span>
         </Button>
-      </motion.div>
+      </div>
 
       <span className="text-muted-foreground text-sm">
         第 {currentPage} 页，共 {totalPages} 页
       </span>
 
-      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+      <div className="transition-transform duration-200 hover:scale-105 active:scale-95">
         <Button
           variant="outline"
           onClick={() => onPageChange(currentPage + 1)}
@@ -181,7 +174,7 @@ export function SimplePagination({
           <span>下一页</span>
           <ChevronRight className="h-4 w-4" />
         </Button>
-      </motion.div>
+      </div>
     </div>
   )
 }

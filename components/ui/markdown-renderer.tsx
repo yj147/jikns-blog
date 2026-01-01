@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils"
 import { createHeadingIdFactory } from "@/lib/markdown/toc"
+import { getOptimizedImageUrl } from "@/lib/images/optimizer"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import type { ReactNode } from "react"
@@ -18,6 +19,11 @@ function extractPlainText(children: ReactNode): string {
     return extractPlainText(props?.children)
   }
   return ""
+}
+
+function isDangerousUrl(value: string): boolean {
+  const trimmed = value.trim().toLowerCase()
+  return trimmed.startsWith("javascript:") || trimmed.startsWith("vbscript:")
 }
 
 export function MarkdownRenderer({
@@ -109,6 +115,27 @@ export function MarkdownRenderer({
                 <h6 id={makeId(text)} className={cn("scroll-mt-24", className)}>
                   {children}
                 </h6>
+              )
+            },
+            img: ({ node: _node, src, alt, ...props }: any) => {
+              const rawSrc = typeof src === "string" ? src : ""
+              if (!rawSrc || isDangerousUrl(rawSrc)) {
+                return null
+              }
+
+              const optimizedSrc =
+                getOptimizedImageUrl(rawSrc, { width: 1200, quality: 75, fit: "contain" }) || rawSrc
+
+              const { loading, decoding, ...restProps } = props
+
+              return (
+                <img
+                  src={optimizedSrc}
+                  alt={alt || ""}
+                  loading={loading ?? "lazy"}
+                  decoding={decoding ?? "async"}
+                  {...restProps}
+                />
               )
             },
           }}
