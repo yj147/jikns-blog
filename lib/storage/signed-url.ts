@@ -15,7 +15,7 @@ const POST_IMAGES_BUCKET = "post-images"
 const DEFAULT_BUCKET = ACTIVITY_IMAGES_BUCKET
 const SIGNABLE_BUCKETS = new Set<string>([ACTIVITY_IMAGES_BUCKET, POST_IMAGES_BUCKET])
 const SIGNED_URL_CACHE_MAX_ENTRIES = 500
-const SIGNED_URL_CACHE_MARGIN_SECONDS = 5
+const SIGNED_URL_CACHE_MARGIN_SECONDS = 60
 const SHOULD_USE_PERSISTENT_CACHE = process.env.NODE_ENV === "production"
 
 type StorageTarget = {
@@ -44,12 +44,44 @@ function getCacheTtlMs(expiresInSeconds: number) {
   return ttlSeconds * 1000
 }
 
+function getSupabaseSignedUrlExpiresAtMs(signedUrl: string): number | null {
+  try {
+    const url = new URL(signedUrl)
+    const token = url.searchParams.get("token")
+    if (!token) return null
+
+    const payloadPart = token.split(".")[1]
+    if (!payloadPart) return null
+
+    const payload = JSON.parse(Buffer.from(payloadPart, "base64url").toString("utf8")) as {
+      exp?: unknown
+    }
+
+    if (typeof payload.exp !== "number") return null
+    return payload.exp * 1000
+  } catch {
+    return null
+  }
+}
+
+function getSignedUrlCacheExpiresAtMs(signedUrl: string, nowMs: number, fallbackTtlMs: number) {
+  const tokenExpMs = getSupabaseSignedUrlExpiresAtMs(signedUrl)
+  if (!tokenExpMs) return nowMs + fallbackTtlMs
+  return tokenExpMs - SIGNED_URL_CACHE_MARGIN_SECONDS * 1000
+}
+
+function isSignedUrlUsable(signedUrl: string, nowMs: number) {
+  const tokenExpMs = getSupabaseSignedUrlExpiresAtMs(signedUrl)
+  if (!tokenExpMs) return true
+  return tokenExpMs - SIGNED_URL_CACHE_MARGIN_SECONDS * 1000 > nowMs
+}
+
 function pruneSignedUrlCache() {
   if (signedUrlCache.size <= SIGNED_URL_CACHE_MAX_ENTRIES) return
 
   const now = Date.now()
   for (const [key, entry] of signedUrlCache) {
-    if (entry.expiresAt <= now) {
+    if (entry.expiresAt <= now || !isSignedUrlUsable(entry.value, now)) {
       signedUrlCache.delete(key)
     }
   }
@@ -172,9 +204,13 @@ async function signSingle(target: StorageTarget, expiresInSeconds = DEFAULT_EXPI
   const cacheTtlMs = getCacheTtlMs(expiresInSeconds)
 
   if (cacheTtlMs > 0) {
+    const nowMs = Date.now()
     const cached = signedUrlCache.get(cacheKey)
-    if (cached && cached.expiresAt > Date.now()) {
-      return cached.value
+    if (cached) {
+      if (cached.expiresAt > nowMs && isSignedUrlUsable(cached.value, nowMs)) {
+        return cached.value
+      }
+      signedUrlCache.delete(cacheKey)
     }
 
     const inFlight = signedUrlInFlight.get(cacheKey)
@@ -190,7 +226,7 @@ async function signSingle(target: StorageTarget, expiresInSeconds = DEFAULT_EXPI
       }
 
       const revalidateSeconds = cacheTtlMs > 0 ? Math.max(0, Math.floor(cacheTtlMs / 1000)) : 0
-      const signed =
+      const candidate =
         SHOULD_USE_PERSISTENT_CACHE && revalidateSeconds > 0
           ? await unstable_cache(
               async () => createSignedUrl(target, normalizedPath, expiresInSeconds),
@@ -199,11 +235,25 @@ async function signSingle(target: StorageTarget, expiresInSeconds = DEFAULT_EXPI
             )()
           : await createSignedUrl(target, normalizedPath, expiresInSeconds)
 
+      let signed = candidate
       if (cacheTtlMs > 0) {
+        const nowMs = Date.now()
+        const expiresAtMs = getSignedUrlCacheExpiresAtMs(candidate, nowMs, cacheTtlMs)
+        if (expiresAtMs <= nowMs) {
+          signed = await createSignedUrl(target, normalizedPath, expiresInSeconds)
+        }
+      }
+
+      if (cacheTtlMs > 0) {
+        const nowMs = Date.now()
+        const expiresAt = getSignedUrlCacheExpiresAtMs(signed, nowMs, cacheTtlMs)
+        if (expiresAt <= nowMs) {
+          return signed
+        }
         pruneSignedUrlCache()
         signedUrlCache.set(cacheKey, {
           value: signed,
-          expiresAt: Date.now() + cacheTtlMs,
+          expiresAt,
         })
       }
 
@@ -272,9 +322,12 @@ export async function createSignedUrls(
 
     if (cacheTtlMs > 0) {
       const cached = signedUrlCache.get(cacheKey)
-      if (cached && cached.expiresAt > now) {
-        resolved[index] = cached.value
-        continue
+      if (cached) {
+        if (cached.expiresAt > now && isSignedUrlUsable(cached.value, now)) {
+          resolved[index] = cached.value
+          continue
+        }
+        signedUrlCache.delete(cacheKey)
       }
     }
 
