@@ -37,8 +37,8 @@ export function LoginButton({
 
     try {
       // 必须走服务端 OAuth 启动路由：
-      // 1) 统一 state 校验与速率限制；2) callback 使用 request.url origin，Preview 不会被 NEXT_PUBLIC_SITE_URL 污染；
-      // 3) redirect_to 通过 query 传递，最终由 /auth/callback 处理。
+      // 1) 统一 state 校验与速率限制；2) callback 走 allowlist 允许的 origin；
+      // 3) redirect_to 由服务端写入短期 cookie，最终由 /auth/callback 读取并跳转。
       const params = new URLSearchParams()
       if (redirectTo && redirectTo !== "/") {
         params.set("redirect_to", redirectTo)

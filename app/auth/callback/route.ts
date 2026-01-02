@@ -12,12 +12,17 @@ import type { NextRequest } from "next/server"
 import { authLogger } from "@/lib/utils/logger"
 
 const AUTH_SESSION_SYNC_COOKIE = "auth_session_sync"
+const AUTH_REDIRECT_COOKIE = "auth_redirect_to"
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get("code")
+  const redirectCookie = request.cookies.get(AUTH_REDIRECT_COOKIE)?.value
   const redirectPath =
-    requestUrl.searchParams.get("redirect_to") || requestUrl.searchParams.get("redirect") || "/"
+    requestUrl.searchParams.get("redirect_to") ||
+    requestUrl.searchParams.get("redirect") ||
+    redirectCookie ||
+    "/"
   const error = requestUrl.searchParams.get("error")
   const errorDescription = requestUrl.searchParams.get("error_description")
 
@@ -98,6 +103,20 @@ export async function GET(request: NextRequest) {
           const finalRedirect = validateRedirectUrl(redirectPath) ? redirectPath : "/"
 
           const response = NextResponse.redirect(new URL(finalRedirect, requestUrl.origin))
+          const domain =
+            requestUrl.hostname === "jikns666.xyz" || requestUrl.hostname.endsWith(".jikns666.xyz")
+              ? ".jikns666.xyz"
+              : undefined
+          response.cookies.set({
+            name: AUTH_REDIRECT_COOKIE,
+            value: "",
+            httpOnly: true,
+            sameSite: "lax",
+            secure: requestUrl.protocol === "https:",
+            path: "/",
+            maxAge: 0,
+            ...(domain ? { domain } : {}),
+          })
           // 提示客户端在下一次渲染时从服务端 Cookie 同步 Supabase session（仅短暂有效）
           response.cookies.set({
             name: AUTH_SESSION_SYNC_COOKIE,
