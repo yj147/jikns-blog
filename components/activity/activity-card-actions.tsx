@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useState } from "react"
 import { LikeButton } from "@/components/blog/like-button"
 import { useRealtimeLikes } from "@/hooks/use-realtime-likes"
+import { useAuth } from "@/hooks/use-auth"
 import { MessageCircle, Repeat2, BarChart2 } from "lucide-react"
 import { bumpActivityCounts } from "@/lib/activities/cache-update"
 
@@ -33,6 +34,8 @@ function ActivityCardActionsComponent({
   onComment,
   onShare,
 }: ActivityCardActionsProps) {
+  const { session } = useAuth()
+  const isAuthenticated = Boolean(session?.user)
   const [likesCount, setLikesCount] = useState(initialLikesCount)
 
   useEffect(() => {
@@ -50,6 +53,7 @@ function ActivityCardActionsComponent({
   useRealtimeLikes({
     targetType: "activity",
     targetId: activityId,
+    enabled: isAuthenticated,
     onLike: handleRealtimeLike,
     onUnlike: handleRealtimeUnlike,
   })
