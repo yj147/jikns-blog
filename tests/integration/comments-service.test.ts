@@ -16,6 +16,7 @@ import {
 } from "@/lib/interactions/comments"
 import { prisma } from "@/lib/prisma"
 import { cleanXSS } from "@/lib/security/xss-cleaner"
+import { createSignedUrls } from "@/lib/storage/signed-url"
 import { logger } from "@/lib/utils/logger"
 
 // Mock 依赖
@@ -59,6 +60,10 @@ vi.mock("@/lib/security/xss-cleaner", () => ({
 
 vi.mock("@/lib/services/notification", () => ({
   notify: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock("@/lib/storage/signed-url", () => ({
+  createSignedUrls: vi.fn(async (inputs: string[]) => inputs),
 }))
 
 vi.mock("@/lib/utils/logger", () => ({
@@ -158,6 +163,32 @@ describe("评论服务测试", () => {
           id: "user-1",
         },
       })
+    })
+
+    it("应该为新建评论的作者头像生成签名 URL（Storage 相对路径）", async () => {
+      const mockPost = { id: "post-1", authorId: "user-1" }
+      const mockComment = {
+        id: "comment-1",
+        content: "Test comment_cleaned",
+        authorId: "user-1",
+        postId: "post-1",
+        parentId: null,
+        deletedAt: null,
+        author: {
+          id: "user-1",
+          name: "Test User",
+          avatarUrl: "avatars/user-1/avatar.png",
+        },
+      }
+
+      vi.mocked(prisma.post.findUnique).mockResolvedValue(mockPost as any)
+      vi.mocked(prisma.comment.create).mockResolvedValue(mockComment as any)
+      vi.mocked(createSignedUrls).mockResolvedValueOnce(["signed-avatar-url"])
+
+      const result = await createComment(baseCreateData)
+
+      expect(createSignedUrls).toHaveBeenCalledWith(["avatars/user-1/avatar.png"])
+      expect(result.author?.avatarUrl).toBe("signed-avatar-url")
     })
 
     it("应该成功创建动态评论并更新计数", async () => {

@@ -260,7 +260,9 @@ export async function createComment(data: CreateCommentData): Promise<CommentWit
       })
     }
 
-    return formatComment(comment as PrismaCommentWithAuthor)
+    const formatted = formatComment(comment as PrismaCommentWithAuthor)
+    const [signed] = await signCommentAuthors([formatted])
+    return signed ?? formatted
   } catch (error) {
     if (error instanceof CommentServiceError) {
       logger.warn("创建评论失败", {
