@@ -12,10 +12,16 @@ import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 import { getClientIp } from "@/lib/api/get-client-ip"
 
 function resolveAuthBaseUrl(request: NextRequest): string {
-  // OAuth callback 必须回到「当前请求的 origin」：
-  // - Preview: 每次部署都有独立域名，否则会把用户带去旧 deployment/别名，导致 cookie 不生效
-  // - Production: 也遵循用户实际访问的域名（自定义域 or *.vercel.app）
-  return new URL(request.url).origin
+  // OAuth callback 必须落回 Supabase allowlist 允许的域名。
+  // 生产环境常见情况：站点对外是 www 域，但 Supabase Site URL 配的是根域（无 www）。
+  // 这时直接使用 request.origin 会导致 Supabase 忽略 redirectTo，回落到 Site URL 根路径，登录无法完成。
+  const origin = new URL(request.url).origin
+  const url = new URL(origin)
+  if (url.hostname.startsWith("www.")) {
+    url.hostname = url.hostname.replace(/^www\\./, "")
+    return url.origin
+  }
+  return origin
 }
 
 async function handlePost(request: NextRequest) {

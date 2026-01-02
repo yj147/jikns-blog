@@ -13,8 +13,14 @@ import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 import { getClientIp } from "@/lib/api/get-client-ip"
 
 function resolveAuthBaseUrl(request: NextRequest): string {
-  // Preview 注册/邮箱确认需要落回当前部署域名，否则会丢失 cookie 或跳到旧别名。
-  return new URL(request.url).origin
+  // Auth 回调必须落回 Supabase allowlist 允许的域名（见 app/api/auth/github/route.ts）。
+  const origin = new URL(request.url).origin
+  const url = new URL(origin)
+  if (url.hostname.startsWith("www.")) {
+    url.hostname = url.hostname.replace(/^www\\./, "")
+    return url.origin
+  }
+  return origin
 }
 
 // 注册请求验证 Schema
