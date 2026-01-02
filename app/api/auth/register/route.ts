@@ -14,13 +14,31 @@ import { getClientIp } from "@/lib/api/get-client-ip"
 
 function resolveAuthBaseUrl(request: NextRequest): string {
   // Auth 回调必须落回 Supabase allowlist 允许的域名（见 app/api/auth/github/route.ts）。
-  const origin = new URL(request.url).origin
+  const requestOrigin = new URL(request.url).origin
+
+  let origin = requestOrigin
+  if (process.env.VERCEL_ENV === "preview") {
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
+    if (siteUrl) {
+      try {
+        const siteOrigin = new URL(siteUrl).origin
+        if (
+          !siteOrigin.startsWith("http://localhost") &&
+          !siteOrigin.startsWith("http://127.0.0.1")
+        ) {
+          origin = siteOrigin
+        }
+      } catch {
+        origin = requestOrigin
+      }
+    }
+  }
+
   const url = new URL(origin)
   if (url.hostname.startsWith("www.")) {
     url.hostname = url.hostname.replace(/^www\\./, "")
-    return url.origin
   }
-  return origin
+  return url.origin
 }
 
 // 注册请求验证 Schema

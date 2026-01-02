@@ -13,15 +13,33 @@ import { getClientIp } from "@/lib/api/get-client-ip"
 
 function resolveAuthBaseUrl(request: NextRequest): string {
   // OAuth callback 必须落回 Supabase allowlist 允许的域名。
-  // 生产环境常见情况：站点对外是 www 域，但 Supabase Site URL 配的是根域（无 www）。
-  // 这时直接使用 request.origin 会导致 Supabase 忽略 redirectTo，回落到 Site URL 根路径，登录无法完成。
-  const origin = new URL(request.url).origin
+  // - Preview: 允许用 NEXT_PUBLIC_SITE_URL 固定回调域名（避免随机 deployment 域名不在 allowlist）
+  // - Production: 站点对外可能是 www 域，但 Supabase Site URL 常配根域（无 www），需归一化
+  const requestOrigin = new URL(request.url).origin
+
+  let origin = requestOrigin
+  if (process.env.VERCEL_ENV === "preview") {
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
+    if (siteUrl) {
+      try {
+        const siteOrigin = new URL(siteUrl).origin
+        if (
+          !siteOrigin.startsWith("http://localhost") &&
+          !siteOrigin.startsWith("http://127.0.0.1")
+        ) {
+          origin = siteOrigin
+        }
+      } catch {
+        origin = requestOrigin
+      }
+    }
+  }
+
   const url = new URL(origin)
   if (url.hostname.startsWith("www.")) {
     url.hostname = url.hostname.replace(/^www\\./, "")
-    return url.origin
   }
-  return origin
+  return url.origin
 }
 
 async function handlePost(request: NextRequest) {
