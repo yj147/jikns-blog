@@ -400,10 +400,12 @@ const CommentList: React.FC<CommentListProps> = ({
           }
         }
       } else if (incoming) {
-        if (!canUseRealtime) {
-          addTopLevelComment(incoming)
-        }
+        // 本端创建评论必须立即更新 UI；realtime 只负责同步给其他客户端，不能作为本端刷新来源。
+        addTopLevelComment(incoming)
         resetReplies()
+
+        // 重新拉取第一页以刷新 cursor/total，且避免出现重复 GET。
+        void resetList().catch(() => {})
       } else {
         await resetList()
         resetReplies()
