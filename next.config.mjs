@@ -96,36 +96,36 @@ const supabaseRemotePatterns = [
     : []),
   {
     protocol: "https",
-    hostname: "*.supabase.co",
+    hostname: "**.supabase.co",
     pathname: "/storage/v1/object/public/**",
   },
   // 支持签名 URL (*.supabase.co)
   {
     protocol: "https",
-    hostname: "*.supabase.co",
+    hostname: "**.supabase.co",
     pathname: "/storage/v1/object/sign/**",
   },
   // 支持 Image Transformation API (*.supabase.co)
   {
     protocol: "https",
-    hostname: "*.supabase.co",
+    hostname: "**.supabase.co",
     pathname: "/storage/v1/render/image/**",
   },
   {
     protocol: "https",
-    hostname: "*.supabase.in",
+    hostname: "**.supabase.in",
     pathname: "/storage/v1/object/public/**",
   },
   // 支持签名 URL (*.supabase.in)
   {
     protocol: "https",
-    hostname: "*.supabase.in",
+    hostname: "**.supabase.in",
     pathname: "/storage/v1/object/sign/**",
   },
   // 支持 Image Transformation API (*.supabase.in)
   {
     protocol: "https",
-    hostname: "*.supabase.in",
+    hostname: "**.supabase.in",
     pathname: "/storage/v1/render/image/**",
   },
   {
