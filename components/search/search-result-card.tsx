@@ -6,7 +6,6 @@
 
 import type { ReactNode } from "react"
 import Link from "next/link"
-import { motion } from "framer-motion"
 import { Calendar, Clock, Hash, User as UserIcon, MessageSquare, Heart } from "lucide-react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -20,8 +19,6 @@ type SearchResultCardProps =
   | { type: "activities" | "activity"; data: SearchActivityHit; query: string }
   | { type: "users" | "user"; data: SearchUserHit; query: string }
   | { type: "tags" | "tag"; data: SearchTagHit; query: string }
-
-const CARD_TRANSITION = { duration: 0.2 }
 
 export function SearchResultCard(props: SearchResultCardProps) {
   switch (props.type) {
@@ -184,15 +181,7 @@ function TagCard({ data, query }: { data: SearchTagHit; query: string }) {
 }
 
 function ResultCardShell({ children }: { children: ReactNode }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={CARD_TRANSITION}
-    >
-      {children}
-    </motion.div>
-  )
+  return <div className="animate-in fade-in slide-in-from-bottom-2 duration-200">{children}</div>
 }
 
 function RelevanceBadge({ rank }: { rank: number }) {

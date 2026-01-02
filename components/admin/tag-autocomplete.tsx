@@ -6,7 +6,6 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { motion, AnimatePresence } from "framer-motion"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -311,12 +310,7 @@ export function TagAutocomplete({
       {selectedTags.length > 0 && (
         <div className="mb-3 flex flex-wrap gap-2">
           {selectedTags.map((tag) => (
-            <motion.div
-              key={tag.id}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-            >
+            <div key={tag.id}>
               <Badge
                 variant="secondary"
                 className="flex items-center gap-1 pr-1"
@@ -342,7 +336,7 @@ export function TagAutocomplete({
                   <X className="h-3 w-3" />
                 </Button>
               </Badge>
-            </motion.div>
+            </div>
           ))}
         </div>
       )}
@@ -371,55 +365,49 @@ export function TagAutocomplete({
       {inputError && <p className="text-destructive mt-2 text-sm">{inputError}</p>}
 
       {/* 下拉建议 */}
-      <AnimatePresence>
-        {showDropdown && (
-          <motion.div
-            ref={dropdownRef}
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="absolute z-50 mt-2 w-full"
-            id="tag-suggestions"
-            role="listbox"
-          >
-            <Card>
-              <CardContent className="p-2">
-                {suggestions.length > 0 ? (
-                  <div className="space-y-1">
-                    {suggestions.map((tag, index) => (
-                      <button
-                        key={tag.id}
-                        onClick={() => addTag(tag)}
-                        className={`hover:bg-accent flex w-full items-center gap-2 rounded px-3 py-2 text-left transition-colors ${
-                          index === selectedIndex ? "bg-accent" : ""
-                        }`}
-                        role="option"
-                        aria-selected={index === selectedIndex}
-                      >
-                        <Hash className="h-4 w-4" style={{ color: tag.color || undefined }} />
-                        <span className="flex-1">{tag.name}</span>
-                        <span className="text-muted-foreground text-xs">
-                          {tag.id.startsWith("new-") ? "新建" : "已存在"}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                ) : inputValue.trim() ? (
-                  <button
-                    onClick={createNewTag}
-                    disabled={!!inputError}
-                    className="hover:bg-accent flex w-full items-center gap-2 rounded px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span>创建新标签 &ldquo;{inputValue.trim()}&rdquo;</span>
-                  </button>
-                ) : null}
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {showDropdown && (
+        <div
+          ref={dropdownRef}
+          className="animate-in fade-in slide-in-from-top-2 absolute z-50 mt-2 w-full duration-200"
+          id="tag-suggestions"
+          role="listbox"
+        >
+          <Card>
+            <CardContent className="p-2">
+              {suggestions.length > 0 ? (
+                <div className="space-y-1">
+                  {suggestions.map((tag, index) => (
+                    <button
+                      key={tag.id}
+                      onClick={() => addTag(tag)}
+                      className={`hover:bg-accent flex w-full items-center gap-2 rounded px-3 py-2 text-left transition-colors ${
+                        index === selectedIndex ? "bg-accent" : ""
+                      }`}
+                      role="option"
+                      aria-selected={index === selectedIndex}
+                    >
+                      <Hash className="h-4 w-4" style={{ color: tag.color || undefined }} />
+                      <span className="flex-1">{tag.name}</span>
+                      <span className="text-muted-foreground text-xs">
+                        {tag.id.startsWith("new-") ? "新建" : "已存在"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : inputValue.trim() ? (
+                <button
+                  onClick={createNewTag}
+                  disabled={!!inputError}
+                  className="hover:bg-accent flex w-full items-center gap-2 rounded px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>创建新标签 &ldquo;{inputValue.trim()}&rdquo;</span>
+                </button>
+              ) : null}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }

@@ -9,7 +9,6 @@ import { ArrowLeft, UserPlus } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/hooks/use-auth"
 import { useFollowing } from "@/hooks/use-follow-list"
-import { motion } from "framer-motion"
 import { use, useState, useEffect } from "react"
 import { createLogger } from "@/lib/utils/logger"
 
@@ -181,11 +180,9 @@ export default function FollowingPage({ params }: FollowingPageProps) {
                 const handle = (user.name || user.id).toLowerCase().replace(/\s+/g, "_")
 
                 return (
-                  <motion.div
+                  <div
                     key={user.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: index * 0.05 }}
+                    className="animate-in fade-in slide-in-from-bottom-2 duration-200"
                   >
                     <Card className="transition-shadow hover:shadow-md">
                       <CardContent className="pt-6">
@@ -249,7 +246,7 @@ export default function FollowingPage({ params }: FollowingPageProps) {
                         </div>
                       </CardContent>
                     </Card>
-                  </motion.div>
+                  </div>
                 )
               })}
             </div>

@@ -9,7 +9,6 @@ import { ArrowLeft, Users } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/hooks/use-auth"
 import { useFollowers, useFollowStatusBatch } from "@/hooks/use-follow-list"
-import { motion } from "framer-motion"
 import { useState, useEffect, useMemo } from "react"
 import { createLogger } from "@/lib/utils/logger"
 
@@ -181,11 +180,9 @@ export default function FollowersPage({ params }: FollowersPageProps) {
                   : follower.isMutual
 
                 return (
-                  <motion.div
+                  <div
                     key={follower.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: index * 0.05 }}
+                    className="animate-in fade-in slide-in-from-bottom-2 duration-200"
                   >
                     <Card className="transition-shadow hover:shadow-md">
                       <CardContent className="pt-6">
@@ -250,7 +247,7 @@ export default function FollowersPage({ params }: FollowersPageProps) {
                         </div>
                       </CardContent>
                     </Card>
-                  </motion.div>
+                  </div>
                 )
               })}
             </div>

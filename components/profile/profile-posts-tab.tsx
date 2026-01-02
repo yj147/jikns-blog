@@ -1,7 +1,6 @@
 "use client"
 
 import useSWRInfinite from "swr/infinite"
-import { AnimatePresence, motion } from "framer-motion"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -150,60 +149,50 @@ export function ProfilePostsTab({ userId }: ProfilePostsTabProps) {
 
   return (
     <div className="space-y-6">
-      <AnimatePresence>
-        {posts.map((post) => (
-          <motion.div
-            key={post.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.2 }}
-          >
-            <Card className="transition-shadow hover:shadow-lg">
-              <CardHeader>
-                {post.tags.length > 0 && (
-                  <div className="mb-2 flex flex-wrap gap-2">
-                    {post.tags.map((tag) => (
-                      <Badge key={tag.id} variant="secondary" className="text-xs">
-                        {tag.name}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-                <CardTitle className="line-clamp-2 text-xl">
-                  <Link href={`/blog/${post.slug}`} className="hover:underline">
-                    {post.title}
-                  </Link>
-                </CardTitle>
-                {post.excerpt && (
-                  <CardDescription className="line-clamp-3 text-base">
-                    {post.excerpt}
-                  </CardDescription>
-                )}
-              </CardHeader>
-              <CardContent>
-                <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-4 text-sm">
-                  <div className="flex flex-wrap items-center gap-4">
-                    <span className="flex items-center">
-                      <Calendar className="mr-1 h-3 w-3" />
-                      {formatPublishedDate(post.publishedAt)}
-                    </span>
-                    <span className="flex items-center">
-                      <Clock className="mr-1 h-3 w-3" />
-                      {formatReadTime(post.readTimeMinutes)}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-4">
-                    <span>{numberFormatter.format(post.viewCount)} 阅读</span>
-                    <span>{numberFormatter.format(post._count.likes)} 点赞</span>
-                    <span>{numberFormatter.format(post._count.comments)} 评论</span>
-                  </div>
+      {posts.map((post) => (
+        <div key={post.id} className="animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <Card className="transition-shadow hover:shadow-lg">
+            <CardHeader>
+              {post.tags.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-2">
+                  {post.tags.map((tag) => (
+                    <Badge key={tag.id} variant="secondary" className="text-xs">
+                      {tag.name}
+                    </Badge>
+                  ))}
                 </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
-      </AnimatePresence>
+              )}
+              <CardTitle className="line-clamp-2 text-xl">
+                <Link href={`/blog/${post.slug}`} className="hover:underline">
+                  {post.title}
+                </Link>
+              </CardTitle>
+              {post.excerpt && (
+                <CardDescription className="line-clamp-3 text-base">{post.excerpt}</CardDescription>
+              )}
+            </CardHeader>
+            <CardContent>
+              <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-4 text-sm">
+                <div className="flex flex-wrap items-center gap-4">
+                  <span className="flex items-center">
+                    <Calendar className="mr-1 h-3 w-3" />
+                    {formatPublishedDate(post.publishedAt)}
+                  </span>
+                  <span className="flex items-center">
+                    <Clock className="mr-1 h-3 w-3" />
+                    {formatReadTime(post.readTimeMinutes)}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-4">
+                  <span>{numberFormatter.format(post.viewCount)} 阅读</span>
+                  <span>{numberFormatter.format(post._count.likes)} 点赞</span>
+                  <span>{numberFormatter.format(post._count.comments)} 评论</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ))}
 
       {hasMore && (
         <div className="py-4 text-center">

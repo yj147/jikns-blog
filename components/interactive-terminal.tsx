@@ -3,7 +3,6 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 
 const commands = [
@@ -138,7 +137,7 @@ export function InteractiveTerminal() {
           "Tech Stack:",
           "- Frontend: Next.js 14, React 19, TypeScript",
           "- Styling: Tailwind CSS, shadcn/ui, Magic UI",
-          "- Animation: Framer Motion",
+          "- Animation: CSS transitions",
           "- Backend: Supabase, Prisma",
         ]
       case "contact":
@@ -157,12 +156,7 @@ export function InteractiveTerminal() {
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6 }}
-      className="mx-auto w-full max-w-4xl"
-    >
+    <div className="animate-in fade-in slide-in-from-bottom-2 mx-auto w-full max-w-4xl duration-300">
       <div className="border-border bg-muted/80 overflow-hidden rounded-lg border shadow-2xl">
         {/* Terminal Header */}
         <div className="border-border/60 bg-background/60 flex items-center justify-between border-b px-4 py-3">
@@ -184,75 +178,57 @@ export function InteractiveTerminal() {
 
         {/* Terminal Content */}
         <div className="max-h-[500px] min-h-[400px] overflow-y-auto p-6 font-mono text-sm">
-          <AnimatePresence mode="wait">
-            {!isInteractive ? (
-              <motion.div
-                key="auto-mode"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-              >
-                {/* Current Command */}
-                <div className="text-status-success mb-2 flex items-center">
-                  <span className="text-status-info mr-2">$</span>
-                  <span>{displayedCommand}</span>
-                  {isTyping && showCursor && (
-                    <span className="bg-status-success ml-1 inline-block h-5 w-2"></span>
-                  )}
-                </div>
+          {!isInteractive ? (
+            <div key="auto-mode" className="animate-in fade-in duration-200">
+              {/* Current Command */}
+              <div className="text-status-success mb-2 flex items-center">
+                <span className="text-status-info mr-2">$</span>
+                <span>{displayedCommand}</span>
+                {isTyping && showCursor && (
+                  <span className="bg-status-success ml-1 inline-block h-5 w-2"></span>
+                )}
+              </div>
 
-                {/* Command Output */}
-                <div className="text-muted-foreground mb-4">
-                  {displayedOutput.map((line, index) => (
-                    <motion.div
-                      key={index}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className="mb-1"
-                    >
-                      {line}
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="interactive-mode"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-              >
-                {/* Interactive Output */}
-                <div className="text-muted-foreground mb-4">
-                  {displayedOutput.map((line, index) => (
-                    <div key={index} className="mb-1">
-                      {line}
-                    </div>
-                  ))}
-                </div>
+              {/* Command Output */}
+              <div className="text-muted-foreground mb-4">
+                {displayedOutput.map((line, index) => (
+                  <div key={index} className="mb-1">
+                    {line}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div key="interactive-mode" className="animate-in fade-in duration-200">
+              {/* Interactive Output */}
+              <div className="text-muted-foreground mb-4">
+                {displayedOutput.map((line, index) => (
+                  <div key={index} className="mb-1">
+                    {line}
+                  </div>
+                ))}
+              </div>
 
-                {/* Interactive Input */}
-                <div className="text-status-success flex items-center">
-                  <span className="text-status-info mr-2">$</span>
-                  <input
-                    type="text"
-                    value={userInput}
-                    onChange={(e) => setUserInput(e.target.value)}
-                    onKeyDown={handleUserCommand}
-                    className="text-status-success flex-1 bg-transparent outline-none"
-                    placeholder="Type a command..."
-                    autoFocus
-                  />
-                  {showCursor && (
-                    <span className="bg-status-success ml-1 inline-block h-5 w-2"></span>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              {/* Interactive Input */}
+              <div className="text-status-success flex items-center">
+                <span className="text-status-info mr-2">$</span>
+                <input
+                  type="text"
+                  value={userInput}
+                  onChange={(e) => setUserInput(e.target.value)}
+                  onKeyDown={handleUserCommand}
+                  className="text-status-success flex-1 bg-transparent outline-none"
+                  placeholder="Type a command..."
+                  autoFocus
+                />
+                {showCursor && (
+                  <span className="bg-status-success ml-1 inline-block h-5 w-2"></span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
-    </motion.div>
+    </div>
   )
 }

@@ -7,7 +7,6 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
-import { motion } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -159,13 +158,9 @@ export function PopularTags({
           }
         >
           {tags.map((tag, index) => (
-            <motion.div
+            <div
               key={tag.id}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.2, delay: index * 0.05 }}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              className="transition-transform duration-200 hover:scale-105 active:scale-95"
             >
               <Link href={`/tags/${tag.slug}`} prefetch={false}>
                 <Badge
@@ -185,7 +180,7 @@ export function PopularTags({
                   <span className="ml-1 opacity-70">({tag.postsCount})</span>
                 </Badge>
               </Link>
-            </motion.div>
+            </div>
           ))}
         </div>
       </CardContent>
