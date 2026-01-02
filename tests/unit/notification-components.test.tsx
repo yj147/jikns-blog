@@ -239,12 +239,23 @@ describe("NotificationBell", () => {
     },
   }
 
+  const unreadCountData = {
+    success: true,
+    data: {
+      unreadCount: 3,
+    },
+  }
+
   const renderBell = () => {
     authMock.mockReturnValue({ user: { id: "user-1" }, loading: false })
-    swrMock.mockReturnValue({
-      data: bellData,
-      isLoading: false,
-      mutate: vi.fn(),
+    swrMock.mockImplementation((key: any) => {
+      if (key === "/api/notifications/unread-count") {
+        return { data: unreadCountData, isLoading: false, mutate: vi.fn() }
+      }
+      if (key === "/api/notifications?limit=5") {
+        return { data: bellData, isLoading: false, mutate: vi.fn() }
+      }
+      return { data: undefined, isLoading: false, mutate: vi.fn() }
     })
     return render(<NotificationBell />)
   }
@@ -258,10 +269,22 @@ describe("NotificationBell", () => {
 
   it("无未读时不显示角标", () => {
     authMock.mockReturnValue({ user: { id: "user-1" }, loading: false })
-    swrMock.mockReturnValue({
-      data: { ...bellData, data: { ...bellData.data, unreadCount: 0, filteredUnreadCount: 0 } },
-      isLoading: false,
-      mutate: vi.fn(),
+    swrMock.mockImplementation((key: any) => {
+      if (key === "/api/notifications/unread-count") {
+        return {
+          data: { ...unreadCountData, data: { unreadCount: 0 } },
+          isLoading: false,
+          mutate: vi.fn(),
+        }
+      }
+      if (key === "/api/notifications?limit=5") {
+        return {
+          data: { ...bellData, data: { ...bellData.data, unreadCount: 0 } },
+          isLoading: false,
+          mutate: vi.fn(),
+        }
+      }
+      return { data: undefined, isLoading: false, mutate: vi.fn() }
     })
 
     const { container } = render(<NotificationBell />)
@@ -275,7 +298,9 @@ describe("NotificationBell", () => {
     const trigger = screen.getByRole("button")
     await userEvent.click(trigger)
 
-    const content = screen.getByText("通知").closest('[data-slot="dropdown-menu-content"]')
+    const content = await screen
+      .findByText("通知")
+      .then((node) => node.closest('[data-slot="dropdown-menu-content"]'))
     await waitFor(() => {
       expect(content).toHaveAttribute("data-state", "open")
     })
@@ -286,8 +311,8 @@ describe("NotificationBell", () => {
 
     await userEvent.click(screen.getByRole("button"))
 
-    expect(screen.getByText("Alice")).toBeInTheDocument()
-    expect(screen.getByText("Bob")).toBeInTheDocument()
+    expect(await screen.findByText("Alice")).toBeInTheDocument()
+    expect(await screen.findByText("Bob")).toBeInTheDocument()
   })
 
   it("点击通知关闭下拉并跳转", async () => {
@@ -295,7 +320,9 @@ describe("NotificationBell", () => {
     renderBell()
 
     await userEvent.click(screen.getByRole("button"))
-    const content = screen.getByText("通知").closest('[data-slot="dropdown-menu-content"]')!
+    const content = (await screen.findByText("通知")).closest(
+      '[data-slot="dropdown-menu-content"]'
+    )!
     await waitFor(() => expect(content).toHaveAttribute("data-state", "open"))
 
     await userEvent.click(screen.getByText("Alice"))
@@ -310,7 +337,7 @@ describe("NotificationBell", () => {
     renderBell()
 
     await userEvent.click(screen.getByRole("button"))
-    await userEvent.click(screen.getByRole("button", { name: "查看全部" }))
+    await userEvent.click(await screen.findByRole("button", { name: "查看全部" }))
 
     expect(routerPushMock).toHaveBeenCalledWith("/notifications")
   })
