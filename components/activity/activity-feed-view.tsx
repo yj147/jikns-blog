@@ -1,12 +1,12 @@
 "use client"
 
-import { useMemo, useCallback } from "react"
+import { useMemo, useCallback, useEffect } from "react"
 import { ActivityCard } from "@/components/activity-card"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { AlertCircle } from "lucide-react"
-import { Virtuoso } from "@/components/common/virtual-list"
+import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
 import type { ActivityWithAuthor } from "@/types/activity"
 
 interface ActivityErrorStateProps {
@@ -164,6 +164,10 @@ export function ActivityFeedView({
   onEdit,
   onDelete,
 }: ActivityFeedViewProps) {
+  const [sentinelRef, isSentinelVisible] = useIntersectionObserver<HTMLDivElement>({
+    rootMargin: "400px",
+  })
+
   const shouldShowEmpty = useMemo(
     () => !isLoading && !isError && activities.length === 0,
     [activities.length, isError, isLoading]
@@ -179,27 +183,34 @@ export function ActivityFeedView({
     }
   }, [hasMore, isLoading, loadMore])
 
-  const renderActivity = useCallback(
-    (index: number, activity: ActivityWithAuthor) => (
-      <div style={{ paddingBottom: index === activities.length - 1 ? 0 : 16 }}>
-        <ActivityCard activity={activity} onEdit={onEdit} onDelete={onDelete} />
-      </div>
-    ),
-    [activities.length, onDelete, onEdit]
-  )
+  useEffect(() => {
+    if (!isSentinelVisible) return
+    if (typeof window !== "undefined" && window.scrollY === 0) return
+    handleEndReached()
+  }, [handleEndReached, isSentinelVisible])
 
   return (
     <div className="space-y-4">
       <ActivityErrorState isError={isError} message={error?.message} onRetry={onRetry} />
 
-      <Virtuoso
-        data={activities}
-        useWindowScroll
-        itemContent={renderActivity}
-        endReached={handleEndReached}
-      />
+      <div className="space-y-4">
+        {activities.map((activity, index) => (
+          <div
+            key={activity.id}
+            style={{ paddingBottom: index === activities.length - 1 ? 0 : 16 }}
+          >
+            <ActivityCard activity={activity} onEdit={onEdit} onDelete={onDelete} />
+          </div>
+        ))}
+      </div>
 
       {isLoading && <ActivitySkeletonList />}
+
+      <div
+        ref={sentinelRef}
+        aria-hidden
+        className={hasMore && activities.length > 0 ? "h-1 w-full" : "hidden"}
+      />
 
       <ActivityLoadMoreSection hasMore={hasMore} isLoading={isLoading} loadMore={loadMore} />
 
