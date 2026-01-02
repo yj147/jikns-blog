@@ -52,6 +52,7 @@ export function MarkdownRenderer({
   colorMode = "light",
 }: MarkdownRendererProps) {
   const makeId = createHeadingIdFactory()
+  let renderedImageCount = 0
 
   return (
     <div className={cn("w-full", className)} data-color-mode={colorMode}>
@@ -143,16 +144,20 @@ export function MarkdownRenderer({
                 return null
               }
 
+              const isFirstImage = renderedImageCount === 0
+              renderedImageCount += 1
+
               const optimizedSrc =
                 getOptimizedImageUrl(rawSrc, { width: 1200, quality: 75, fit: "contain" }) || rawSrc
 
-              const { loading, decoding, ...restProps } = props
+              const { loading, decoding, fetchPriority, ...restProps } = props
 
               return (
                 <img
                   src={optimizedSrc}
                   alt={alt || ""}
-                  loading={loading ?? "lazy"}
+                  loading={loading ?? (isFirstImage ? "eager" : "lazy")}
+                  fetchPriority={fetchPriority ?? (isFirstImage ? "high" : undefined)}
                   decoding={decoding ?? "async"}
                   {...restProps}
                 />

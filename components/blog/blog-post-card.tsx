@@ -21,7 +21,7 @@ interface BlogPostCardProps {
   index?: number
 }
 
-export function BlogPostCard({ post }: BlogPostCardProps) {
+export function BlogPostCard({ post, index = 0 }: BlogPostCardProps) {
   const coverSource = post.signedCoverImage ?? post.coverImage ?? undefined
   const coverImageUrl =
     coverSource &&
@@ -86,6 +86,8 @@ export function BlogPostCard({ post }: BlogPostCardProps) {
                 fill
                 className="object-cover transition-transform duration-700 hover:scale-105"
                 sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 800px"
+                priority={index === 0}
+                fetchPriority={index === 0 ? "high" : undefined}
               />
             </div>
           </Link>
