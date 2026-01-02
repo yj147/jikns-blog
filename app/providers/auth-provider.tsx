@@ -14,6 +14,31 @@ import type { User as DatabaseUser } from "@/lib/generated/prisma"
 const AUTH_SESSION_SYNC_COOKIE = "auth_session_sync"
 const USER_PROFILE_CACHE_TTL_MS = 60_000
 
+function isSupabaseSessionCookieName(name?: string): boolean {
+  if (!name || !name.startsWith("sb-")) return false
+  return (
+    name.endsWith("-auth-token") ||
+    name.endsWith("-auth-token.0") ||
+    name.endsWith("-auth-token.1") ||
+    name.endsWith("-refresh-token")
+  )
+}
+
+function hasSupabaseSessionCookieClient(): boolean {
+  if (typeof document === "undefined") return false
+
+  const cookieHeader = document.cookie ?? ""
+  if (!cookieHeader) return false
+
+  return cookieHeader.split(";").some((pair) => {
+    const [rawName, rawValue] = pair.trim().split("=")
+    const name = rawName?.trim() ?? ""
+    const value = rawValue?.trim() ?? ""
+    if (!isSupabaseSessionCookieName(name)) return false
+    return value.length > 0
+  })
+}
+
 function consumeClientCookie(name: string): boolean {
   if (typeof document === "undefined") return false
 
@@ -56,6 +81,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let isMounted = true
 
     const initSupabase = async () => {
+      const currentPath = typeof window !== "undefined" ? window.location.pathname : ""
+      const protectedPaths = ["/profile", "/settings", "/admin", "/notifications"]
+      const shouldInitSupabase =
+        hasSupabaseSessionCookieClient() ||
+        document.cookie.includes(`${AUTH_SESSION_SYNC_COOKIE}=`) ||
+        protectedPaths.some((path) => currentPath.startsWith(path))
+
+      if (!shouldInitSupabase) {
+        if (isMounted) {
+          setLoading(false)
+        }
+        return
+      }
+
       try {
         const { createClient } = await import("@/lib/supabase")
         if (!isMounted) return
@@ -167,8 +206,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   // 从服务端 Cookie 同步 Supabase 会话到客户端
-  const syncSessionFromServer = async (): Promise<Session | null> => {
-    if (!supabase) return null
+  const syncSessionFromServer = async (client?: SupabaseClient): Promise<Session | null> => {
+    const activeClient = client ?? supabase
+    if (!activeClient) return null
     try {
       const response = await fetch("/api/auth/session", {
         method: "GET",
@@ -188,7 +228,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return null
       }
 
-      const { data: setResult, error: setError } = await supabase.auth.setSession({
+      const { data: setResult, error: setError } = await activeClient.auth.setSession({
         access_token: serverSession.access_token,
         refresh_token: serverSession.refresh_token,
       })
@@ -324,11 +364,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const handleServerLogin = async () => {
-      if (!supabase) return
       setLoading(true)
       try {
+        let activeSupabase = supabase
+        if (!activeSupabase) {
+          const { createClient } = await import("@/lib/supabase")
+          activeSupabase = createClient()
+          setSupabase(activeSupabase)
+        }
+
         const nextSession =
-          (await syncSessionFromServer()) ?? (await supabase.auth.getSession()).data.session
+          (await syncSessionFromServer(activeSupabase)) ??
+          (await activeSupabase.auth.getSession()).data.session
         setSession(nextSession)
         await loadUserProfile(nextSession)
       } finally {
