@@ -11,14 +11,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { ActivityFiltersDialog } from "@/components/activity/activity-filters-dialog"
-import { ActivityForm } from "./activity-form"
 import { ActivityToolbar, ActivityMetaSummary } from "@/components/activity/activity-toolbar"
 import { ActivityFeedView } from "@/components/activity/activity-feed-view"
 import { useActivities } from "@/hooks/use-activities"
 import { useActivityFilters, MIN_SEARCH_LENGTH } from "@/hooks/use-activity-filters"
 import { ActivityWithAuthor, ActivityOrderBy, ActivityQueryParams } from "@/types/activity"
 import { cn } from "@/lib/utils"
+
+const ActivityForm = dynamic(() => import("./activity-form").then((mod) => mod.ActivityForm), {
+  ssr: false,
+  loading: () => <div className="bg-muted/30 h-40 w-full animate-pulse rounded-lg" />,
+})
+
+const ActivityFiltersDialog = dynamic(
+  () =>
+    import("@/components/activity/activity-filters-dialog").then(
+      (mod) => mod.ActivityFiltersDialog
+    ),
+  { ssr: false }
+)
 
 const ActivityDeleteDialog = dynamic(
   () =>
@@ -249,7 +260,7 @@ export function ActivityList({
         isLoading={isLoading}
       />
 
-      {showFilters && (
+      {showFilters && showFiltersDialog ? (
         <ActivityFiltersDialog
           open={showFiltersDialog}
           onOpenChange={setShowFiltersDialog}
@@ -268,7 +279,7 @@ export function ActivityList({
           clearAllFilters={clearAllFilters}
           mergeFilters={mergeFilters}
         />
-      )}
+      ) : null}
 
       <ActivityMetaSummary total={total} appliedFilters={appliedFilters ?? null} />
 
@@ -294,16 +305,18 @@ export function ActivityList({
         canPin={canPinEditing}
       />
 
-      <ActivityDeleteDialog
-        activity={deletingActivity}
-        open={!!deletingActivity}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDeletingActivity(null)
-          }
-        }}
-        onSuccess={handleDeleteComplete}
-      />
+      {deletingActivity ? (
+        <ActivityDeleteDialog
+          activity={deletingActivity}
+          open={!!deletingActivity}
+          onOpenChange={(open) => {
+            if (!open) {
+              setDeletingActivity(null)
+            }
+          }}
+          onSuccess={handleDeleteComplete}
+        />
+      ) : null}
     </div>
   )
 }
