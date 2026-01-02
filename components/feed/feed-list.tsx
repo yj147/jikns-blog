@@ -1,9 +1,9 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useCallback, useEffect, useState } from "react"
 import { Loader2 } from "lucide-react"
 import { ActivityCard } from "@/components/activity-card"
-import { CommentList } from "@/components/activity/comment-list"
 import { LazyActivityCard } from "@/components/feed/lazy-activity-card"
 import { Button } from "@/components/ui/button"
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
@@ -11,6 +11,23 @@ import type { User as DatabaseUser } from "@/lib/generated/prisma"
 import { cn } from "@/lib/utils"
 import type { ActivityLikeState, ActivityWithAuthor } from "@/types/activity"
 import type { FeedTab } from "@/components/feed/hooks/use-feed-state"
+
+const CommentList = dynamic(
+  () => import("@/components/activity/comment-list").then((mod) => mod.CommentList),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="border-border bg-muted/10 animate-pulse rounded-md border p-4">
+        <div className="bg-muted h-4 w-24 rounded" />
+        <div className="mt-3 space-y-2">
+          <div className="bg-muted h-3 w-full rounded" />
+          <div className="bg-muted h-3 w-5/6 rounded" />
+          <div className="bg-muted h-3 w-2/3 rounded" />
+        </div>
+      </div>
+    ),
+  }
+)
 
 interface FeedListProps {
   activities: ActivityWithAuthor[]
