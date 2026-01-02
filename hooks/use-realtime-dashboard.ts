@@ -10,7 +10,6 @@ import type {
   RealtimeChannel,
   RealtimePostgresChangesPayload,
 } from "@supabase/supabase-js"
-import { createClient } from "@/lib/supabase"
 import { fetchJson } from "@/lib/api/fetch-json"
 import { logger } from "@/lib/utils/logger"
 import type { Database } from "@/types/database"
@@ -173,6 +172,7 @@ export function useRealtimeDashboard({
         logger.debug("复用外部 Supabase 客户端订阅监控仪表盘")
       } else {
         try {
+          const { createClient } = await import("@/lib/supabase")
           supabaseRef.current = createClient()
         } catch (err) {
           const message = err instanceof Error ? err.message : "创建 Supabase 客户端失败"
