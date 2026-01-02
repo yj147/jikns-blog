@@ -151,40 +151,40 @@ async function fetchAuthorsAndTags(
   type AuthorSummary = { id: string; name: string | null; avatarUrl: string | null }
   type PostTagWithTag = { postId: string; tag: SearchTagResult }
 
-  const [authors, postTags] = await Promise.all([
-    prisma.user.findMany({
-      where: { id: { in: authorIds } },
-      select: {
-        id: true,
-        name: true,
-        avatarUrl: true,
+  const authors: AuthorSummary[] =
+    authorIds.length === 0
+      ? []
+      : await prisma.user.findMany({
+          where: { id: { in: authorIds } },
+          select: {
+            id: true,
+            name: true,
+            avatarUrl: true,
+          },
+        })
+
+  let postTags: PostTagWithTag[] = []
+  if (includeTags && postIds.length > 0) {
+    const items = await prisma.postTag.findMany({
+      where: { postId: { in: postIds } },
+      include: {
+        tag: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            color: true,
+            description: true,
+            postsCount: true,
+          },
+        },
       },
-    }),
-    includeTags
-      ? prisma.postTag
-          .findMany({
-            where: { postId: { in: postIds } },
-            include: {
-              tag: {
-                select: {
-                  id: true,
-                  name: true,
-                  slug: true,
-                  color: true,
-                  description: true,
-                  postsCount: true,
-                },
-              },
-            },
-          })
-          .then((items) =>
-            items.map<PostTagWithTag>((item, index) => ({
-              postId: item.postId,
-              tag: { ...item.tag, rank: item.tag.postsCount ?? index + 1 },
-            }))
-          )
-      : Promise.resolve<PostTagWithTag[]>([]),
-  ])
+    })
+    postTags = items.map<PostTagWithTag>((item, index) => ({
+      postId: item.postId,
+      tag: { ...item.tag, rank: item.tag.postsCount ?? index + 1 },
+    }))
+  }
 
   return { authors, postTags }
 }
