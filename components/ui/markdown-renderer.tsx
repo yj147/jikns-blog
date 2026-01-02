@@ -5,6 +5,9 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import type { ReactNode } from "react"
 
+const MARKDOWN_IMAGE_WIDTHS = [320, 640, 960, 1200] as const
+const MARKDOWN_IMAGE_SIZES = "(max-width: 768px) 100vw, 768px"
+
 export interface MarkdownRendererProps {
   content: string
   className?: string
@@ -150,11 +153,25 @@ export function MarkdownRenderer({
               const optimizedSrc =
                 getOptimizedImageUrl(rawSrc, { width: 1200, quality: 75, fit: "contain" }) || rawSrc
 
+              const isSupabaseRenderUrl =
+                typeof optimizedSrc === "string" &&
+                optimizedSrc.includes("/storage/v1/render/image/")
+
+              const srcSet = isSupabaseRenderUrl
+                ? MARKDOWN_IMAGE_WIDTHS.map((width) => {
+                    const src =
+                      getOptimizedImageUrl(rawSrc, { width, quality: 75, fit: "contain" }) || rawSrc
+                    return `${src} ${width}w`
+                  }).join(", ")
+                : undefined
+
               const { loading, decoding, fetchPriority, ...restProps } = props
 
               return (
                 <img
                   src={optimizedSrc}
+                  srcSet={srcSet}
+                  sizes={srcSet ? MARKDOWN_IMAGE_SIZES : undefined}
                   alt={alt || ""}
                   loading={loading ?? (isFirstImage ? "eager" : "lazy")}
                   fetchPriority={fetchPriority ?? (isFirstImage ? "high" : undefined)}
