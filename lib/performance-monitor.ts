@@ -7,6 +7,44 @@ import { MetricType as PersistedMetricType } from "./generated/prisma"
 import type { Prisma } from "./generated/prisma"
 import { logger } from "./utils/logger"
 
+function getVercelEnvTag(): string | null {
+  const vercelEnv = process.env.VERCEL_ENV
+  if (!vercelEnv) return null
+  return `env:${vercelEnv}`
+}
+
+function getVercelGitShaTag(): string | null {
+  const sha = process.env.VERCEL_GIT_COMMIT_SHA
+  if (!sha) return null
+  return `sha:${sha.slice(0, 7)}`
+}
+
+function enrichMetric(metric: PerformanceMetric): PerformanceMetric {
+  const envTag = getVercelEnvTag()
+  const shaTag = getVercelGitShaTag()
+
+  if (!envTag && !shaTag) {
+    return metric
+  }
+
+  const tags = new Set(metric.tags ?? [])
+  if (envTag) tags.add(envTag)
+  if (shaTag) tags.add(shaTag)
+
+  return {
+    ...metric,
+    tags: Array.from(tags),
+    context: {
+      ...(metric.context ?? {}),
+      additionalData: {
+        ...(metric.context?.additionalData ?? {}),
+        vercelEnv: process.env.VERCEL_ENV,
+        vercelGitSha: process.env.VERCEL_GIT_COMMIT_SHA,
+      },
+    },
+  }
+}
+
 /**
  * 性能指标类型
  */
@@ -163,10 +201,10 @@ export class PerformanceMonitor {
    * 记录性能指标
    */
   recordMetric(metric: Omit<PerformanceMetric, "id">): void {
-    const metricWithId: PerformanceMetric = {
+    const metricWithId: PerformanceMetric = enrichMetric({
       id: this.generateMetricId(),
       ...metric,
-    }
+    })
 
     this.metrics.push(metricWithId)
     void this.persistMetrics([metricWithId])
@@ -503,6 +541,7 @@ export class PerformanceMonitor {
     }
 
     const { prisma } = await import("./prisma")
+    const envTag = getVercelEnvTag()
 
     const rows = await prisma.performanceMetric.findMany({
       where: {
@@ -520,6 +559,7 @@ export class PerformanceMonitor {
           gte: timeRange.start,
           lte: timeRange.end,
         },
+        ...(envTag ? { tags: { has: envTag } } : {}),
       },
       select: {
         id: true,
