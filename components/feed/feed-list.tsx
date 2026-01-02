@@ -1,19 +1,38 @@
 "use client"
 
-import { forwardRef, useCallback, useState } from "react"
+import dynamic from "next/dynamic"
+import { useCallback, useEffect, useState } from "react"
 import { Loader2 } from "lucide-react"
 import { ActivityCard } from "@/components/activity-card"
-import { CommentList } from "@/components/activity/comment-list"
 import { LazyActivityCard } from "@/components/feed/lazy-activity-card"
-import { Virtuoso, type ListProps } from "@/components/common/virtual-list"
 import { Button } from "@/components/ui/button"
+import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
 import type { User as DatabaseUser } from "@/lib/generated/prisma"
 import { cn } from "@/lib/utils"
 import type { ActivityLikeState, ActivityWithAuthor } from "@/types/activity"
 import type { FeedTab } from "@/components/feed/hooks/use-feed-state"
 
+const CommentList = dynamic(
+  () => import("@/components/activity/comment-list").then((mod) => mod.CommentList),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="border-border bg-muted/10 animate-pulse rounded-md border p-4">
+        <div className="bg-muted h-4 w-24 rounded" />
+        <div className="mt-3 space-y-2">
+          <div className="bg-muted h-3 w-full rounded" />
+          <div className="bg-muted h-3 w-5/6 rounded" />
+          <div className="bg-muted h-3 w-2/3 rounded" />
+        </div>
+      </div>
+    ),
+  }
+)
+
 interface FeedListProps {
   activities: ActivityWithAuthor[]
+  initialActivities: ActivityWithAuthor[]
+  hasInitialSnapshot: boolean
   activeTab: FeedTab
   highlightedActivityIds: Set<string>
   realtimeActivityIds: Set<string>
@@ -31,6 +50,8 @@ interface FeedListProps {
 
 export function FeedList({
   activities,
+  initialActivities,
+  hasInitialSnapshot,
   activeTab,
   highlightedActivityIds,
   realtimeActivityIds,
@@ -47,10 +68,23 @@ export function FeedList({
 }: FeedListProps) {
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set())
 
+  const hasEffectiveActivities = hasDisplayActivities || initialActivities.length > 0
+  const effectiveActivities = hasDisplayActivities ? activities : initialActivities
+
+  const [sentinelRef, isSentinelVisible] = useIntersectionObserver<HTMLDivElement>({
+    rootMargin: "400px",
+  })
+
   const handleEndReached = useCallback(() => {
     if (!hasMore || isLoading) return
     onLoadMore()
   }, [hasMore, isLoading, onLoadMore])
+
+  useEffect(() => {
+    if (!isSentinelVisible) return
+    if (typeof window !== "undefined" && window.scrollY === 0) return
+    handleEndReached()
+  }, [handleEndReached, isSentinelVisible])
 
   const handleComment = useCallback((id: string) => {
     setExpandedComments((prev) => {
@@ -77,7 +111,7 @@ export function FeedList({
             "bg-background hover:bg-muted/5 border-border border-b transition-colors",
             isHighlighted && "bg-primary/5",
             isRealtimeItem && "animate-in fade-in slide-in-from-top-4 duration-500",
-            index === activities.length - 1 && "last:border-b-0"
+            index === effectiveActivities.length - 1 && "last:border-b-0"
           )}
         >
           {index === 0 ? (
@@ -116,7 +150,7 @@ export function FeedList({
       )
     },
     [
-      activities.length,
+      effectiveActivities.length,
       expandedComments,
       handleComment,
       highlightedActivityIds,
@@ -129,7 +163,7 @@ export function FeedList({
     ]
   )
 
-  if (isLoading && !hasDisplayActivities) {
+  if (isLoading && !hasEffectiveActivities && !hasInitialSnapshot) {
     return (
       <div className="divide-border min-h-[50vh] divide-y">
         {[...Array(5)].map((_, i) => (
@@ -145,7 +179,7 @@ export function FeedList({
     )
   }
 
-  if (!hasDisplayActivities) {
+  if (!hasEffectiveActivities) {
     return (
       <div className="py-20 text-center">
         <div className="mb-4 text-4xl">📭</div>
@@ -159,35 +193,19 @@ export function FeedList({
 
   return (
     <>
-      <Virtuoso
-        useWindowScroll
-        data={activities}
-        itemContent={renderItem}
-        endReached={handleEndReached}
-        computeItemKey={(_index: number, activity: ActivityWithAuthor) => activity.id}
-        increaseViewportBy={{ top: 200, bottom: 400 }}
-        components={{
-          List: forwardRef<HTMLDivElement, ListProps & { className?: string }>(
-            function FeedListContainer({ className, ...props }, ref) {
-              return (
-                <div
-                  {...props}
-                  ref={ref}
-                  className={cn("divide-border min-h-[50vh] divide-y", className)}
-                />
-              )
-            }
-          ),
-        }}
-      />
-      {hasMore && baseActivitiesCount > 0 && (
-        <div className="border-border flex justify-center border-t py-8">
+      <div className="divide-border min-h-[50vh] divide-y">
+        {effectiveActivities.map((activity, index) => renderItem(index, activity))}
+      </div>
+
+      {hasMore && baseActivitiesCount > 0 ? (
+        <div className="border-border flex flex-col items-center gap-6 border-t py-8">
+          <div ref={sentinelRef} aria-hidden className="h-1 w-full" />
           <Button variant="outline" onClick={onLoadMore} disabled={isLoading}>
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             加载更多
           </Button>
         </div>
-      )}
+      ) : null}
     </>
   )
 }

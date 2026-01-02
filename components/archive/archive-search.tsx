@@ -216,9 +216,11 @@ export default function ArchiveSearch({ years, defaultYear }: ArchiveSearchProps
             <Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
             <Input
               id="archive-search-input"
+              name="q"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="输入标题、摘要或内容关键词…"
+              autoComplete="off"
               aria-describedby={error ? "archive-search-error" : undefined}
               className="pl-9"
             />
@@ -227,7 +229,7 @@ export default function ArchiveSearch({ years, defaultYear }: ArchiveSearchProps
 
         <div className="space-y-2">
           <Label htmlFor="archive-search-year">限定年份</Label>
-          <Select value={yearFilter} onValueChange={handleYearChange}>
+          <Select name="year" value={yearFilter} onValueChange={handleYearChange}>
             <SelectTrigger id="archive-search-year">
               <SelectValue placeholder="全部年份">{selectedYearLabel}</SelectValue>
             </SelectTrigger>
@@ -323,6 +325,7 @@ export default function ArchiveSearch({ years, defaultYear }: ArchiveSearchProps
                       <article className="space-y-2">
                         <Link
                           href={`/blog/${post.slug}`}
+                          prefetch={false}
                           className="hover:text-primary focus-visible:ring-ring text-base font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
                         >
                           {titleSegments.map((segment, index) =>

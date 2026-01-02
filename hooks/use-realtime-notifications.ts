@@ -6,7 +6,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { RealtimePostgresChangesPayload, SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/database"
-import { createClient } from "@/lib/supabase"
 import { fetchJson } from "@/lib/api/fetch-json"
 import { logger } from "@/lib/utils/logger"
 import type { NotificationListPayload, NotificationView } from "@/components/notifications/types"
@@ -288,6 +287,7 @@ export function useRealtimeNotifications({
     const setupSubscription = async () => {
       if (!supabase) {
         try {
+          const { createClient } = await import("@/lib/supabase")
           supabase = createClient()
           supabaseClientRef.current = supabase
         } catch (err) {

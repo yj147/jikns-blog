@@ -36,7 +36,7 @@ function AvatarImage({
   ...props
 }: OptimizedAvatarImageProps) {
   const isDataUrl = typeof src === "string" && src.startsWith("data:")
-  // 检测签名 URL，不应用 Supabase Render API 转换
+  // 检测签名 URL，不应用 Supabase Render API 转换（交给 next/image 优化）
   const isSignedUrl = typeof src === "string" && src.includes("/object/sign/")
   const resolvedSrc =
     (isDataUrl || isSignedUrl
@@ -50,12 +50,10 @@ function AvatarImage({
   const isLocalSupabase =
     typeof resolvedSrc === "string" &&
     (resolvedSrc.includes("127.0.0.1:54321") || resolvedSrc.includes("localhost:54321"))
-  // 签名 URL 也需要 unoptimized，避免 Next.js Image 优化器处理
-  const shouldUnoptimize = (unoptimized ?? isSvg) || isDataUrl || isLocalSupabase || isSignedUrl
+  const shouldUnoptimize = (unoptimized ?? isSvg) || isDataUrl || isLocalSupabase
 
-  // 本地开发环境或签名 URL 使用原生 img 标签
-  // 避免 Next.js Image 与 Radix Avatar 的时序冲突导致图片无法显示
-  if (isLocalSupabase || isSignedUrl) {
+  // 本地开发环境使用原生 img 标签，避免 next/image 优化器请求本地 Supabase
+  if (isLocalSupabase) {
     return (
       <AvatarPrimitive.Image
         data-slot="avatar-image"

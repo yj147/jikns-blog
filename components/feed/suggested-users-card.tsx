@@ -1,8 +1,10 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { FollowButton } from "@/components/follow"
 import { useSuggestedUsers } from "@/hooks/use-suggested-users"
+import { useAuth } from "@/hooks/use-auth"
 import Link from "next/link"
 
 interface SuggestedUsersCardProps {
@@ -11,14 +13,33 @@ interface SuggestedUsersCardProps {
 }
 
 export default function SuggestedUsersCard({ limit = 3, onFollowChange }: SuggestedUsersCardProps) {
-  const { suggestedUsers, isLoading, isError, refresh } = useSuggestedUsers(limit)
+  const { user } = useAuth()
+  const [enabled, setEnabled] = useState(false)
+
+  useEffect(() => {
+    if (!user) {
+      setEnabled(false)
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => setEnabled(true), 1500)
+    return () => window.clearTimeout(timeoutId)
+  }, [user])
+
+  const { suggestedUsers, isLoading, isError, refresh } = useSuggestedUsers(limit, {
+    enabled: enabled && Boolean(user),
+  })
 
   const handleFollowChange = () => {
     onFollowChange?.()
     refresh()
   }
 
-  if (isLoading) {
+  if (!user) {
+    return null
+  }
+
+  if (!enabled || isLoading) {
     return (
       <div className="space-y-4 p-4">
         {[...Array(limit)].map((_, index) => (
@@ -55,6 +76,7 @@ export default function SuggestedUsersCard({ limit = 3, onFollowChange }: Sugges
             <div key={suggestedUser.id} className="group flex items-center justify-between gap-2">
               <Link
                 href={`/profile/${suggestedUser.id}`}
+                prefetch={false}
                 className="hover:bg-muted/50 -ml-1.5 flex min-w-0 flex-1 items-center gap-3 rounded-lg p-1.5 transition-colors"
               >
                 <Avatar className="ring-background group-hover:ring-muted h-10 w-10 ring-2">

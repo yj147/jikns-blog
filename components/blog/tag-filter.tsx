@@ -7,12 +7,22 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { motion } from "framer-motion"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Hash, X, Loader2, AlertCircle } from "lucide-react"
-import { getPopularTags } from "@/lib/actions/tags"
+import { fetchJson } from "@/lib/api/fetch-json"
+
+type TagsApiResponse = {
+  success: boolean
+  data?: {
+    tags?: PopularTag[]
+  }
+  error?: {
+    message?: string
+    details?: unknown
+  }
+}
 
 export interface PopularTag {
   id: string
@@ -98,7 +108,12 @@ export function TagFilter({
     setRetryAfter(null)
 
     try {
-      const result = await getPopularTags(limit)
+      const params = new URLSearchParams()
+      params.set("page", "1")
+      params.set("limit", String(limit))
+      params.set("orderBy", "postsCount")
+      params.set("order", "desc")
+      const result = await fetchJson<TagsApiResponse>(`/api/tags?${params.toString()}`)
       if (result.success && result.data?.tags) {
         if (!mountedRef.current) return
         setTags(result.data.tags)
@@ -233,17 +248,13 @@ export function TagFilter({
       </CardHeader>
       <CardContent>
         <div className="flex flex-wrap gap-2">
-          {tags.map((tag, index) => {
+          {tags.map((tag) => {
             const isSelected = selectedTag === tag.slug
 
             return (
-              <motion.div
+              <div
                 key={tag.id}
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.2, delay: index * 0.05 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                className="transition-transform duration-200 hover:scale-105 active:scale-95"
               >
                 <Badge
                   variant={isSelected ? "default" : "outline"}
@@ -263,7 +274,7 @@ export function TagFilter({
                   {tag.name}
                   <span className="ml-1 opacity-70">({tag.postsCount})</span>
                 </Badge>
-              </motion.div>
+              </div>
             )
           })}
         </div>

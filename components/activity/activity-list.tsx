@@ -1,5 +1,6 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useState, useCallback, useMemo, useEffect } from "react"
 import { useAuth } from "@/app/providers/auth-provider"
 import { toast } from "sonner"
@@ -10,14 +11,31 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { ActivityFiltersDialog } from "@/components/activity/activity-filters-dialog"
-import { ActivityForm } from "./activity-form"
 import { ActivityToolbar, ActivityMetaSummary } from "@/components/activity/activity-toolbar"
 import { ActivityFeedView } from "@/components/activity/activity-feed-view"
 import { useActivities } from "@/hooks/use-activities"
 import { useActivityFilters, MIN_SEARCH_LENGTH } from "@/hooks/use-activity-filters"
 import { ActivityWithAuthor, ActivityOrderBy, ActivityQueryParams } from "@/types/activity"
 import { cn } from "@/lib/utils"
+
+const ActivityForm = dynamic(() => import("./activity-form").then((mod) => mod.ActivityForm), {
+  ssr: false,
+  loading: () => <div className="bg-muted/30 h-40 w-full animate-pulse rounded-lg" />,
+})
+
+const ActivityFiltersDialog = dynamic(
+  () =>
+    import("@/components/activity/activity-filters-dialog").then(
+      (mod) => mod.ActivityFiltersDialog
+    ),
+  { ssr: false }
+)
+
+const ActivityDeleteDialog = dynamic(
+  () =>
+    import("@/components/activity/activity-delete-dialog").then((mod) => mod.ActivityDeleteDialog),
+  { ssr: false }
+)
 
 interface ActivityListProps {
   userId?: string
@@ -131,6 +149,7 @@ export function ActivityList({
   className = "",
 }: ActivityListProps) {
   const [editingActivity, setEditingActivity] = useState<ActivityWithAuthor | null>(null)
+  const [deletingActivity, setDeletingActivity] = useState<ActivityWithAuthor | null>(null)
   const { user, canViewFollowing, filterState, activitiesState } = useActivityListController({
     userId,
     orderBy,
@@ -185,6 +204,10 @@ export function ActivityList({
     setEditingActivity(activity)
   }, [])
 
+  const handleDeleteActivity = useCallback((activity: ActivityWithAuthor) => {
+    setDeletingActivity(activity)
+  }, [])
+
   const handleEditComplete = useCallback(
     (activity: ActivityWithAuthor) => {
       setEditingActivity(null)
@@ -193,6 +216,11 @@ export function ActivityList({
     },
     [onActivityUpdate, refresh]
   )
+
+  const handleDeleteComplete = useCallback(() => {
+    setDeletingActivity(null)
+    refresh()
+  }, [refresh])
 
   const handleApplySearch = useCallback(() => {
     const result = applySearch()
@@ -232,7 +260,7 @@ export function ActivityList({
         isLoading={isLoading}
       />
 
-      {showFilters && (
+      {showFilters && showFiltersDialog ? (
         <ActivityFiltersDialog
           open={showFiltersDialog}
           onOpenChange={setShowFiltersDialog}
@@ -251,7 +279,7 @@ export function ActivityList({
           clearAllFilters={clearAllFilters}
           mergeFilters={mergeFilters}
         />
-      )}
+      ) : null}
 
       <ActivityMetaSummary total={total} appliedFilters={appliedFilters ?? null} />
 
@@ -267,6 +295,7 @@ export function ActivityList({
         clearAllFilters={clearAllFilters}
         onRetry={refresh}
         onEdit={handleEditActivity}
+        onDelete={handleDeleteActivity}
       />
 
       <ActivityEditorDialog
@@ -275,6 +304,19 @@ export function ActivityList({
         onSuccess={handleEditComplete}
         canPin={canPinEditing}
       />
+
+      {deletingActivity ? (
+        <ActivityDeleteDialog
+          activity={deletingActivity}
+          open={!!deletingActivity}
+          onOpenChange={(open) => {
+            if (!open) {
+              setDeletingActivity(null)
+            }
+          }}
+          onSuccess={handleDeleteComplete}
+        />
+      ) : null}
     </div>
   )
 }

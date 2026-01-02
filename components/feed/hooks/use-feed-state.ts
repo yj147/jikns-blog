@@ -12,13 +12,14 @@ interface UseFeedStateOptions {
   initialActivities: ActivityWithAuthor[]
   initialPagination: {
     limit: number
-    total: number
+    total: number | null
     hasMore: boolean
     nextCursor: string | null
   }
   initialTab: FeedTab
   highlightActivityId?: string
   user: DatabaseUser | null
+  isAuthenticated?: boolean
 }
 
 export function useFeedState({
@@ -27,6 +28,7 @@ export function useFeedState({
   initialTab,
   highlightActivityId,
   user,
+  isAuthenticated,
 }: UseFeedStateOptions) {
   const [activeTab, setActiveTab] = useState<FeedTab>(initialTab)
   const [isPending, startTransition] = useTransition()
@@ -36,21 +38,19 @@ export function useFeedState({
   const handledHighlightIdRef = useRef<string | null>(null)
   const [highlightedActivityIds, setHighlightedActivityIds] = useState<Set<string>>(new Set())
 
+  const resolvedIsAuthenticated = isAuthenticated ?? Boolean(user)
+
   const resolvedOrderBy = useMemo(
     () =>
       activeTab === "trending"
         ? "trending"
-        : activeTab === "following" && user
+        : activeTab === "following" && resolvedIsAuthenticated
           ? "following"
           : "latest",
-    [activeTab, user]
+    [activeTab, resolvedIsAuthenticated]
   )
 
   const fallbackPages = useMemo(() => {
-    if (initialActivities.length === 0) {
-      return undefined
-    }
-
     return [
       {
         success: true,
@@ -80,14 +80,28 @@ export function useFeedState({
   )
 
   useEffect(() => {
-    if (!user && activeTab === "following") {
+    if (!resolvedIsAuthenticated && activeTab === "following") {
       setActiveTab("latest")
     }
-  }, [user, activeTab])
+  }, [resolvedIsAuthenticated, activeTab])
 
   useEffect(() => {
     activitiesRef.current = activities
   }, [activities])
+
+  const prependActivity = useCallback((activity: ActivityWithAuthor) => {
+    setRealtimeActivities((prev) => {
+      if (prev.some((item) => item.id === activity.id)) {
+        return prev
+      }
+
+      if (activitiesRef.current.some((item) => item.id === activity.id)) {
+        return prev
+      }
+
+      return [activity, ...prev].slice(0, 10)
+    })
+  }, [])
 
   // 当 activities 变化时，清理已存在于主列表中的实时活动
   // 使用 activities.length 作为依赖，避免每次渲染都触发
@@ -259,6 +273,7 @@ export function useFeedState({
 
   const { isSubscribed: isRealtimeSubscribed, error: realtimeActivitiesError } =
     useRealtimeActivities({
+      enabled: resolvedIsAuthenticated,
       onInsert: handleRealtimeActivityInsert,
       onUpdate: handleRealtimeActivityUpdate,
       onDelete: handleRealtimeActivityDelete,
@@ -341,6 +356,7 @@ export function useFeedState({
     isPending,
     isRealtimeSubscribed,
     loadMore,
+    prependActivity,
     realtimeActivityIds,
     realtimeActivitiesError,
     refresh,

@@ -4,6 +4,7 @@
  */
 
 import { NextRequest } from "next/server"
+import { revalidateTag } from "next/cache"
 import {
   toggleLike,
   ensureLiked,
@@ -174,6 +175,7 @@ async function handlePost(request: NextRequest) {
 
     // 切换点赞状态
     const status = await toggleLike(targetType, targetId, user.id, requestId)
+    revalidateTag(`likes:user:${user.id}`)
 
     // 记录审计日志
     auditLogger.logEventAsync({
@@ -258,6 +260,7 @@ async function handlePut(request: NextRequest) {
 
     // 调用幂等接口：确保已点赞
     const status = await ensureLiked(targetType, targetId, user.id, requestId)
+    revalidateTag(`likes:user:${user.id}`)
 
     // 记录审计日志
     auditLogger.logEventAsync({
@@ -348,6 +351,7 @@ async function handleDelete(request: NextRequest) {
 
     // 调用幂等接口：确保未点赞
     const status = await ensureUnliked(targetType as LikeTargetType, targetId, user.id, requestId)
+    revalidateTag(`likes:user:${user.id}`)
 
     // 记录审计日志
     auditLogger.logEventAsync({

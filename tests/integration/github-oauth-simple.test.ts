@@ -5,13 +5,13 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { NextRequest } from "next/server"
-import { generateOAuthState } from "@/lib/auth/oauth-state"
 
 // 创建Mock Supabase客户端
 const mockSignInWithOAuth = vi.fn()
 const mockGetUser = vi.fn()
 const mockGetSession = vi.fn()
 const mockSignOut = vi.fn()
+const mockExchangeCodeForSession = vi.fn()
 
 const mockSupabaseClient = {
   auth: {
@@ -19,6 +19,7 @@ const mockSupabaseClient = {
     getUser: mockGetUser,
     getSession: mockGetSession,
     signOut: mockSignOut,
+    exchangeCodeForSession: mockExchangeCodeForSession,
     onAuthStateChange: vi.fn(() => ({
       data: { subscription: { unsubscribe: vi.fn() } },
     })),
@@ -66,7 +67,6 @@ vi.mock("next/headers", () => ({
 describe("GitHub OAuth 简化集成测试", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    process.env.OAUTH_STATE_SECRET = "test-oauth-state-secret"
 
     // 设置默认Mock行为
     mockSignInWithOAuth.mockResolvedValue({
@@ -102,6 +102,24 @@ describe("GitHub OAuth 简化集成测试", () => {
           },
           access_token: "mock-access-token",
           refresh_token: "mock-refresh-token",
+        },
+      },
+      error: null,
+    })
+
+    mockExchangeCodeForSession.mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "test-user-id",
+            email: "admin@test.com",
+            user_metadata: {
+              full_name: "管理员",
+              avatar_url: "https://github.com/avatar.jpg",
+            },
+            identities: [],
+          },
+          access_token: "mock-access-token",
         },
       },
       error: null,
@@ -205,42 +223,7 @@ describe("GitHub OAuth 简化集成测试", () => {
       // 动态导入OAuth路由处理器
       const { GET: callbackHandler } = await import("@/app/auth/callback/route")
 
-      const stateToken = generateOAuthState()
-      const headers = new Headers()
-      headers.set(
-        "cookie",
-        `oauth_state=${stateToken.state}.${stateToken.issuedAt}.${stateToken.signature}`
-      )
-      const request = new NextRequest(
-        new URL(`http://localhost:3000/auth/callback?code=test-code&state=${stateToken.state}`),
-        { headers }
-      )
-
-      // Mock exchangeCodeForSession 成功
-      vi.doMock("@/lib/supabase", () => ({
-        createClient: () => ({
-          ...mockSupabaseClient,
-          auth: {
-            ...mockSupabaseClient.auth,
-            exchangeCodeForSession: vi.fn().mockResolvedValue({
-              data: {
-                session: {
-                  user: {
-                    id: "test-user-id",
-                    email: "admin@test.com",
-                  },
-                  access_token: "mock-access-token",
-                },
-                user: {
-                  id: "test-user-id",
-                  email: "admin@test.com",
-                },
-              },
-              error: null,
-            }),
-          },
-        }),
-      }))
+      const request = new NextRequest(new URL("http://localhost:3000/auth/callback?code=test-code"))
 
       const response = await callbackHandler(request)
 

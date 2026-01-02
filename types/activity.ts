@@ -269,7 +269,7 @@ export interface ActivityApiResponse<T = ActivityWithAuthor | ActivityWithAuthor
     pagination?: {
       page: number
       limit: number
-      total: number
+      total: number | null
       hasMore: boolean
       nextCursor?: string | null
     }

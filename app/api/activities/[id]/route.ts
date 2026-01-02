@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server"
+import { revalidateTag } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
-import type { AuthenticatedUser } from "@/lib/auth/session"
+import { getOptionalViewer, type AuthenticatedUser } from "@/lib/auth/session"
 import { activityUpdateSchema, type ActivityWithAuthor } from "@/types/activity"
 import { createSuccessResponse, createErrorResponse, ErrorCode } from "@/lib/api/unified-response"
 import { handleApiError } from "@/lib/api/error-handler"
@@ -11,6 +12,7 @@ import { auditLogger, getClientIP, getClientUserAgent } from "@/lib/audit-log"
 import { extractActivityHashtags, syncActivityTags } from "@/lib/services/activity-tags"
 import { signAvatarUrl, signActivityImages } from "@/lib/storage/signed-url"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
+import { logger } from "@/lib/utils/logger"
 
 function toAuthenticatedUser(
   user: Awaited<ReturnType<typeof getCurrentUser>>
@@ -32,8 +34,16 @@ const DEFAULT_RATE_LIMIT_MESSAGE = "请求过于频繁，请稍后再试"
 async function handleGet(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-    const currentUser = await getCurrentUser()
-    const viewer = toAuthenticatedUser(currentUser)
+
+    let viewer: AuthenticatedUser | null = null
+    try {
+      viewer = await getOptionalViewer({ request })
+    } catch (error) {
+      logger.warn("getOptionalViewer failed, falling back to anonymous viewer", {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      viewer = null
+    }
 
     const activity = await prisma.activity.findUnique({
       where: { id, deletedAt: null },
@@ -230,6 +240,8 @@ async function handlePut(request: NextRequest, { params }: { params: Promise<{ i
       },
     })
 
+    revalidateTag("activities:list")
+
     // 签名 URL
     const [signedAvatar, signedImages] = await Promise.all([
       signAvatarUrl(updated.author.avatarUrl),
@@ -343,6 +355,8 @@ async function handleDelete(request: NextRequest, { params }: { params: Promise<
         wasPinned: activity.isPinned,
       },
     })
+
+    revalidateTag("activities:list")
 
     return createSuccessResponse({
       id,

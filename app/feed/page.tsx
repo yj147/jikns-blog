@@ -1,56 +1,48 @@
+import { Suspense } from "react"
 import FeedPageClient from "@/components/feed/feed-page-client"
 import { getFeatureFlags } from "@/lib/config/client-feature-flags"
-import { getCurrentUser } from "@/lib/auth"
 import { listActivities } from "@/lib/repos/activity-repo"
 import type { ActivityWithAuthor } from "@/types/activity"
 import { signActivityListItems } from "@/lib/storage/signed-url"
+import FeedLoading from "./loading"
 
 const INITIAL_LIMIT = 10
 type FeedTab = "latest" | "trending" | "following"
 
-export const revalidate = 60
+export const revalidate = 30
 
-export default async function FeedPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ highlight?: string | string[] }>
-}) {
+export default async function FeedPage() {
   const featureFlags = await getFeatureFlags()
-  const currentUser = await getCurrentUser()
-  const resolvedParams = await searchParams
-  const highlightParam = resolvedParams?.highlight
-  const highlightActivityId = Array.isArray(highlightParam)
-    ? highlightParam[0]
-    : highlightParam || undefined
 
-  const initialTab: FeedTab =
-    featureFlags.feedFollowingStrict && currentUser ? "following" : "latest"
-
-  const initialResult = await fetchInitialActivities(initialTab, currentUser?.id ?? null)
+  // `/feed` 首屏不应该被认证链路阻塞：默认渲染最新流；关注流由客户端在已登录后按需加载。
+  const initialTab: FeedTab = "latest"
+  const baseInitialResult = await fetchInitialActivities("latest")
 
   return (
-    <FeedPageClient
-      featureFlags={featureFlags}
-      initialActivities={initialResult.activities}
-      initialPagination={{
-        limit: INITIAL_LIMIT,
-        total: initialResult.totalCount,
-        hasMore: initialResult.hasMore,
-        nextCursor: initialResult.nextCursor,
-      }}
-      initialTab={initialTab}
-      highlightActivityId={highlightActivityId}
-    />
+    <Suspense fallback={<FeedLoading />}>
+      <FeedPageClient
+        featureFlags={featureFlags}
+        initialActivities={baseInitialResult.activities}
+        initialPagination={{
+          limit: INITIAL_LIMIT,
+          total: baseInitialResult.totalCount,
+          hasMore: baseInitialResult.hasMore,
+          nextCursor: baseInitialResult.nextCursor,
+        }}
+        initialTab={initialTab}
+      />
+    </Suspense>
   )
 }
 
-async function fetchInitialActivities(orderBy: FeedTab, userId: string | null) {
+async function fetchInitialActivities(orderBy: FeedTab) {
   try {
     const result = await listActivities({
       orderBy,
       limit: INITIAL_LIMIT,
-      followingUserId: orderBy === "following" ? userId : null,
+      includeTotalCount: false,
     })
+
     const signed = await signActivityListItems(result.items)
 
     return {
@@ -65,7 +57,7 @@ async function fetchInitialActivities(orderBy: FeedTab, userId: string | null) {
       activities: [] as ActivityWithAuthor[],
       hasMore: false,
       nextCursor: null,
-      totalCount: 0,
+      totalCount: null,
     }
   }
 }

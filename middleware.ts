@@ -34,30 +34,30 @@ const PATH_PERMISSIONS = {
   authenticated: [
     "/settings",
     "/api/user",
-    "/api/users",
-    "/api/users/*",
+    "/api/users/follow",
+    "/api/users/suggested",
     "/admin",
-    "/admin/dashboard",
-    "/admin/users",
-    "/admin/posts",
-    "/admin/settings",
-    "/admin/feeds",
     "/api/admin",
-    "/api/admin/feeds",
   ],
 
   // 公开路径（无需认证）
   public: [
     "/",
+    "/about",
     "/blog",
+    "/feed",
     "/search",
+    "/tags",
     "/archive",
+    "/privacy",
+    "/terms",
     "/login",
     "/register",
     "/auth",
+    "/subscribe",
+    "/unsubscribe",
     "/unauthorized",
     "/api/archive",
-    "/api/archive/*",
     "/api/csrf-token",
     "/api/auth",
   ],
@@ -119,8 +119,7 @@ function createUnauthorizedResponse(
 ): NextResponse {
   const isApiRequest = request.nextUrl.pathname.startsWith("/api/")
 
-  if (isApiRequest && reason !== "AUTHENTICATION_REQUIRED") {
-    // API 请求返回 JSON 错误响应
+  if (isApiRequest) {
     return NextResponse.json(
       {
         error: getErrorMessage(reason),
@@ -131,7 +130,7 @@ function createUnauthorizedResponse(
     )
   }
 
-  if (isApiRequest && reason === "AUTHENTICATION_REQUIRED") {
+  if (reason === "AUTHENTICATION_REQUIRED") {
     const loginUrl = new URL("/login", request.url)
     loginUrl.searchParams.set("redirect", request.nextUrl.pathname)
     return NextResponse.redirect(loginUrl)
@@ -175,6 +174,11 @@ function isSupabaseSessionMissingError(error: any): boolean {
   if (error.constructor && error.constructor.name === "AuthSessionMissingError") return true
   if (error.__isAuthError && error.status === 400) return true
   return false
+}
+
+function isSupabaseSessionCookie(name?: string): boolean {
+  if (!name || !name.startsWith("sb-")) return false
+  return name.includes("-auth-token") || name.includes("-refresh-token")
 }
 
 /**
@@ -263,81 +267,65 @@ export async function middleware(request: NextRequest) {
       return attachTraceHeaders(securityCheckResult)
     }
 
+    const requiresAuth = matchesPath(pathname, PATH_PERMISSIONS.authenticated)
+    const isApiRequest = pathname.startsWith("/api/")
+    if (requiresAuth) {
+      const hasSessionCookie = request.cookies.getAll().some((cookie) => {
+        if (!isSupabaseSessionCookie(cookie.name)) return false
+        return cookie.value.length > 0
+      })
+
+      if (!hasSessionCookie) {
+        return attachTraceHeaders(createUnauthorizedResponse(request, "AUTHENTICATION_REQUIRED"))
+      }
+    }
+
     // 安全检查已在 SecurityMiddleware.processSecurityChecks() 中完成
     // 移除重复的速率限制检查以避免双重消耗配额
 
     // 创建 Supabase 客户端
     const response = NextResponse.next({ request: { headers: forwardedHeaders } })
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return request.cookies.get(name)?.value
-          },
-          set(name: string, value: string, options: any) {
-            response.cookies.set(name, value, options)
-          },
-          remove(name: string, options: any) {
-            response.cookies.delete(name)
-          },
-        },
-      }
-    )
 
     // 获取经过验证的用户信息
     let user: any = null
-    try {
-      const {
-        data: { user: fetchedUser },
-        error: userError,
-      } = await supabase.auth.getUser()
+    if (requiresAuth && !isApiRequest) {
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            get(name: string) {
+              return request.cookies.get(name)?.value
+            },
+            set(name: string, value: string, options: any) {
+              response.cookies.set(name, value, options)
+            },
+            remove(name: string, options: any) {
+              response.cookies.delete(name)
+            },
+          },
+        }
+      )
 
-      if (userError) {
-        if (!isSupabaseSessionMissingError(userError)) {
-          console.error("中间件用户验证错误:", userError)
-          // 用户认证错误时，区分 API 和页面请求
-          const isApiRequest = pathname.startsWith("/api/")
-          if (isApiRequest) {
-            return attachTraceHeaders(
-              NextResponse.json(
-                {
-                  error: "用户未认证",
-                  code: "AUTHENTICATION_REQUIRED",
-                  timestamp: new Date().toISOString(),
-                },
-                { status: 401 }
-              )
-            )
-          } else {
-            // 页面请求重定向到登录页
+      try {
+        const {
+          data: { user: fetchedUser },
+          error: userError,
+        } = await supabase.auth.getUser()
+
+        if (userError) {
+          if (!isSupabaseSessionMissingError(userError)) {
+            console.error("中间件用户验证错误:", userError)
             const loginUrl = new URL("/login", request.url)
             loginUrl.searchParams.set("redirect", pathname)
             return attachTraceHeaders(createRedirectResponse(loginUrl.toString(), request))
           }
-        }
-      } else {
-        user = fetchedUser
-      }
-    } catch (error) {
-      if (!isSupabaseSessionMissingError(error)) {
-        console.error("中间件用户验证异常:", error)
-        // 用户认证异常时，区分 API 和页面请求
-        const isApiRequest = pathname.startsWith("/api/")
-        if (isApiRequest) {
-          return attachTraceHeaders(
-            NextResponse.json(
-              {
-                error: "用户未认证",
-                code: "AUTHENTICATION_REQUIRED",
-                timestamp: new Date().toISOString(),
-              },
-              { status: 401 }
-            )
-          )
         } else {
-          // 页面请求重定向到登录页
+          user = fetchedUser
+        }
+      } catch (error) {
+        if (!isSupabaseSessionMissingError(error)) {
+          console.error("中间件用户验证异常:", error)
           const loginUrl = new URL("/login", request.url)
           loginUrl.searchParams.set("redirect", pathname)
           return attachTraceHeaders(createRedirectResponse(loginUrl.toString(), request))
@@ -345,22 +333,10 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    // 检查是否需要认证（/admin 仅要求登录，角色校验由 Server Component / API 负责）
-    const requiresAuth = matchesPath(pathname, PATH_PERMISSIONS.authenticated)
-
-    if (!user && requiresAuth) {
-      // 未认证用户访问需认证路径
-      const isApiRequest = pathname.startsWith("/api/")
-
-      if (isApiRequest) {
-        // API 请求返回错误状态码
-        return attachTraceHeaders(createUnauthorizedResponse(request, "AUTHENTICATION_REQUIRED"))
-      } else {
-        // 页面请求重定向到登录页
-        const loginUrl = new URL("/login", request.url)
-        loginUrl.searchParams.set("redirect", pathname)
-        return attachTraceHeaders(createRedirectResponse(loginUrl.toString(), request))
-      }
+    if (!user && requiresAuth && !isApiRequest) {
+      const loginUrl = new URL("/login", request.url)
+      loginUrl.searchParams.set("redirect", pathname)
+      return attachTraceHeaders(createRedirectResponse(loginUrl.toString(), request))
     }
 
     // 注意：角色/封禁检查已移至 API 路由和 Server Components（lib/permissions.ts）

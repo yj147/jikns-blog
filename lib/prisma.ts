@@ -237,12 +237,46 @@ const searchTokenExtension = Prisma.defineExtension({
   },
 })
 
+function normalizeDatasourceUrl(rawUrl: string | undefined): string | undefined {
+  if (!rawUrl) return rawUrl
+
+  try {
+    const url = new URL(rawUrl)
+    const hostname = url.hostname
+
+    const isSupabasePooler =
+      hostname.endsWith(".pooler.supabase.com") || hostname.includes(".pooler.supabase.com")
+
+    if (!isSupabasePooler) {
+      return rawUrl
+    }
+
+    if (!url.searchParams.has("pgbouncer")) {
+      url.searchParams.set("pgbouncer", "true")
+    }
+
+    const currentLimit = Number(url.searchParams.get("connection_limit"))
+    if (!Number.isFinite(currentLimit) || currentLimit > 2) {
+      url.searchParams.set("connection_limit", "2")
+    }
+
+    const currentPoolTimeout = Number(url.searchParams.get("pool_timeout"))
+    if (!Number.isFinite(currentPoolTimeout) || currentPoolTimeout < 60) {
+      url.searchParams.set("pool_timeout", "60")
+    }
+
+    return url.toString()
+  } catch {
+    return rawUrl
+  }
+}
+
 function createPrismaClient(): PrismaClient {
   return new PrismaClient({
     log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
     datasources: {
       db: {
-        url: process.env.DATABASE_URL,
+        url: normalizeDatasourceUrl(process.env.DATABASE_URL),
       },
     },
     transactionOptions: {

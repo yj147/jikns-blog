@@ -6,7 +6,7 @@
  * 支持查询状态、切换收藏、乐观更新和错误回滚
  */
 
-import { useCallback } from "react"
+import { useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Bookmark } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
@@ -14,6 +14,7 @@ import { cn, formatCompactCount } from "@/lib/utils"
 import { fetchGet, fetchPost, FetchError } from "@/lib/api/fetch-json"
 import { useInteractionToggle } from "@/hooks/use-interaction-toggle"
 import { useInteractionErrorToast } from "@/hooks/use-interaction-error-toast"
+import { useAuth } from "@/hooks/use-auth"
 
 interface BookmarkButtonProps {
   postId: string
@@ -34,6 +35,7 @@ export function BookmarkButton({
   size = "sm",
   showCount = true,
 }: BookmarkButtonProps) {
+  const { user } = useAuth()
   const { toast } = useToast()
   const handleToggleError = useInteractionErrorToast("收藏文章")
 
@@ -70,17 +72,22 @@ export function BookmarkButton({
     [initialCount]
   )
 
-  const { status, isLoading, isToggling, toggle } = useInteractionToggle({
+  const { status, isLoading, isToggling, toggle, fetchStatus } = useInteractionToggle({
     initialIsActive: initialIsBookmarked ?? false,
     initialCount,
     fetcher: fetchBookmarkStatus,
     toggler: toggleBookmarkRequest,
-    shouldFetchOnMount: initialIsBookmarked === undefined,
+    shouldFetchOnMount: false,
     externalIsActive: initialIsBookmarked,
     externalCount: initialCount,
     onFetchError: handleFetchError,
     onToggleError: handleToggleError,
   })
+
+  useEffect(() => {
+    if (!user || initialIsBookmarked !== undefined) return
+    fetchStatus()
+  }, [user, initialIsBookmarked, fetchStatus])
 
   const handleToggle = useCallback(async () => {
     const result = await toggle()

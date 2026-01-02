@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef } from "react"
+import { useSearchParams } from "next/navigation"
 import useSWRInfinite from "swr/infinite"
 import { Loader2, RefreshCcw, AlertCircle, Sparkles } from "lucide-react"
 import { BlogPostCard } from "@/components/blog/blog-post-card"
@@ -13,9 +14,6 @@ import type { PostListItem } from "@/types/blog"
 interface BlogListClientProps {
   initialPosts: PostListItem[]
   initialPagination: { total: number; hasNext: boolean; nextCursor?: string | null }
-  searchQuery?: string
-  tagFilter?: string
-  sortBy?: string
 }
 
 interface PostsApiResponse {
@@ -95,30 +93,30 @@ function LoadingSkeleton() {
   )
 }
 
-export function BlogListClient({
-  initialPosts,
-  initialPagination,
-  searchQuery,
-  tagFilter,
-  sortBy,
-}: BlogListClientProps) {
-  const normalizedSearch = searchQuery?.trim() ?? ""
-  const normalizedTag = tagFilter?.trim() ?? ""
-  const orderBy = sortBy && ALLOWED_SORTS.has(sortBy) ? sortBy : "publishedAt"
+export function BlogListClient({ initialPosts, initialPagination }: BlogListClientProps) {
+  const searchParams = useSearchParams()
+  const normalizedSearch = (searchParams.get("q") ?? "").trim()
+  const normalizedTag = (searchParams.get("tag") ?? "").trim()
+  const sortParam = (searchParams.get("sort") ?? "").trim()
+  const orderBy = ALLOWED_SORTS.has(sortParam) ? sortParam : "publishedAt"
+  const useInitialData =
+    normalizedSearch === "" && normalizedTag === "" && orderBy === "publishedAt"
 
   const initialPage = useMemo<PostsApiResponse | undefined>(() => {
-    if (!initialPosts || initialPosts.length === 0) return undefined
+    if (!useInitialData) return undefined
+
+    const safeInitialPosts = initialPosts ?? []
 
     const nextCursor = initialPagination.nextCursor ?? (initialPagination.hasNext ? "2" : null)
     const totalPages = Math.max(
       1,
-      Math.ceil((initialPagination.total || initialPosts.length) / PAGE_SIZE)
+      Math.ceil((initialPagination.total || safeInitialPosts.length) / PAGE_SIZE)
     )
 
     return {
       success: true,
       data: {
-        posts: initialPosts,
+        posts: safeInitialPosts,
         pagination: {
           currentPage: 1,
           totalPages,
@@ -143,6 +141,7 @@ export function BlogListClient({
     initialPagination.nextCursor,
     initialPagination.total,
     initialPosts,
+    useInitialData,
   ])
 
   const { data, error, isLoading, isValidating, size, setSize, mutate } =
@@ -170,6 +169,7 @@ export function BlogListClient({
       fetcher,
       {
         fallbackData: initialPage ? [initialPage] : undefined,
+        revalidateOnMount: initialPage ? false : true,
         revalidateOnFocus: false,
         revalidateFirstPage: false,
         revalidateIfStale: false,

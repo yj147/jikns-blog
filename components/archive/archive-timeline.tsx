@@ -5,7 +5,6 @@ import { ArchiveYear } from "@/lib/actions/archive"
 import ArchiveYearGroup from "./archive-year-group"
 import ArchiveYearSkeleton from "./archive-year-skeleton"
 import { Button } from "@/components/ui/button"
-import { motion } from "framer-motion"
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
 import { logger } from "@/lib/utils/logger"
 
@@ -30,7 +29,6 @@ type TimelineState =
   | (TimelineBaseState & { status: "error"; error: string })
 
 type TimelineAction =
-  | { type: "hydrate"; payload: { timeline: ArchiveYear[]; totalYearCount?: number } }
   | { type: "toggleYear"; year: number }
   | { type: "fetchStart" }
   | {
@@ -84,8 +82,6 @@ function mergeArchiveTimeline(current: ArchiveYear[], incoming: ArchiveYear[]): 
 
 function timelineReducer(state: TimelineState, action: TimelineAction): TimelineState {
   switch (action.type) {
-    case "hydrate":
-      return createInitialTimelineState(action.payload.timeline, action.payload.totalYearCount)
     case "toggleYear": {
       const nextExpandedYears = new Set(state.expandedYears)
       if (nextExpandedYears.has(action.year)) {
@@ -147,10 +143,6 @@ export default function ArchiveTimeline({
     rootMargin: "200px",
   })
 
-  useEffect(() => {
-    dispatch({ type: "hydrate", payload: { timeline: data, totalYearCount } })
-  }, [data, totalYearCount])
-
   const toggleYear = useCallback((year: number) => {
     dispatch({ type: "toggleYear", year })
   }, [])
@@ -206,19 +198,14 @@ export default function ArchiveTimeline({
       <div className="from-primary/50 via-primary/20 absolute bottom-0 left-0 top-0 w-0.5 bg-gradient-to-b to-transparent" />
 
       <div className="space-y-8 pl-8">
-        {state.timeline.map((yearData, index) => (
-          <motion.div
-            key={yearData.year}
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: Math.min(index * 0.05, 0.3) }}
-          >
+        {state.timeline.map((yearData) => (
+          <div key={yearData.year}>
             <ArchiveYearGroup
               yearData={yearData}
               isExpanded={state.expandedYears.has(yearData.year)}
               onToggle={() => toggleYear(yearData.year)}
             />
-          </motion.div>
+          </div>
         ))}
 
         {isFetching && <ArchiveYearSkeleton />}

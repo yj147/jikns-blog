@@ -5,18 +5,51 @@
  * 实现完整的文章管理后端逻辑，包括 CRUD 操作和权限控制
  */
 
-import { revalidatePath, revalidateTag } from "next/cache"
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache"
 import { revalidateArchiveCache } from "@/lib/actions/archive-cache"
 import { enqueueNewPostNotification } from "@/lib/services/email-queue"
 import { prisma } from "@/lib/prisma"
-import { requireAuth, requireAdmin } from "@/lib/auth"
 import { recalculateTagCounts, syncPostTags } from "@/lib/repos/tag-repo"
 import { validateSlug } from "@/lib/utils/slug"
 import { createUniqueSmartSlug } from "@/lib/utils/slug-english"
 import { logger } from "@/lib/utils/logger"
-import { AuditEventType, auditLogger } from "@/lib/audit-log"
-import { getServerContext } from "@/lib/server-context"
-import { createSignedUrlIfNeeded, signAvatarUrl } from "@/lib/storage/signed-url"
+import { createSignedUrlIfNeeded, createSignedUrls, signAvatarUrl } from "@/lib/storage/signed-url"
+
+const POSTS_LIST_CACHE_TAG = "posts:list"
+const POSTS_DETAIL_CACHE_TAG = "posts:detail"
+const POSTS_CACHE_DISABLED_ENVS = new Set(["development", "test"])
+
+async function requireAdminUser() {
+  const { requireAdmin } = await import("@/lib/auth")
+  return requireAdmin()
+}
+
+function revalidatePostsCache() {
+  revalidateTag(POSTS_LIST_CACHE_TAG)
+  revalidateTag(POSTS_DETAIL_CACHE_TAG)
+}
+
+function shouldCachePosts(params: PostsSearchParams): boolean {
+  if (POSTS_CACHE_DISABLED_ENVS.has(process.env.NODE_ENV ?? "")) return false
+  // 只缓存公开文章列表：避免把草稿/管理态数据写入共享缓存
+  return params.published === true
+}
+
+function serializePostsSearchParams(params: PostsSearchParams): string {
+  return JSON.stringify({
+    page: params.page ?? 1,
+    limit: params.limit ?? 10,
+    q: params.q?.trim() ?? "",
+    published: params.published === true ? "1" : params.published === false ? "0" : "",
+    authorId: params.authorId ?? "",
+    seriesId: params.seriesId ?? "",
+    tag: params.tag ?? "",
+    fromDate: params.fromDate ?? "",
+    toDate: params.toDate ?? "",
+    orderBy: params.orderBy ?? "publishedAt",
+    order: params.order ?? "desc",
+  })
+}
 
 function resolveErrorCode(error: unknown, fallback: string): string {
   if (error instanceof Error) {
@@ -91,18 +124,17 @@ async function signPostContent(
     return content
   }
 
-  const replacements = await Promise.all(
-    matches.map(async (original) => {
-      const signed = await createSignedUrlIfNeeded(
-        original,
-        POST_IMAGE_SIGN_EXPIRES_IN,
-        "post-images"
-      )
-      return [original, signed ?? original] as const
-    })
-  )
+  const signedUrls = await createSignedUrls(matches, POST_IMAGE_SIGN_EXPIRES_IN, "post-images")
 
-  return replacements.reduce((acc, [original, signed]) => acc.replaceAll(original, signed), content)
+  const replacementMap = new Map<string, string>()
+  matches.forEach((original, index) => {
+    replacementMap.set(original, signedUrls[index] ?? original)
+  })
+
+  return matches.reduce(
+    (acc, original) => acc.replaceAll(original, replacementMap.get(original) ?? original),
+    content
+  )
 }
 
 async function recordPostAudit(params: {
@@ -113,6 +145,11 @@ async function recordPostAudit(params: {
   errorCode?: string
   errorMessage?: string
 }): Promise<void> {
+  const [{ getServerContext }, { AuditEventType, auditLogger }] = await Promise.all([
+    import("@/lib/server-context"),
+    import("@/lib/audit-log"),
+  ])
+
   const context = await getServerContext()
   const details =
     params.errorCode !== undefined
@@ -328,7 +365,7 @@ export async function createPost(data: CreatePostRequest): Promise<ApiResponse<P
   let admin: { id: string } | null = null
   try {
     // 验证管理员权限
-    admin = await requireAdmin()
+    admin = await requireAdminUser()
 
     // 增强的输入验证
     const trimmedTitle = data.title?.trim() || ""
@@ -458,6 +495,7 @@ export async function createPost(data: CreatePostRequest): Promise<ApiResponse<P
       revalidateTag("tags:list")
       revalidateTag("tags:detail")
     }
+    revalidatePostsCache()
 
     await revalidateArchiveCache({
       nextPublished: result.published,
@@ -549,224 +587,95 @@ export async function createPost(data: CreatePostRequest): Promise<ApiResponse<P
 /**
  * 获取文章列表 Server Action
  */
-export async function getPosts(
+async function getPostsQuery(
   params: PostsSearchParams = {}
 ): Promise<PaginatedApiResponse<PostListResponse>> {
-  try {
-    const {
-      page = 1,
-      limit = 10,
-      q,
-      published,
-      authorId,
-      seriesId,
-      tag,
-      fromDate,
-      toDate,
-      orderBy = "publishedAt",
-      order = "desc",
-    } = params
+  const {
+    page = 1,
+    limit = 10,
+    q,
+    published,
+    authorId,
+    seriesId,
+    tag,
+    fromDate,
+    toDate,
+    orderBy = "publishedAt",
+    order = "desc",
+  } = params
 
-    // 构建查询条件
-    const where: any = {}
+  // 构建查询条件
+  const where: any = {}
 
-    // 发布状态筛选
-    if (published !== undefined) {
-      where.published = published
-    }
+  // 发布状态筛选
+  if (published !== undefined) {
+    where.published = published
+  }
 
-    // 作者筛选
-    if (authorId) {
-      where.authorId = authorId
-    }
+  // 作者筛选
+  if (authorId) {
+    where.authorId = authorId
+  }
 
-    // 系列筛选
-    if (seriesId) {
-      where.seriesId = seriesId
-    }
+  // 系列筛选
+  if (seriesId) {
+    where.seriesId = seriesId
+  }
 
-    // 标签筛选
-    if (tag) {
-      where.tags = {
-        some: {
-          tag: {
-            slug: tag,
-          },
+  // 标签筛选
+  if (tag) {
+    where.tags = {
+      some: {
+        tag: {
+          slug: tag,
         },
-      }
-    }
-
-    // 日期范围筛选
-    if (fromDate || toDate) {
-      where.publishedAt = {}
-      if (fromDate) {
-        where.publishedAt.gte = new Date(fromDate)
-      }
-      if (toDate) {
-        where.publishedAt.lte = new Date(toDate)
-      }
-    }
-
-    // 关键词搜索
-    if (q) {
-      where.OR = [
-        { title: { contains: q, mode: "insensitive" } },
-        { content: { contains: q, mode: "insensitive" } },
-        { excerpt: { contains: q, mode: "insensitive" } },
-      ]
-    }
-
-    // 执行分页查询
-    const [posts, total] = await Promise.all([
-      prisma.post.findMany({
-        where,
-        select: {
-          id: true,
-          slug: true,
-          title: true,
-          excerpt: true,
-          published: true,
-          isPinned: true,
-          coverImage: true,
-          viewCount: true,
-          publishedAt: true,
-          createdAt: true,
-          // 不获取完整 content，避免大量数据传输
-          author: {
-            select: { id: true, name: true, avatarUrl: true },
-          },
-          tags: {
-            include: {
-              tag: {
-                select: { name: true, slug: true, color: true },
-              },
-            },
-          },
-          _count: {
-            select: {
-              comments: true,
-              likes: true,
-              bookmarks: true,
-            },
-          },
-        },
-        orderBy: { [orderBy]: order },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.post.count({ where }),
-    ])
-
-    // 签名媒体 URL
-    const signedAvatars = await Promise.all(
-      posts.map((post) => signAvatarUrl(post.author.avatarUrl))
-    )
-    const signedCoverImages = await Promise.all(
-      posts.map((post) => signPostCoverImage(post.coverImage))
-    )
-
-    // 格式化响应数据
-    const data: PostListResponse[] = posts.map((post, index) => ({
-      id: post.id,
-      slug: post.slug,
-      title: post.title,
-      excerpt: post.excerpt,
-      published: post.published,
-      isPinned: post.isPinned,
-      coverImage: post.coverImage,
-      signedCoverImage: signedCoverImages[index],
-      viewCount: post.viewCount,
-      publishedAt: post.publishedAt?.toISOString() || null,
-      createdAt: post.createdAt.toISOString(),
-      author: {
-        ...post.author,
-        avatarUrl: signedAvatars[index] ?? post.author.avatarUrl,
-      },
-      tags: post.tags.map((pt) => pt.tag),
-      stats: {
-        commentsCount: post._count.comments,
-        likesCount: post._count.likes,
-        bookmarksCount: post._count.bookmarks,
-      },
-      // 不再获取完整 content，列表页不需要精确长度
-      contentLength: 0,
-    }))
-
-    const totalPages = Math.ceil(total / limit)
-
-    return {
-      success: true,
-      data,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages,
-        hasNext: page < totalPages,
-        hasPrev: page > 1,
-      },
-      meta: {
-        requestId: crypto.randomUUID(),
-        timestamp: Date.now(),
-      },
-    }
-  } catch (error) {
-    logger.error("获取文章列表失败", { module: "lib/actions/posts", action: "getPosts" }, error)
-    return {
-      success: false,
-      data: [],
-      pagination: {
-        page: 1,
-        limit: 10,
-        total: 0,
-        totalPages: 0,
-        hasNext: false,
-        hasPrev: false,
-      },
-      error: {
-        code: "INTERNAL_ERROR",
-        message: error instanceof Error ? error.message : "获取文章列表失败",
-        timestamp: Date.now(),
       },
     }
   }
-}
 
-/**
- * 获取管理员视角的文章列表（不过滤发布状态）
- */
-export async function getPostsForAdmin(
-  params: AdminPostsSearchParams = {}
-): Promise<PaginatedApiResponse<PostListResponse>> {
-  await requireAdmin()
-  return getPosts(params as PostsSearchParams)
-}
+  // 日期范围筛选
+  if (fromDate || toDate) {
+    where.publishedAt = {}
+    if (fromDate) {
+      where.publishedAt.gte = new Date(fromDate)
+    }
+    if (toDate) {
+      where.publishedAt.lte = new Date(toDate)
+    }
+  }
 
-/**
- * 获取单篇文章 Server Action
- */
-export async function getPost(
-  slugOrId: string,
-  options?: { incrementView?: boolean }
-): Promise<ApiResponse<PostResponse>> {
-  try {
-    // Post.id 是 UUID；slug 可能很长，不能用长度猜测
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slugOrId)
-    const where = isUuid ? { id: slugOrId } : { slug: slugOrId }
+  // 关键词搜索
+  if (q) {
+    where.OR = [
+      { title: { contains: q, mode: "insensitive" } },
+      { content: { contains: q, mode: "insensitive" } },
+      { excerpt: { contains: q, mode: "insensitive" } },
+    ]
+  }
 
-    const post = await prisma.post.findUnique({
+  // 执行分页查询
+  const [posts, total] = await Promise.all([
+    prisma.post.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        excerpt: true,
+        published: true,
+        isPinned: true,
+        coverImage: true,
+        viewCount: true,
+        publishedAt: true,
+        createdAt: true,
+        // 不获取完整 content，避免大量数据传输
         author: {
-          select: { id: true, name: true, avatarUrl: true, bio: true },
-        },
-        series: {
-          select: { id: true, title: true, slug: true, description: true },
+          select: { id: true, name: true, avatarUrl: true },
         },
         tags: {
           include: {
             tag: {
-              select: { id: true, name: true, slug: true, color: true },
+              select: { name: true, slug: true, color: true },
             },
           },
         },
@@ -778,83 +687,348 @@ export async function getPost(
           },
         },
       },
-    })
+      orderBy: { [orderBy]: order },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.post.count({ where }),
+  ])
 
-    if (!post) {
+  const avatarInputs = Array.from(
+    new Set(
+      posts
+        .map((post) => post.author.avatarUrl)
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+    )
+  )
+  const coverInputs = Array.from(
+    new Set(
+      posts
+        .map((post) => post.coverImage)
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+    )
+  )
+
+  const [signedAvatars, signedCoverImages] = await Promise.all([
+    avatarInputs.length > 0 ? createSignedUrls(avatarInputs) : Promise.resolve([]),
+    coverInputs.length > 0
+      ? createSignedUrls(coverInputs, POST_IMAGE_SIGN_EXPIRES_IN, "post-images")
+      : Promise.resolve([]),
+  ])
+
+  const avatarMap = new Map<string, string>()
+  avatarInputs.forEach((original, index) => {
+    avatarMap.set(original, signedAvatars[index] ?? original)
+  })
+
+  const coverMap = new Map<string, string>()
+  coverInputs.forEach((original, index) => {
+    coverMap.set(original, signedCoverImages[index] ?? original)
+  })
+
+  // 格式化响应数据
+  const data: PostListResponse[] = posts.map((post) => ({
+    id: post.id,
+    slug: post.slug,
+    title: post.title,
+    excerpt: post.excerpt,
+    published: post.published,
+    isPinned: post.isPinned,
+    coverImage: post.coverImage,
+    signedCoverImage: post.coverImage ? (coverMap.get(post.coverImage) ?? post.coverImage) : null,
+    viewCount: post.viewCount,
+    publishedAt: post.publishedAt?.toISOString() || null,
+    createdAt: post.createdAt.toISOString(),
+    author: {
+      ...post.author,
+      avatarUrl: post.author.avatarUrl
+        ? (avatarMap.get(post.author.avatarUrl) ?? post.author.avatarUrl)
+        : null,
+    },
+    tags: post.tags.map((pt) => pt.tag),
+    stats: {
+      commentsCount: post._count.comments,
+      likesCount: post._count.likes,
+      bookmarksCount: post._count.bookmarks,
+    },
+    // 不再获取完整 content，列表页不需要精确长度
+    contentLength: 0,
+  }))
+
+  const totalPages = Math.ceil(total / limit)
+
+  return {
+    success: true,
+    data,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages,
+      hasNext: page < totalPages,
+      hasPrev: page > 1,
+    },
+    meta: {
+      requestId: crypto.randomUUID(),
+      timestamp: Date.now(),
+    },
+  }
+}
+
+export async function getPosts(
+  params: PostsSearchParams = {}
+): Promise<PaginatedApiResponse<PostListResponse>> {
+  if (!shouldCachePosts(params)) {
+    try {
+      return await getPostsQuery(params)
+    } catch (error) {
+      logger.error("获取文章列表失败", { module: "lib/actions/posts", action: "getPosts" }, error)
       return {
         success: false,
+        data: [],
+        pagination: {
+          page: 1,
+          limit: 10,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
         error: {
-          code: "RESOURCE_NOT_FOUND",
-          message: "文章不存在",
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "获取文章列表失败",
           timestamp: Date.now(),
         },
       }
     }
+  }
 
-    // 增加浏览量（仅对发布的文章）
-    if (options?.incrementView && post.published) {
-      await prisma.post.update({
-        where: { id: post.id },
-        data: { viewCount: { increment: 1 } },
-      })
-      post.viewCount += 1
-    }
+  const cacheKey = serializePostsSearchParams(params)
+  const cachedFn = unstable_cache(() => getPostsQuery(params), ["posts", "list", cacheKey], {
+    tags: [POSTS_LIST_CACHE_TAG],
+    revalidate: 120,
+  })
 
-    const [signedCoverImage, signedAvatar, signedContent] = await Promise.all([
-      signPostCoverImage(post.coverImage),
-      signAvatarUrl(post.author.avatarUrl),
-      signPostContent(post.content),
-    ])
-
-    // 格式化响应
-    const response: PostResponse = {
-      id: post.id,
-      slug: post.slug,
-      title: post.title,
-      content: post.content,
-      contentSigned: signedContent ?? undefined,
-      excerpt: post.excerpt,
-      published: post.published,
-      isPinned: post.isPinned,
-      canonicalUrl: post.canonicalUrl,
-      seoTitle: post.seoTitle,
-      seoDescription: post.seoDescription,
-      coverImage: post.coverImage,
-      signedCoverImage,
-      viewCount: post.viewCount,
-      createdAt: post.createdAt.toISOString(),
-      updatedAt: post.updatedAt.toISOString(),
-      publishedAt: post.publishedAt?.toISOString() || null,
-      author: {
-        ...post.author,
-        avatarUrl: signedAvatar ?? post.author.avatarUrl,
-      },
-      series: post.series || undefined,
-      tags: post.tags.map((pt) => pt.tag),
-      stats: {
-        commentsCount: post._count.comments,
-        likesCount: post._count.likes,
-        bookmarksCount: post._count.bookmarks,
-      },
-    }
-
-    return {
-      success: true,
-      data: response,
-      meta: {
-        requestId: crypto.randomUUID(),
-        timestamp: Date.now(),
-      },
-    }
+  try {
+    return await cachedFn()
   } catch (error) {
-    logger.error("获取文章失败", { module: "lib/actions/posts", action: "getPost" }, error)
+    logger.warn("读取缓存文章列表失败，回退直连查询", {
+      cacheKey,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    try {
+      return await getPostsQuery(params)
+    } catch (innerError) {
+      logger.error(
+        "获取文章列表失败",
+        { module: "lib/actions/posts", action: "getPosts", cacheKey },
+        innerError
+      )
+      return {
+        success: false,
+        data: [],
+        pagination: {
+          page: 1,
+          limit: 10,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+        error: {
+          code: "INTERNAL_ERROR",
+          message: innerError instanceof Error ? innerError.message : "获取文章列表失败",
+          timestamp: Date.now(),
+        },
+      }
+    }
+  }
+}
+
+/**
+ * 获取管理员视角的文章列表（不过滤发布状态）
+ */
+export async function getPostsForAdmin(
+  params: AdminPostsSearchParams = {}
+): Promise<PaginatedApiResponse<PostListResponse>> {
+  await requireAdminUser()
+  return getPosts(params as PostsSearchParams)
+}
+
+/**
+ * 获取单篇文章 Server Action
+ */
+const POST_ID_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+async function getPostQuery(
+  slugOrId: string,
+  options?: { incrementView?: boolean }
+): Promise<ApiResponse<PostResponse>> {
+  const isUuid = POST_ID_UUID_PATTERN.test(slugOrId)
+  const where = isUuid ? { id: slugOrId } : { slug: slugOrId }
+
+  const post = await prisma.post.findUnique({
+    where,
+    include: {
+      author: {
+        select: { id: true, name: true, avatarUrl: true, bio: true },
+      },
+      series: {
+        select: { id: true, title: true, slug: true, description: true },
+      },
+      tags: {
+        include: {
+          tag: {
+            select: { id: true, name: true, slug: true, color: true },
+          },
+        },
+      },
+      _count: {
+        select: {
+          comments: true,
+          likes: true,
+          bookmarks: true,
+        },
+      },
+    },
+  })
+
+  if (!post) {
     return {
       success: false,
       error: {
-        code: "INTERNAL_ERROR",
-        message: error instanceof Error ? error.message : "获取文章失败",
+        code: "RESOURCE_NOT_FOUND",
+        message: "文章不存在",
         timestamp: Date.now(),
       },
+    }
+  }
+
+  // 增加浏览量（仅对发布的文章）
+  if (options?.incrementView && post.published) {
+    await prisma.post.update({
+      where: { id: post.id },
+      data: { viewCount: { increment: 1 } },
+    })
+    post.viewCount += 1
+  }
+
+  const [signedCoverImage, signedAvatar, signedContent] = await Promise.all([
+    signPostCoverImage(post.coverImage),
+    signAvatarUrl(post.author.avatarUrl),
+    signPostContent(post.content),
+  ])
+
+  // 格式化响应
+  const response: PostResponse = {
+    id: post.id,
+    slug: post.slug,
+    title: post.title,
+    content: post.content,
+    contentSigned: signedContent ?? undefined,
+    excerpt: post.excerpt,
+    published: post.published,
+    isPinned: post.isPinned,
+    canonicalUrl: post.canonicalUrl,
+    seoTitle: post.seoTitle,
+    seoDescription: post.seoDescription,
+    coverImage: post.coverImage,
+    signedCoverImage,
+    viewCount: post.viewCount,
+    createdAt: post.createdAt.toISOString(),
+    updatedAt: post.updatedAt.toISOString(),
+    publishedAt: post.publishedAt?.toISOString() || null,
+    author: {
+      ...post.author,
+      avatarUrl: signedAvatar ?? post.author.avatarUrl,
+    },
+    series: post.series || undefined,
+    tags: post.tags.map((pt) => pt.tag),
+    stats: {
+      commentsCount: post._count.comments,
+      likesCount: post._count.likes,
+      bookmarksCount: post._count.bookmarks,
+    },
+  }
+
+  return {
+    success: true,
+    data: response,
+    meta: {
+      requestId: crypto.randomUUID(),
+      timestamp: Date.now(),
+    },
+  }
+}
+
+export async function getPost(
+  slugOrId: string,
+  options?: { incrementView?: boolean }
+): Promise<ApiResponse<PostResponse>> {
+  const isUuid = POST_ID_UUID_PATTERN.test(slugOrId)
+  const incrementView = Boolean(options?.incrementView)
+
+  if (POSTS_CACHE_DISABLED_ENVS.has(process.env.NODE_ENV ?? "") || isUuid || incrementView) {
+    try {
+      return await getPostQuery(slugOrId, options)
+    } catch (error) {
+      logger.error("获取文章失败", { module: "lib/actions/posts", action: "getPost" }, error)
+      return {
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "获取文章失败",
+          timestamp: Date.now(),
+        },
+      }
+    }
+  }
+
+  const cachedFn = unstable_cache(
+    async () => {
+      const result = await getPostQuery(slugOrId, { incrementView: false })
+
+      // 只缓存公开文章：避免把草稿内容写入共享缓存
+      if (result.success && result.data && !result.data.published) {
+        return {
+          success: false,
+          error: {
+            code: "RESOURCE_NOT_FOUND",
+            message: "文章不存在",
+            timestamp: Date.now(),
+          },
+        }
+      }
+
+      return result
+    },
+    ["posts", "detail", slugOrId],
+    { tags: [POSTS_DETAIL_CACHE_TAG], revalidate: 60 }
+  )
+
+  try {
+    return await cachedFn()
+  } catch (error) {
+    logger.warn("读取缓存文章详情失败，回退直连查询", {
+      slugOrId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    try {
+      return await getPostQuery(slugOrId, options)
+    } catch (innerError) {
+      logger.error(
+        "获取文章失败",
+        { module: "lib/actions/posts", action: "getPost", slugOrId },
+        innerError
+      )
+      return {
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: innerError instanceof Error ? innerError.message : "获取文章失败",
+          timestamp: Date.now(),
+        },
+      }
     }
   }
 }
@@ -866,7 +1040,7 @@ export async function updatePost(data: UpdatePostRequest): Promise<ApiResponse<P
   let admin: { id: string } | null = null
   try {
     // 验证管理员权限
-    admin = await requireAdmin()
+    admin = await requireAdminUser()
 
     const { id, ...updateData } = data
 
@@ -1055,6 +1229,7 @@ export async function updatePost(data: UpdatePostRequest): Promise<ApiResponse<P
     if (newSlug !== existingPost.slug) {
       revalidatePath(`/blog/${newSlug}`)
     }
+    revalidatePostsCache()
 
     if (tagsAffected) {
       revalidateTag("tags:list")
@@ -1141,7 +1316,7 @@ export async function deletePost(
   let admin: { id: string } | null = null
   try {
     // 验证管理员权限
-    admin = await requireAdmin()
+    admin = await requireAdminUser()
     // 验证文章存在
     const existingPost = await prisma.post.findUnique({
       where: { id: postId },
@@ -1174,6 +1349,7 @@ export async function deletePost(
     revalidatePath("/admin/posts")
     revalidatePath("/blog")
     revalidatePath(`/blog/${existingPost.slug}`)
+    revalidatePostsCache()
 
     if (affectedTagIds.length > 0) {
       revalidateTag("tags:list")
@@ -1238,7 +1414,7 @@ export async function publishPost(
   let admin: { id: string } | null = null
   try {
     // 验证管理员权限
-    admin = await requireAdmin()
+    admin = await requireAdminUser()
     const post = await prisma.post.findUnique({
       where: { id: postId },
       include: {
@@ -1278,6 +1454,7 @@ export async function publishPost(
     revalidatePath("/admin/posts")
     revalidatePath("/blog")
     revalidatePath(`/blog/${updatedPost.slug}`)
+    revalidatePostsCache()
 
     if (tagIds.length > 0) {
       revalidateTag("tags:list")
@@ -1349,7 +1526,7 @@ export async function unpublishPost(
   let admin: { id: string } | null = null
   try {
     // 验证管理员权限
-    admin = await requireAdmin()
+    admin = await requireAdminUser()
     const post = await prisma.post.findUnique({
       where: { id: postId },
       include: {
@@ -1389,6 +1566,7 @@ export async function unpublishPost(
     revalidatePath("/admin/posts")
     revalidatePath("/blog")
     revalidatePath(`/blog/${updatedPost.slug}`)
+    revalidatePostsCache()
 
     if (tagIds.length > 0) {
       revalidateTag("tags:list")
@@ -1456,7 +1634,7 @@ export async function togglePinPost(
   let admin: { id: string } | null = null
   try {
     // 验证管理员权限
-    admin = await requireAdmin()
+    admin = await requireAdminUser()
     const post = await prisma.post.findUnique({
       where: { id: postId },
     })
@@ -1478,6 +1656,7 @@ export async function togglePinPost(
     if (post.published) {
       revalidatePath(`/blog/${updatedPost.slug}`)
     }
+    revalidatePostsCache()
 
     await recordPostAudit({
       action: "POST_TOGGLE_PIN",
@@ -1533,7 +1712,7 @@ export async function bulkDeletePosts(
   let admin: { id: string } | null = null
   try {
     // 验证管理员权限
-    admin = await requireAdmin()
+    admin = await requireAdminUser()
     if (!postIds || postIds.length === 0) {
       throw new Error("请至少选择一篇文章")
     }
@@ -1574,6 +1753,7 @@ export async function bulkDeletePosts(
     // 重新验证相关页面缓存
     revalidatePath("/admin/posts")
     revalidatePath("/blog")
+    revalidatePostsCache()
 
     if (affectedTagIds.size > 0) {
       revalidateTag("tags:list")

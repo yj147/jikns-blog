@@ -37,11 +37,63 @@ const ERROR_MESSAGES: Record<number, string> = {
   500: "服务器错误，请稍后重试",
 }
 
+type InflightKey = string
+
+type InflightMap = Map<InflightKey, Promise<unknown>>
+
+const inflightGetRequests: InflightMap = (() => {
+  const globalWithMap = globalThis as typeof globalThis & {
+    __jiknsFetchJsonInflightGetRequests?: InflightMap
+  }
+
+  if (!globalWithMap.__jiknsFetchJsonInflightGetRequests) {
+    globalWithMap.__jiknsFetchJsonInflightGetRequests = new Map<InflightKey, Promise<unknown>>()
+  }
+
+  return globalWithMap.__jiknsFetchJsonInflightGetRequests
+})()
+
+function normalizeHeaders(headers: HeadersInit | undefined): string {
+  if (!headers) return ""
+  if (headers instanceof Headers) {
+    const pairs: Array<[string, string]> = []
+    headers.forEach((value, key) => pairs.push([key.toLowerCase(), value]))
+    pairs.sort((a, b) => a[0].localeCompare(b[0]))
+    return pairs.map(([key, value]) => `${key}:${value}`).join("|")
+  }
+  if (Array.isArray(headers)) {
+    return headers
+      .map(([key, value]) => [key.toLowerCase(), value] as const)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([key, value]) => `${key}:${value}`)
+      .join("|")
+  }
+
+  return Object.entries(headers)
+    .map(([key, value]) => [key.toLowerCase(), String(value)] as const)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([key, value]) => `${key}:${value}`)
+    .join("|")
+}
+
+function buildInflightKey(
+  url: string,
+  method: string,
+  options: RequestInit,
+  headers: HeadersInit,
+  credentials: RequestCredentials
+) {
+  const cache = options.cache ?? ""
+  const headerSig = normalizeHeaders(headers)
+  return `${method} ${url} cache=${cache} credentials=${credentials} headers=${headerSig}`
+}
+
 /**
  * 统一的 fetch 封装
  */
 export async function fetchJson<T = any>(url: string, options: FetchOptions = {}): Promise<T> {
   const { params, ...fetchOptions } = options
+  const credentials: RequestCredentials = "same-origin"
 
   // 构建 URL 参数
   if (params) {
@@ -71,50 +123,70 @@ export async function fetchJson<T = any>(url: string, options: FetchOptions = {}
     }
   }
 
-  try {
-    const response = await fetch(url, {
-      ...fetchOptions,
-      headers,
-      credentials: "same-origin", // 确保携带 cookies
+  const fetchOnce = async () => {
+    try {
+      const response = await fetch(url, {
+        ...fetchOptions,
+        headers,
+        credentials, // 确保携带 cookies
+      })
+
+      // 尝试解析 JSON 响应
+      let data: any
+      const contentType = response.headers.get("content-type")
+      if (contentType?.includes("application/json")) {
+        data = await response.json()
+      } else {
+        data = await response.text()
+      }
+
+      // 处理错误响应
+      if (!response.ok) {
+        // 后端统一使用 unified-response.ts，优先使用 error.message
+        const errorMessage =
+          (typeof data === "object" && data?.error?.message) ||
+          ERROR_MESSAGES[response.status] ||
+          `请求失败 (${response.status})`
+
+        throw new FetchError(
+          errorMessage,
+          response.status,
+          typeof data === "object" ? data : { error: errorMessage }
+        )
+      }
+
+      return data as T
+    } catch (error) {
+      // 处理网络错误或其他异常
+      if (error instanceof FetchError) {
+        throw error
+      }
+
+      if (error instanceof TypeError && error.message.includes("fetch")) {
+        throw new FetchError("网络连接失败，请检查网络", 0)
+      }
+
+      throw new FetchError(error instanceof Error ? error.message : "未知错误", 0)
+    }
+  }
+
+  // 同 URL 的并发 GET 请求合并，避免性能优化/状态刷新引发的重复请求
+  if (method === "GET" && !fetchOptions.signal) {
+    const key = buildInflightKey(url, method, fetchOptions, headers, credentials)
+    const existing = inflightGetRequests.get(key)
+    if (existing) {
+      return existing as Promise<T>
+    }
+
+    const promise = fetchOnce().finally(() => {
+      inflightGetRequests.delete(key)
     })
 
-    // 尝试解析 JSON 响应
-    let data: any
-    const contentType = response.headers.get("content-type")
-    if (contentType?.includes("application/json")) {
-      data = await response.json()
-    } else {
-      data = await response.text()
-    }
-
-    // 处理错误响应
-    if (!response.ok) {
-      // 后端统一使用 unified-response.ts，优先使用 error.message
-      const errorMessage =
-        (typeof data === "object" && data?.error?.message) ||
-        ERROR_MESSAGES[response.status] ||
-        `请求失败 (${response.status})`
-
-      throw new FetchError(
-        errorMessage,
-        response.status,
-        typeof data === "object" ? data : { error: errorMessage }
-      )
-    }
-
-    return data
-  } catch (error) {
-    // 处理网络错误或其他异常
-    if (error instanceof FetchError) {
-      throw error
-    }
-
-    if (error instanceof TypeError && error.message.includes("fetch")) {
-      throw new FetchError("网络连接失败，请检查网络", 0)
-    }
-
-    throw new FetchError(error instanceof Error ? error.message : "未知错误", 0)
+    inflightGetRequests.set(key, promise)
+    return promise
   }
+
+  return fetchOnce()
 }
 
 /**

@@ -6,8 +6,6 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { createClient } from "@/lib/supabase"
-import { getAuthCallbackUrl } from "@/lib/auth-utils"
 import { useAuthToast } from "@/hooks/use-auth-toast"
 import { Github, Mail, Loader2 } from "lucide-react"
 import { useState } from "react"
@@ -34,32 +32,22 @@ export function LoginButton({
   // 获取重定向路径，优先级：props > searchParams > 默认值
   const redirectTo = redirect || searchParams.get("redirect") || "/"
 
-  const supabase = createClient()
-
   const handleGithubLogin = async () => {
     setLoading("github")
 
     try {
-      // 使用当前页面的 origin 作为最终重定向目标
-      const currentOrigin =
-        typeof window !== "undefined" ? window.location.origin : "http://localhost:4000"
-      const finalRedirectUrl = redirectTo !== "/" ? `${currentOrigin}${redirectTo}` : currentOrigin
-
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "github",
-        options: {
-          redirectTo: finalRedirectUrl,
-          scopes: "user:email",
-        },
-      })
-
-      if (error) {
-        console.error("GitHub 登录错误:", error.message)
-        authToast.loginError(`GitHub 登录失败: ${error.message}`)
-      } else {
-        authToast.oauthStarted("GitHub")
-        // Supabase 会自动重定向到 GitHub，然后回到网关，最后跳转到 finalRedirectUrl
+      // 必须走服务端 OAuth 启动路由：
+      // 1) 统一 state 校验与速率限制；2) callback 走 allowlist 允许的 origin；
+      // 3) redirect_to 由服务端写入短期 cookie，最终由 /auth/callback 读取并跳转。
+      const params = new URLSearchParams()
+      if (redirectTo && redirectTo !== "/") {
+        params.set("redirect_to", redirectTo)
       }
+
+      authToast.oauthStarted("GitHub")
+
+      const url = params.size > 0 ? `/api/auth/github?${params.toString()}` : "/api/auth/github"
+      window.location.href = url
     } catch (error) {
       console.error("GitHub 登录异常:", error)
       authToast.networkError()

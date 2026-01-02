@@ -1,19 +1,12 @@
-"use client"
-
-import dynamic from "next/dynamic"
-import { useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
+import { createHeadingIdFactory } from "@/lib/markdown/toc"
+import { getOptimizedImageUrl } from "@/lib/images/optimizer"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import type { ReactNode } from "react"
 
-// 动态导入 Markdown 预览组件，避免 SSR 问题
-const MarkdownPreview = dynamic(() => import("@uiw/react-markdown-preview"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex items-center justify-center p-8">
-      <div className="border-primary h-8 w-8 animate-spin rounded-full border-b-2"></div>
-      <span className="ml-2">正在加载内容...</span>
-    </div>
-  ),
-})
+const MARKDOWN_IMAGE_WIDTHS = [320, 640, 960, 1200] as const
+const MARKDOWN_IMAGE_SIZES = "(max-width: 768px) 100vw, 768px"
 
 export interface MarkdownRendererProps {
   content: string
@@ -21,46 +14,52 @@ export interface MarkdownRendererProps {
   colorMode?: "light" | "dark"
 }
 
+function extractPlainText(children: ReactNode): string {
+  if (typeof children === "string") return children
+  if (Array.isArray(children)) return children.map(extractPlainText).join("")
+  if (children && typeof children === "object" && "props" in children) {
+    const props = (children as any).props
+    return extractPlainText(props?.children)
+  }
+  return ""
+}
+
+function isDangerousUrl(value: string): boolean {
+  const trimmed = value.trim()
+  const lower = trimmed.toLowerCase()
+
+  if (lower.startsWith("javascript:") || lower.startsWith("vbscript:")) {
+    return true
+  }
+
+  if (lower.startsWith("data:") && !lower.startsWith("data:image/")) {
+    return true
+  }
+
+  const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(trimmed)
+  if (
+    hasScheme &&
+    !lower.startsWith("http:") &&
+    !lower.startsWith("https:") &&
+    !lower.startsWith("data:image/")
+  ) {
+    return true
+  }
+
+  return false
+}
+
 export function MarkdownRenderer({
   content,
   className,
   colorMode = "light",
 }: MarkdownRendererProps) {
-  const [mounted, setMounted] = useState(false)
-
-  // 客户端挂载后才渲染组件
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  // 服务端渲染时显示加载占位符
-  if (!mounted) {
-    return (
-      <div className={cn("animate-pulse", className)}>
-        <div className="space-y-4">
-          <div className="bg-muted h-4 w-3/4 rounded"></div>
-          <div className="bg-muted h-4 w-1/2 rounded"></div>
-          <div className="bg-muted h-4 w-5/6 rounded"></div>
-          <div className="bg-muted h-20 rounded"></div>
-          <div className="bg-muted h-4 w-2/3 rounded"></div>
-        </div>
-      </div>
-    )
-  }
+  const makeId = createHeadingIdFactory()
+  let renderedImageCount = 0
 
   return (
     <div className={cn("w-full", className)} data-color-mode={colorMode}>
-      <MarkdownPreview
-        source={content}
-        style={{
-          backgroundColor: "transparent",
-          color: "inherit",
-          fontFamily: "inherit",
-        }}
-        wrapperElement={{
-          "data-color-mode": colorMode,
-        }}
-        // 自定义样式以适配主题
+      <div
         className={cn(
           "prose prose-lg dark:prose-invert max-w-none",
           // 覆盖默认样式以确保与主题一致
@@ -90,7 +89,102 @@ export function MarkdownRenderer({
           "[&_ol]:mb-4 [&_p]:mb-4 [&_ul]:mb-4",
           "[&_blockquote]:mb-4 [&_pre]:mb-4 [&_table]:mb-4"
         )}
-      />
+      >
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            h1: ({ children, className }: any) => {
+              const text = extractPlainText(children)
+              return (
+                <h1 id={makeId(text)} className={cn("scroll-mt-24", className)}>
+                  {children}
+                </h1>
+              )
+            },
+            h2: ({ children, className }: any) => {
+              const text = extractPlainText(children)
+              return (
+                <h2 id={makeId(text)} className={cn("scroll-mt-24", className)}>
+                  {children}
+                </h2>
+              )
+            },
+            h3: ({ children, className }: any) => {
+              const text = extractPlainText(children)
+              return (
+                <h3 id={makeId(text)} className={cn("scroll-mt-24", className)}>
+                  {children}
+                </h3>
+              )
+            },
+            h4: ({ children, className }: any) => {
+              const text = extractPlainText(children)
+              return (
+                <h4 id={makeId(text)} className={cn("scroll-mt-24", className)}>
+                  {children}
+                </h4>
+              )
+            },
+            h5: ({ children, className }: any) => {
+              const text = extractPlainText(children)
+              return (
+                <h5 id={makeId(text)} className={cn("scroll-mt-24", className)}>
+                  {children}
+                </h5>
+              )
+            },
+            h6: ({ children, className }: any) => {
+              const text = extractPlainText(children)
+              return (
+                <h6 id={makeId(text)} className={cn("scroll-mt-24", className)}>
+                  {children}
+                </h6>
+              )
+            },
+            img: ({ node: _node, src, alt, ...props }: any) => {
+              const rawSrc = typeof src === "string" ? src : ""
+              if (!rawSrc || isDangerousUrl(rawSrc)) {
+                return null
+              }
+
+              const isFirstImage = renderedImageCount === 0
+              renderedImageCount += 1
+
+              const optimizedSrc =
+                getOptimizedImageUrl(rawSrc, { width: 1200, quality: 75, fit: "contain" }) || rawSrc
+
+              const isSupabaseRenderUrl =
+                typeof optimizedSrc === "string" &&
+                optimizedSrc.includes("/storage/v1/render/image/")
+
+              const srcSet = isSupabaseRenderUrl
+                ? MARKDOWN_IMAGE_WIDTHS.map((width) => {
+                    const src =
+                      getOptimizedImageUrl(rawSrc, { width, quality: 75, fit: "contain" }) || rawSrc
+                    return `${src} ${width}w`
+                  }).join(", ")
+                : undefined
+
+              const { loading, decoding, fetchPriority, ...restProps } = props
+
+              return (
+                <img
+                  src={optimizedSrc}
+                  srcSet={srcSet}
+                  sizes={srcSet ? MARKDOWN_IMAGE_SIZES : undefined}
+                  alt={alt || ""}
+                  loading={loading ?? (isFirstImage ? "eager" : "lazy")}
+                  fetchPriority={fetchPriority ?? (isFirstImage ? "high" : undefined)}
+                  decoding={decoding ?? "async"}
+                  {...restProps}
+                />
+              )
+            },
+          }}
+        >
+          {content}
+        </ReactMarkdown>
+      </div>
     </div>
   )
 }

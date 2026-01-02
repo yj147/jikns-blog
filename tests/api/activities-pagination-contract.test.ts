@@ -3,9 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { GET } from "@/app/api/activities/route"
 
-vi.mock("@/lib/auth", () => ({
-  getCurrentUser: vi.fn(),
-}))
+vi.mock("@/lib/auth/session", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/auth/session")>("@/lib/auth/session")
+  return {
+    ...actual,
+    getOptionalViewer: vi.fn(),
+  }
+})
 
 vi.mock("@/lib/repos/activity-repo", () => ({
   listActivities: vi.fn(),
@@ -25,7 +29,7 @@ vi.mock("@/lib/fixtures/activity-fixture", () => ({
   shouldUseFixtureExplicitly: vi.fn(() => false),
 }))
 
-import { getCurrentUser } from "@/lib/auth"
+import { getOptionalViewer } from "@/lib/auth/session"
 import { listActivities } from "@/lib/repos/activity-repo"
 import { getBatchLikeStatus } from "@/lib/interactions/likes"
 import { getActivityFixture } from "@/lib/fixtures/activity-fixture"
@@ -58,7 +62,7 @@ describe("Activity API pagination contract", () => {
   })
 
   it("handles second page via nextCursor without duplicating items", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue(null)
+    vi.mocked(getOptionalViewer).mockResolvedValue(null)
 
     const firstPageItems = [makeItem("act-1"), makeItem("act-2")]
     const secondPageItems = [makeItem("act-3"), makeItem("act-4")]
@@ -112,7 +116,7 @@ describe("Activity API pagination contract", () => {
   })
 
   it("forwards server-side filters for isPinned and hasImages", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue(null)
+    vi.mocked(getOptionalViewer).mockResolvedValue(null)
     vi.mocked(getBatchLikeStatus).mockResolvedValue(new Map())
 
     const filteredItems = [
@@ -151,7 +155,7 @@ describe("Activity API pagination contract", () => {
   })
 
   it("requires authentication for following feed", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue(null)
+    vi.mocked(getOptionalViewer).mockResolvedValue(null)
 
     const response = await GET(
       new NextRequest("http://localhost:3000/api/activities?orderBy=following")
@@ -164,7 +168,14 @@ describe("Activity API pagination contract", () => {
   })
 
   it("passes followingUserId to repository when user is authenticated", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue({ id: "user-123" } as any)
+    vi.mocked(getOptionalViewer).mockResolvedValue({
+      id: "user-123",
+      email: "user@example.com",
+      role: "USER",
+      status: "ACTIVE",
+      name: "User 123",
+      avatarUrl: null,
+    } as any)
     vi.mocked(getBatchLikeStatus).mockResolvedValue(new Map())
     vi.mocked(listActivities).mockResolvedValueOnce({
       items: [makeItem("act-100")],
@@ -200,7 +211,14 @@ describe("Activity API pagination contract", () => {
       status: "BANNED",
     }
 
-    vi.mocked(getCurrentUser).mockResolvedValue({ id: "admin-1", role: "ADMIN" } as any)
+    vi.mocked(getOptionalViewer).mockResolvedValue({
+      id: "admin-1",
+      email: "admin@example.com",
+      role: "ADMIN",
+      status: "ACTIVE",
+      name: "Admin",
+      avatarUrl: null,
+    } as any)
     vi.mocked(getBatchLikeStatus).mockResolvedValue(new Map())
     vi.mocked(listActivities).mockResolvedValueOnce({
       items: [makeItem("act-banned", { author: bannedAuthor })],
@@ -227,7 +245,7 @@ describe("Activity API pagination contract", () => {
   })
 
   it("forwards searchTerm via q parameter", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue(null)
+    vi.mocked(getOptionalViewer).mockResolvedValue(null)
     vi.mocked(getBatchLikeStatus).mockResolvedValue(new Map())
     vi.mocked(listActivities).mockResolvedValueOnce({
       items: [makeItem("act-210")],
@@ -258,7 +276,7 @@ describe("Activity API pagination contract", () => {
   })
 
   it("does not fallback to fixtures when repository throws", async () => {
-    vi.mocked(getCurrentUser).mockResolvedValue(null)
+    vi.mocked(getOptionalViewer).mockResolvedValue(null)
     vi.mocked(listActivities).mockRejectedValueOnce(new Error("db-down"))
 
     const response = await GET(new NextRequest("http://localhost:3000/api/activities"))

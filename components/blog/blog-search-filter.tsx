@@ -9,15 +9,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Search, Filter, X, SortAsc, SortDesc } from "lucide-react"
-import { motion } from "framer-motion"
 import { useDebounce } from "@/hooks/use-debounce"
 import { TagFilter, type PopularTag } from "@/components/blog/tag-filter"
 import {
@@ -46,6 +38,15 @@ export function BlogSearchFilter({ className = "", popularTags }: BlogSearchFilt
   const searchParams = useSearchParams()
   const paramsKey = searchParams.toString()
 
+  const pushIfChanged = useCallback(
+    (url: string) => {
+      const currentUrl = `${window.location.pathname}${window.location.search}`
+      if (currentUrl === url) return
+      router.push(url)
+    },
+    [router]
+  )
+
   // 状态管理
   const [query, setQuery] = useState(searchParams.get("q") || "")
   const [selectedTag, setSelectedTag] = useState(searchParams.get("tag") || "")
@@ -68,18 +69,23 @@ export function BlogSearchFilter({ className = "", popularTags }: BlogSearchFilt
 
       const cleanQuery = sanitizeSearchQuery(searchQuery)
       const [sortBy, sortOrder] = selectedSort.split("-")
+      const normalizedTag = selectedTag.trim()
+      const isDefault =
+        cleanQuery === "" && normalizedTag === "" && selectedSort === "publishedAt-desc"
 
-      const url = createBlogListUrl({
-        q: cleanQuery,
-        tag: selectedTag,
-        sort: sortBy,
-        order: sortOrder,
-        page: 1, // 搜索时重置到第一页
-      })
+      const url = isDefault
+        ? "/blog"
+        : createBlogListUrl({
+            q: cleanQuery || undefined,
+            tag: normalizedTag || undefined,
+            sort: sortBy,
+            order: sortOrder,
+            page: 1, // 搜索时重置到第一页
+          })
 
-      router.push(url)
+      pushIfChanged(url)
     },
-    [selectedTag, selectedSort, router]
+    [selectedTag, selectedSort, pushIfChanged]
   )
 
   // 处理标签筛选
@@ -88,18 +94,23 @@ export function BlogSearchFilter({ className = "", popularTags }: BlogSearchFilt
       const normalizedTag = tag ?? ""
       setSelectedTag(normalizedTag)
       const [sortBy, sortOrder] = selectedSort.split("-")
+      const cleanQuery = sanitizeSearchQuery(query)
+      const isDefault =
+        cleanQuery === "" && normalizedTag.trim() === "" && selectedSort === "publishedAt-desc"
 
-      const url = createBlogListUrl({
-        q: query,
-        tag: normalizedTag || undefined,
-        sort: sortBy,
-        order: sortOrder,
-        page: 1,
-      })
+      const url = isDefault
+        ? "/blog"
+        : createBlogListUrl({
+            q: cleanQuery || undefined,
+            tag: normalizedTag.trim() || undefined,
+            sort: sortBy,
+            order: sortOrder,
+            page: 1,
+          })
 
-      router.push(url)
+      pushIfChanged(url)
     },
-    [query, selectedSort, router]
+    [query, selectedSort, pushIfChanged]
   )
 
   // 处理排序变更
@@ -107,18 +118,24 @@ export function BlogSearchFilter({ className = "", popularTags }: BlogSearchFilt
     (sortValue: string) => {
       setSelectedSort(sortValue)
       const [sortBy, sortOrder] = sortValue.split("-")
+      const cleanQuery = sanitizeSearchQuery(query)
+      const normalizedTag = selectedTag.trim()
+      const isDefault =
+        cleanQuery === "" && normalizedTag === "" && sortValue === "publishedAt-desc"
 
-      const url = createBlogListUrl({
-        q: query,
-        tag: selectedTag,
-        sort: sortBy,
-        order: sortOrder,
-        page: 1,
-      })
+      const url = isDefault
+        ? "/blog"
+        : createBlogListUrl({
+            q: cleanQuery || undefined,
+            tag: normalizedTag || undefined,
+            sort: sortBy,
+            order: sortOrder,
+            page: 1,
+          })
 
-      router.push(url)
+      pushIfChanged(url)
     },
-    [query, selectedTag, router]
+    [query, selectedTag, pushIfChanged]
   )
 
   // 清除所有筛选
@@ -126,8 +143,8 @@ export function BlogSearchFilter({ className = "", popularTags }: BlogSearchFilt
     setQuery("")
     setSelectedTag("")
     setSelectedSort("publishedAt-desc")
-    router.push("/blog")
-  }, [router])
+    pushIfChanged("/blog")
+  }, [pushIfChanged])
 
   // URL 标签变化时同步状态，兼容侧边栏筛选
   useEffect(() => {
@@ -144,27 +161,22 @@ export function BlogSearchFilter({ className = "", popularTags }: BlogSearchFilt
   const hasActiveFilters = query || selectedTag || selectedSort !== "publishedAt-desc"
 
   return (
-    <motion.div
-      className={`space-y-4 ${className}`}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6 }}
-    >
+    <div className={`space-y-4 ${className}`}>
       {/* 搜索栏和基础筛选 */}
       <div className="flex flex-col gap-4 md:flex-row">
         {/* 搜索输入框 */}
-        <motion.div
-          className="relative flex-1"
-          whileFocus={{ scale: 1.02 }}
-          transition={{ type: "spring", stiffness: 300 }}
-        >
+        <div className="relative flex-1">
           <Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transform" />
           <Input
+            id="blog-search-query"
+            name="q"
+            type="search"
             placeholder="搜索文章标题、内容..."
             className="pl-10 pr-10"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             maxLength={100}
+            aria-label="搜索文章"
           />
           {query && (
             <Button
@@ -176,76 +188,66 @@ export function BlogSearchFilter({ className = "", popularTags }: BlogSearchFilt
               <X className="h-4 w-4" />
             </Button>
           )}
-        </motion.div>
+        </div>
 
         {/* 排序选择 */}
-        <motion.div whileHover={{ scale: 1.02 }} className="w-full md:w-48">
-          <Select value={selectedSort} onValueChange={handleSortChange}>
-            <SelectTrigger>
-              <div className="flex items-center space-x-2">
-                {selectedSort.includes("asc") ? (
-                  <SortAsc className="h-4 w-4" />
-                ) : (
-                  <SortDesc className="h-4 w-4" />
-                )}
-                <SelectValue placeholder="排序方式" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
+        <div className="w-full md:w-48">
+          <label htmlFor="blog-sort" className="sr-only">
+            排序方式
+          </label>
+          <div className="relative">
+            <select
+              id="blog-sort"
+              value={selectedSort}
+              onChange={(event) => handleSortChange(event.target.value)}
+              className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full appearance-none rounded-md border px-3 py-2 pr-10 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            >
               {sortOptions.map((option) => (
-                <SelectItem
+                <option
                   key={`${option.value}-${option.order}`}
                   value={`${option.value}-${option.order}`}
                 >
                   {option.label}
-                </SelectItem>
+                </option>
               ))}
-            </SelectContent>
-          </Select>
-        </motion.div>
+            </select>
+            <div className="text-muted-foreground pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+              {selectedSort.includes("asc") ? (
+                <SortAsc className="h-4 w-4" />
+              ) : (
+                <SortDesc className="h-4 w-4" />
+              )}
+            </div>
+          </div>
+        </div>
 
         {/* 高级筛选切换 */}
-        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-          <Button
-            variant="outline"
-            onClick={() => setShowAdvancedFilter(!showAdvancedFilter)}
-            className="flex items-center space-x-2"
-          >
-            <Filter className="h-4 w-4" />
-            <span>筛选</span>
-          </Button>
-        </motion.div>
+        <Button
+          variant="outline"
+          onClick={() => setShowAdvancedFilter((current) => !current)}
+          className="flex items-center space-x-2"
+        >
+          <Filter className="h-4 w-4" />
+          <span>筛选</span>
+        </Button>
       </div>
 
       {/* 高级筛选面板 */}
-      <motion.div
-        initial={false}
-        animate={{ height: showAdvancedFilter ? "auto" : 0, opacity: showAdvancedFilter ? 1 : 0 }}
-        transition={{ duration: 0.3, ease: "easeInOut" }}
-        className="overflow-hidden"
-      >
+      {showAdvancedFilter ? (
         <div className="space-y-4 pt-2">
-          {/* 标签筛选 */}
-          <div>
-            <TagFilter
-              className="bg-background border border-dashed shadow-none"
-              limit={popularTags?.length ?? 10}
-              initialTags={popularTags}
-              selectedTag={selectedTag || null}
-              onTagChange={handleTagFilter}
-            />
-          </div>
+          <TagFilter
+            className="bg-background border border-dashed shadow-none"
+            limit={popularTags?.length ?? 10}
+            initialTags={popularTags}
+            selectedTag={selectedTag || null}
+            onTagChange={handleTagFilter}
+          />
         </div>
-      </motion.div>
+      ) : null}
 
       {/* 活动筛选条件显示和清除 */}
       {hasActiveFilters && (
-        <motion.div
-          className="bg-muted/50 flex items-center justify-between rounded-lg p-3"
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.3 }}
-        >
+        <div className="bg-muted/50 flex items-center justify-between rounded-lg p-3">
           <div className="flex items-center space-x-2 text-sm">
             <span className="text-muted-foreground">活动筛选:</span>
             {query && (
@@ -268,13 +270,11 @@ export function BlogSearchFilter({ className = "", popularTags }: BlogSearchFilt
             )}
           </div>
 
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Button variant="ghost" size="sm" onClick={handleClearFilters} className="text-xs">
-              清除筛选
-            </Button>
-          </motion.div>
-        </motion.div>
+          <Button variant="ghost" size="sm" onClick={handleClearFilters} className="text-xs">
+            清除筛选
+          </Button>
+        </div>
       )}
-    </motion.div>
+    </div>
   )
 }

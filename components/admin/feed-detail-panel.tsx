@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -11,6 +12,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { formatCompactCount } from "@/lib/utils"
+import { getOptimizedImageUrl } from "@/lib/images/optimizer"
 import type { FeedItem } from "@/types/feed"
 
 const dateFormatter = new Intl.DateTimeFormat("zh-CN", {
@@ -61,8 +63,21 @@ export function FeedDetailPanel({ feed, open, onOpenChange }: FeedDetailPanelPro
                 <h4 className="text-muted-foreground text-sm font-medium">图片</h4>
                 <div className="grid grid-cols-2 gap-3">
                   {feed.imageUrls.map((url) => (
-                    <div key={url} className="overflow-hidden rounded-md border">
-                      <img src={url} alt="Feed 图片" className="h-32 w-full object-cover" />
+                    <div key={url} className="relative h-32 overflow-hidden rounded-md border">
+                      <Image
+                        src={
+                          getOptimizedImageUrl(url, {
+                            width: 600,
+                            height: 384,
+                            quality: 75,
+                            format: "webp",
+                          }) ?? url
+                        }
+                        alt="Feed 图片"
+                        fill
+                        sizes="(max-width: 640px) 100vw, 50vw"
+                        className="object-cover"
+                      />
                     </div>
                   ))}
                 </div>

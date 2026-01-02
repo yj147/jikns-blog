@@ -137,7 +137,7 @@ export function NotificationItem({
           <Badge variant="outline" className={cn("border-transparent", meta.tone)}>
             {meta.label}
           </Badge>
-          <span className="text-muted-foreground text-xs">
+          <span className="text-muted-foreground text-xs" suppressHydrationWarning>
             {formatRelative(notification.createdAt)}
           </span>
         </div>

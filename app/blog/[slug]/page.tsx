@@ -3,101 +3,44 @@
  * 连接真实数据的文章详情展示页面
  */
 
-import { Suspense } from "react"
+import { Suspense, cache } from "react"
 import { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { getPost } from "@/lib/actions/posts"
-import { getCurrentUser } from "@/lib/actions/auth"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { FollowButton } from "@/components/follow"
-import { prisma } from "@/lib/prisma"
-import {
-  ArrowLeft,
-  Calendar,
-  Clock,
-  Eye,
-  Share2,
-  ThumbsUp,
-  MessageSquare,
-  UserPlus,
-} from "lucide-react"
+import { ArrowLeft, Share2, MessageSquare } from "lucide-react"
 import { PostDetail } from "@/types/blog"
-import {
-  formatDate,
-  formatRelativeTime,
-  calculateReadTime,
-  formatNumber,
-} from "@/lib/utils/blog-helpers"
+import { formatRelativeTime, calculateReadTime, formatNumber } from "@/lib/utils/blog-helpers"
 import { interactionStyles } from "@/lib/styles/interaction-styles"
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer"
 import CommentList from "@/components/comments/comment-list"
 import { LikeButton } from "@/components/blog/like-button"
 import { BookmarkButton } from "@/components/blog/bookmark-button"
 import SubscribeForm from "@/components/subscribe-form"
-import CommentCount from "@/components/comments/comment-count"
-import { TableOfContents, TocItem } from "@/components/blog/table-of-contents"
+import { TableOfContents } from "@/components/blog/table-of-contents"
+import { extractTocItems, type TocItem } from "@/lib/markdown/toc"
 import { cn } from "@/lib/utils"
+import { PostAuthorFollowAction } from "@/components/blog/post-author-follow-action"
+import { PostViewTracker } from "@/components/blog/post-view-tracker"
 
-// 强制动态渲染，避免缓存新文章的 404 响应
-export const dynamic = "force-dynamic"
+export const revalidate = 300
+export const dynamic = "force-static"
 
 // 页面参数接口
 interface BlogPostPageProps {
   params: Promise<{ slug: string }>
 }
 
-// 简单的 ID 生成器，需要与 rehype-slug 的逻辑尽量保持一致
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[\s\W-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-}
-
-function extractHeadings(content: string): TocItem[] {
-  const regex = /^(#{2,3})\s+(.+)$/gm
-  const headings: TocItem[] = []
-  const seenIds = new Map<string, number>()
-  let match
-
-  while ((match = regex.exec(content)) !== null) {
-    const level = match[1].length
-    const text = match[2].trim()
-    let id = slugify(text)
-
-    // Fallback for empty slugs (e.g. only special chars)
-    if (!id) {
-      id = `heading`
-    }
-
-    // Ensure uniqueness
-    if (seenIds.has(id)) {
-      const count = seenIds.get(id)!
-      seenIds.set(id, count + 1)
-      id = `${id}-${count}`
-    } else {
-      seenIds.set(id, 1)
-    }
-
-    headings.push({
-      id,
-      text,
-      level,
-    })
-  }
-
-  return headings
-}
+const getPostCached = cache(async (slug: string) => getPost(slug))
 
 // 生成页面元数据
 export async function generateMetadata({ params }: BlogPostPageProps): Promise<Metadata> {
   const { slug } = await params
-  const result = await getPost(slug)
+  const result = await getPostCached(slug)
 
   if (!result.success || !result.data) {
     return {
@@ -138,8 +81,7 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
 export default async function BlogPostPage({ params }: BlogPostPageProps) {
   const { slug } = await params
 
-  // 先获取文章数据（不增加浏览量），检查发布状态
-  const result = await getPost(slug)
+  const result = await getPostCached(slug)
 
   // 处理文章不存在的情况
   if (!result.success || !result.data) {
@@ -148,37 +90,17 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 
   const post: PostDetail = result.data
 
-  // 检查文章是否已发布（防止访问草稿）- 必须在 incrementView 之前
+  // 检查文章是否已发布（防止访问草稿）
   if (!post.published) {
     notFound()
   }
 
-  // 文章已发布，增加浏览量
-  await getPost(slug, { incrementView: true })
-
-  const currentUser = await getCurrentUser()
-  const isOwnPost = currentUser?.id === post.author.id
-
-  let viewerFollowsAuthor = false
-
-  if (currentUser && !isOwnPost) {
-    const existingFollow = await prisma.follow.findUnique({
-      where: {
-        followerId_followingId: {
-          followerId: currentUser.id,
-          followingId: post.author.id,
-        },
-      },
-      select: { followerId: true },
-    })
-    viewerFollowsAuthor = !!existingFollow
-  }
-
   const content = post.contentSigned ?? post.content
-  const toc = extractHeadings(content)
+  const toc = extractTocItems(content)
 
   return (
     <div className="bg-background min-h-screen">
+      <PostViewTracker postId={post.id} />
       <div className="container mx-auto grid grid-cols-1 gap-8 px-4 py-8 lg:grid-cols-12">
         {/* Back Button Area - Optional, maybe top left? */}
 
@@ -189,6 +111,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
             <div className="mb-6">
               <Link
                 href="/blog"
+                prefetch={false}
                 className="text-muted-foreground hover:text-primary flex items-center gap-1 text-sm transition-colors"
               >
                 <ArrowLeft className="h-3 w-3" />
@@ -203,7 +126,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
               </h1>
 
               <div className="mb-6 flex items-center gap-3">
-                <Link href={`/profile/${post.author.id ?? "#"}`}>
+                <Link href={`/profile/${post.author.id ?? "#"}`} prefetch={false}>
                   <Avatar className="ring-background h-10 w-10 ring-2">
                     <AvatarImage
                       src={post.author.avatarUrl || "/placeholder.svg"}
@@ -239,11 +162,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 />
                 <div className="text-muted-foreground flex items-center gap-1 text-sm">
                   <MessageSquare className="h-4 w-4" />
-                  <CommentCount
-                    targetType="post"
-                    targetId={post.id}
-                    initialCount={post.stats.commentsCount}
-                  />
+                  <span>{formatNumber(post.stats.commentsCount)}</span>
                 </div>
                 <BookmarkButton
                   postId={post.id}
@@ -282,22 +201,12 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 <div className="flex-1 space-y-1">
                   <div className="flex items-center justify-between">
                     <h3 className="text-lg font-bold">{post.author.name || "匿名用户"}</h3>
-                    {!isOwnPost &&
-                      (currentUser ? (
-                        <FollowButton
-                          targetUserId={post.author.id}
-                          size="sm"
-                          initialFollowing={viewerFollowsAuthor}
-                          className="rounded-full"
-                        />
-                      ) : (
-                        <Button variant="outline" size="sm" className="rounded-full" asChild>
-                          <Link href="/login">
-                            <UserPlus className="mr-1 h-3 w-3" />
-                            登录后关注
-                          </Link>
-                        </Button>
-                      ))}
+                    <PostAuthorFollowAction
+                      authorId={post.author.id}
+                      authorName={post.author.name}
+                      size="sm"
+                      className="rounded-full"
+                    />
                   </div>
                   {post.author.bio && (
                     <p className="text-muted-foreground text-sm">{post.author.bio}</p>
@@ -309,20 +218,11 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 
           {/* 评论区域 */}
           <section className="border-border mt-12 border-t pt-8">
-            <h3 className="mb-6 text-xl font-bold">
-              评论 (
-              <CommentCount
-                targetType="post"
-                targetId={post.id}
-                initialCount={post.stats.commentsCount}
-              />
-              )
-            </h3>
             <CommentList
               targetType="post"
               targetId={post.id}
               showComposer
-              showTitle={false}
+              showTitle
               initialCount={post.stats.commentsCount}
             />
           </section>
@@ -363,7 +263,7 @@ function BlogSidebar({ post, toc }: { post: PostDetail; toc: TocItem[] }) {
           <div className="bg-muted/30 rounded-xl border-none p-4">
             <h3 className="mb-2 text-sm font-bold">所属系列</h3>
             <div>
-              <Link href={`/blog?series=${post.series.slug}`}>
+              <Link href={`/blog?series=${post.series.slug}`} prefetch={false}>
                 <h4 className="text-primary cursor-pointer font-medium hover:underline">
                   {post.series.title}
                 </h4>
@@ -380,7 +280,7 @@ function BlogSidebar({ post, toc }: { post: PostDetail; toc: TocItem[] }) {
             </h3>
             <div className="flex flex-wrap gap-2">
               {post.tags.map((tag) => (
-                <Link key={tag.id} href={`/blog?tag=${tag.slug}`}>
+                <Link key={tag.id} href={`/blog?tag=${tag.slug}`} prefetch={false}>
                   <Badge
                     variant="secondary"
                     className="hover:bg-primary hover:text-primary-foreground cursor-pointer transition-colors"

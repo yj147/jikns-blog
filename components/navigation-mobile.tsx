@@ -56,6 +56,7 @@ export default function MobileNavigation() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={false}
                   onClick={() => setIsOpen(false)}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
@@ -104,12 +105,12 @@ function MobileUserSection({ closeSheet }: { closeSheet: () => void }) {
             className="justify-start gap-2"
             onClick={closeSheet}
           >
-            <Link href="/login">
+            <Link href="/login" prefetch={false}>
               <LogIn className="h-4 w-4" /> 登录
             </Link>
           </Button>
           <Button asChild size="lg" className="justify-start gap-2" onClick={closeSheet}>
-            <Link href="/register">
+            <Link href="/register" prefetch={false}>
               <UserPlus className="h-4 w-4" /> 注册
             </Link>
           </Button>
@@ -145,17 +146,17 @@ function MobileUserSection({ closeSheet }: { closeSheet: () => void }) {
 
       <div className="grid gap-2">
         <Button asChild variant="ghost" className="justify-start gap-2" onClick={closeSheet}>
-          <Link href="/notifications">
+          <Link href="/notifications" prefetch={false}>
             <Bell className="h-4 w-4" /> 通知
           </Link>
         </Button>
         <Button asChild variant="ghost" className="justify-start gap-2" onClick={closeSheet}>
-          <Link href="/profile">
+          <Link href="/profile" prefetch={false}>
             <User className="h-4 w-4" /> 个人资料
           </Link>
         </Button>
         <Button asChild variant="ghost" className="justify-start gap-2" onClick={closeSheet}>
-          <Link href="/settings">
+          <Link href="/settings" prefetch={false}>
             <Settings className="h-4 w-4" /> 设置
           </Link>
         </Button>
@@ -166,7 +167,7 @@ function MobileUserSection({ closeSheet }: { closeSheet: () => void }) {
             className="justify-start gap-2 text-blue-600 hover:text-blue-700"
             onClick={closeSheet}
           >
-            <Link href="/admin">
+            <Link href="/admin" prefetch={false}>
               <Shield className="h-4 w-4" /> 管理后台
             </Link>
           </Button>

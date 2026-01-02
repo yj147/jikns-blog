@@ -6,7 +6,6 @@
 "use client"
 
 import Link from "next/link"
-import { motion } from "framer-motion"
 import { Card, CardContent } from "@/components/ui/card"
 import { Hash, FileText } from "lucide-react"
 
@@ -37,15 +36,10 @@ function resolveSizeClass(count: number): string {
   return "text-base"
 }
 
-export function TagCard({ tag, index = 0 }: TagCardProps) {
+export function TagCard({ tag }: TagCardProps) {
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.3, delay: index * 0.05 }}
-      whileHover={{ scale: 1.05 }}
-    >
-      <Link href={`/tags/${tag.slug}`}>
+    <div className="transition-transform duration-200 hover:scale-105">
+      <Link href={`/tags/${tag.slug}`} prefetch={false}>
         <Card className="group relative h-full overflow-hidden border-2 transition-all duration-300 hover:shadow-lg">
           {/* 背景装饰 */}
           <div
@@ -92,6 +86,6 @@ export function TagCard({ tag, index = 0 }: TagCardProps) {
           </CardContent>
         </Card>
       </Link>
-    </motion.div>
+    </div>
   )
 }

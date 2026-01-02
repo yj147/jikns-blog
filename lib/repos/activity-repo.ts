@@ -36,6 +36,7 @@ export interface ListActivitiesParams {
   publishedFrom?: Date | null
   publishedTo?: Date | null
   includeBannedAuthors?: boolean | null
+  includeTotalCount?: boolean | null
 }
 
 export interface ActivityListItem {
@@ -62,7 +63,7 @@ export interface ListActivitiesResult {
   items: ActivityListItem[]
   hasMore: boolean
   nextCursor?: string | null
-  totalCount: number
+  totalCount: number | null
   appliedFilters?: {
     searchTerm?: string
     tags?: string[]
@@ -90,6 +91,7 @@ export async function listActivities(params: ListActivitiesParams): Promise<List
   const publishedFrom = params.publishedFrom ?? undefined
   const publishedTo = params.publishedTo ?? undefined
   const includeBannedAuthors = params.includeBannedAuthors ?? false
+  const includeTotalCount = params.includeTotalCount ?? false
 
   const buildAppliedFilters = () => ({
     searchTerm: searchTerm ?? undefined,
@@ -245,7 +247,7 @@ export async function listActivities(params: ListActivitiesParams): Promise<List
         },
       },
     }),
-    prisma.activity.count({ where }),
+    includeTotalCount ? prisma.activity.count({ where }) : Promise.resolve(null),
   ])
 
   const hasMore = activities.length > limit

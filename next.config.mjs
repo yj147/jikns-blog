@@ -15,8 +15,18 @@ const allowedDevOrigins = [
   "localhost:3999",
 ]
 
-const normalizeOrigin = (origin) =>
-  origin && /^https?:\/\//i.test(origin) ? origin : `http://${origin}`
+const normalizeOrigin = (origin) => {
+  if (!origin) return origin
+  if (/^https?:\/\//i.test(origin)) return origin
+
+  const isLocal =
+    origin.startsWith("localhost") ||
+    origin.startsWith("127.0.0.1") ||
+    origin.startsWith("0.0.0.0") ||
+    /^\d+\.\d+\.\d+\.\d+:\d+$/.test(origin)
+
+  return `${isLocal ? "http" : "https"}://${origin}`
+}
 
 const devOriginsWithProtocol = Array.from(
   new Set(allowedDevOrigins.map((origin) => normalizeOrigin(origin)))
@@ -31,7 +41,7 @@ const parseOrigins = (value) =>
 const envAllowedOrigins = parseOrigins(process.env.SERVER_ACTIONS_ALLOWED_ORIGINS).map(
   normalizeOrigin
 )
-const siteOrigins = [process.env.NEXT_PUBLIC_SITE_URL, process.env.SITE_URL]
+const siteOrigins = [process.env.NEXT_PUBLIC_SITE_URL, process.env.SITE_URL, process.env.VERCEL_URL]
   .map((origin) => origin?.trim())
   .filter(Boolean)
   .map(normalizeOrigin)
@@ -86,36 +96,36 @@ const supabaseRemotePatterns = [
     : []),
   {
     protocol: "https",
-    hostname: "*.supabase.co",
+    hostname: "**.supabase.co",
     pathname: "/storage/v1/object/public/**",
   },
   // 支持签名 URL (*.supabase.co)
   {
     protocol: "https",
-    hostname: "*.supabase.co",
+    hostname: "**.supabase.co",
     pathname: "/storage/v1/object/sign/**",
   },
   // 支持 Image Transformation API (*.supabase.co)
   {
     protocol: "https",
-    hostname: "*.supabase.co",
+    hostname: "**.supabase.co",
     pathname: "/storage/v1/render/image/**",
   },
   {
     protocol: "https",
-    hostname: "*.supabase.in",
+    hostname: "**.supabase.in",
     pathname: "/storage/v1/object/public/**",
   },
   // 支持签名 URL (*.supabase.in)
   {
     protocol: "https",
-    hostname: "*.supabase.in",
+    hostname: "**.supabase.in",
     pathname: "/storage/v1/object/sign/**",
   },
   // 支持 Image Transformation API (*.supabase.in)
   {
     protocol: "https",
-    hostname: "*.supabase.in",
+    hostname: "**.supabase.in",
     pathname: "/storage/v1/render/image/**",
   },
   {

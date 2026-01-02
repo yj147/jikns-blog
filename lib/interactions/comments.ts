@@ -38,7 +38,7 @@ import type { Comment, User, Prisma } from "@/lib/generated/prisma"
 import { logger } from "@/lib/utils/logger"
 import type { CommentTargetType } from "@/lib/dto/comments.dto"
 import { notify } from "@/lib/services/notification"
-import { signAvatarUrl } from "@/lib/storage/signed-url"
+import { createSignedUrls } from "@/lib/storage/signed-url"
 
 export enum CommentErrorCode {
   TARGET_NOT_FOUND = "TARGET_NOT_FOUND",
@@ -260,7 +260,9 @@ export async function createComment(data: CreateCommentData): Promise<CommentWit
       })
     }
 
-    return formatComment(comment as PrismaCommentWithAuthor)
+    const formatted = formatComment(comment as PrismaCommentWithAuthor)
+    const [signed] = await signCommentAuthors([formatted])
+    return signed ?? formatted
   } catch (error) {
     if (error instanceof CommentServiceError) {
       logger.warn("创建评论失败", {
@@ -304,30 +306,6 @@ export async function listComments(options: CommentQueryOptions): Promise<{
       ...(isFetchingReplies ? { parentId } : { parentId: null }),
     }
 
-    // totalCount 需排除父评论已被软删的“孤儿回复”，否则会虚高（顶层 + 父存活的回复）
-    const [topLevelCount, validReplyCount] = await Promise.all([
-      prisma.comment.count({
-        where: {
-          ...baseWhere,
-          deletedAt: null,
-          parentId: null,
-        },
-      }),
-      prisma.comment.count({
-        where: {
-          ...baseWhere,
-          deletedAt: null,
-          parentId: { not: null },
-          parent: {
-            ...baseWhere,
-            deletedAt: null,
-          },
-        },
-      }),
-    ])
-
-    const totalCount = topLevelCount + validReplyCount
-
     const orderBy: Prisma.CommentOrderByWithRelationInput[] = isFetchingReplies
       ? [{ createdAt: "asc" }, { id: "asc" }]
       : [{ createdAt: "desc" }, { id: "desc" }]
@@ -365,7 +343,29 @@ export async function listComments(options: CommentQueryOptions): Promise<{
       queryOptions.skip = 1
     }
 
-    const comments = await prisma.comment.findMany(queryOptions)
+    const totalCountPromise = isFetchingReplies
+      ? Promise.resolve(0)
+      : prisma.comment.count({
+          where: {
+            ...baseWhere,
+            deletedAt: null,
+            OR: [
+              { parentId: null },
+              {
+                parentId: { not: null },
+                parent: {
+                  ...baseWhere,
+                  deletedAt: null,
+                },
+              },
+            ],
+          },
+        })
+
+    const [totalCount, comments] = await Promise.all([
+      totalCountPromise,
+      prisma.comment.findMany(queryOptions),
+    ])
 
     // 处理分页
     const hasMore = comments.length > limit
@@ -439,20 +439,47 @@ export async function listComments(options: CommentQueryOptions): Promise<{
 }
 
 async function signCommentAuthors(comments: CommentWithAuthor[]): Promise<CommentWithAuthor[]> {
-  return Promise.all(
-    comments.map(async (comment) => {
-      const signedAvatar = await signAvatarUrl(comment.author?.avatarUrl ?? null)
-      const signedReplies = comment.replies ? await signCommentAuthors(comment.replies) : undefined
+  if (comments.length === 0) return comments
 
+  const avatarInputs = new Set<string>()
+  const collectAvatars = (items: CommentWithAuthor[]) => {
+    for (const item of items) {
+      const avatarUrl = item.author?.avatarUrl
+      if (typeof avatarUrl === "string" && avatarUrl.length > 0) {
+        avatarInputs.add(avatarUrl)
+      }
+      if (item.replies && item.replies.length > 0) {
+        collectAvatars(item.replies)
+      }
+    }
+  }
+  collectAvatars(comments)
+
+  const inputs = [...avatarInputs]
+  if (inputs.length === 0) return comments
+
+  const signed = await createSignedUrls(inputs)
+  const signedMap = new Map<string, string>()
+  inputs.forEach((original, index) => {
+    signedMap.set(original, signed[index] ?? original)
+  })
+
+  const applySignedAvatars = (items: CommentWithAuthor[]): CommentWithAuthor[] => {
+    return items.map((item) => {
+      const authorAvatarUrl = item.author?.avatarUrl
+      const signedAvatar =
+        typeof authorAvatarUrl === "string" ? signedMap.get(authorAvatarUrl) : undefined
       return {
-        ...comment,
-        author: comment.author
-          ? { ...comment.author, avatarUrl: signedAvatar ?? comment.author.avatarUrl }
+        ...item,
+        author: item.author
+          ? { ...item.author, avatarUrl: signedAvatar ?? item.author.avatarUrl }
           : null,
-        replies: signedReplies,
+        replies: item.replies ? applySignedAvatars(item.replies) : undefined,
       }
     })
-  )
+  }
+
+  return applySignedAvatars(comments)
 }
 
 /**
@@ -462,7 +489,7 @@ export async function deleteComment(
   commentId: string,
   userId: string,
   isAdmin: boolean = false
-): Promise<void> {
+): Promise<{ targetType: CommentTargetType; targetId: string }> {
   try {
     const comment = await prisma.comment.findUnique({
       where: { id: commentId },
@@ -492,6 +519,8 @@ export async function deleteComment(
         }
       )
     }
+
+    const target = resolveCommentTarget(comment)
 
     // 获取目标信息用于更新计数
     // 软删除：如果有回复，只清空内容
@@ -523,6 +552,8 @@ export async function deleteComment(
       isAdmin,
       softDelete: hasReplies,
     })
+
+    return target
   } catch (error) {
     if (error instanceof CommentServiceError) {
       logger.warn("删除评论失败", {
@@ -626,7 +657,9 @@ function assembleReplies(
   })
 }
 
-function resolveCommentTarget(comment: PrismaCommentWithAuthor): {
+type CommentTargetReference = Pick<Comment, "id" | "postId" | "activityId">
+
+function resolveCommentTarget(comment: CommentTargetReference): {
   targetType: CommentTargetType
   targetId: string
 } {

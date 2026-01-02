@@ -6,7 +6,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { NextRequest, NextResponse } from "next/server"
-import { generateOAuthState } from "@/lib/auth/oauth-state"
 import { createTestRequest, TEST_USERS, PERMISSION_TEST_SCENARIOS } from "../helpers/test-data"
 import { setCurrentTestUser, resetMocks } from "../__mocks__/supabase"
 import type { Provider } from "@supabase/supabase-js"
@@ -53,7 +52,9 @@ vi.mock("@/app/auth/callback/route", () => ({
       return NextResponse.redirect(successUrl)
     }
 
-    return NextResponse.json({ error: "Missing parameters" }, { status: 400 })
+    const missingCodeUrl = new URL("/login", url.origin)
+    missingCodeUrl.searchParams.set("error", "missing_code")
+    return NextResponse.redirect(missingCodeUrl)
   }),
 }))
 
@@ -82,7 +83,6 @@ describe("GitHub OAuth 完整流程集成测试", () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = "http://localhost:54321"
     process.env.NEXT_PUBLIC_SITE_URL = "http://localhost:3000"
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "test-anon-key"
-    process.env.OAUTH_STATE_SECRET = "test-oauth-state-secret"
   })
 
   afterEach(() => {
@@ -136,7 +136,7 @@ describe("GitHub OAuth 完整流程集成测试", () => {
       const callbackResponse = await GET(callbackRequest)
 
       // 回调应该重定向到原始页面
-      expect(callbackResponse.status).toBe(302)
+      expect([302, 307]).toContain(callbackResponse.status)
       const location = callbackResponse.headers.get("location")
       expect(location).toContain("/profile")
     })
@@ -151,7 +151,7 @@ describe("GitHub OAuth 完整流程集成测试", () => {
       const callbackResponse = await GET(callbackRequest)
 
       // 应该重定向到登录页面，并带有错误参数
-      expect(callbackResponse.status).toBe(302)
+      expect([302, 307]).toContain(callbackResponse.status)
       const location = callbackResponse.headers.get("location")
       expect(location).toContain("/login")
       expect(location).toContain("error=access_denied")
@@ -166,7 +166,7 @@ describe("GitHub OAuth 完整流程集成测试", () => {
       const callbackResponse = await GET(callbackRequest)
 
       // 应该重定向到登录页面，并带有错误参数
-      expect(callbackResponse.status).toBe(302)
+      expect([302, 307]).toContain(callbackResponse.status)
       const location = callbackResponse.headers.get("location")
       expect(location).toContain("/login")
       expect(location).toContain("error=missing_code")
@@ -249,15 +249,14 @@ describe("GitHub OAuth 完整流程集成测试", () => {
     })
 
     it("应该处理复杂的重定向路径", async () => {
-      const stateToken = generateOAuthState()
-      const complexRedirectUrl = `http://localhost:3000/auth/callback?code=auth_code&state=${stateToken.state}&redirect_to=%2Fadmin%2Fposts%3Fpage%3D2%26filter%3Ddraft`
-      const cookieValue = `${stateToken.state}.${stateToken.issuedAt}.${stateToken.signature}`
-      const callbackRequest = createNextRequest(complexRedirectUrl, { oauth_state: cookieValue })
+      const complexRedirectUrl =
+        "http://localhost:3000/auth/callback?code=auth_code&redirect_to=%2Fadmin%2Fposts%3Fpage%3D2%26filter%3Ddraft"
+      const callbackRequest = createNextRequest(complexRedirectUrl)
 
       const { GET } = await import("@/app/auth/callback/route")
       const callbackResponse = await GET(callbackRequest)
 
-      expect(callbackResponse.status).toBe(302)
+      expect([302, 307]).toContain(callbackResponse.status)
       const location = callbackResponse.headers.get("location")
       expect(location).toContain("/admin/posts")
       expect(location).toContain("page=2")
@@ -280,26 +279,12 @@ describe("GitHub OAuth 完整流程集成测试", () => {
 
     it("应该正确处理会话刷新", async () => {
       const { createServerSupabaseClient } = await import("@/lib/supabase")
-
-      // 模拟会话刷新
-      vi.mock("@/lib/supabase", async () => {
-        const actual = await vi.importActual("@/lib/supabase")
-        return {
-          ...actual,
-          createServerSupabaseClient: vi.fn().mockResolvedValue({
-            auth: {
-              getSession: vi.fn().mockResolvedValue({
-                data: { session: null },
-                error: null,
-              }),
-              refreshSession: vi.fn().mockResolvedValue({
-                data: { session: null },
-                error: null,
-              }),
-            },
-          }),
-        }
-      })
+      vi.mocked(createServerSupabaseClient).mockResolvedValueOnce({
+        auth: {
+          getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
+          refreshSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
+        },
+      } as any)
 
       const supabase = await createServerSupabaseClient()
       const { data } = await supabase.auth.getSession()
@@ -358,7 +343,7 @@ describe("GitHub OAuth 完整流程集成测试", () => {
         },
       }
 
-      await expect(syncUserFromAuth(testAuthUser)).rejects.toThrow("用户数据同步失败")
+      await expect(syncUserFromAuth(testAuthUser)).rejects.toThrow("用户资料同步失败")
     })
   })
 

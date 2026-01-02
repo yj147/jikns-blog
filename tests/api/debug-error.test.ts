@@ -7,6 +7,7 @@ import { describe, it, expect, vi } from "vitest"
 // 设置环境变量
 process.env.NEXT_PUBLIC_SUPABASE_URL = "http://localhost:54321"
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "test-anon-key"
+process.env.METRICS_SAMPLE_RATE = "0"
 
 describe("调试测试", () => {
   it("查看错误细节", async () => {
@@ -24,6 +25,14 @@ describe("调试测试", () => {
           console.log("Error logged:", msg, error)
         }),
       },
+    }))
+
+    vi.doMock("@/lib/performance-monitor", () => ({
+      performanceMonitor: { recordApiResponse: vi.fn() },
+    }))
+
+    vi.doMock("@/lib/storage/signed-url", () => ({
+      createSignedUrls: vi.fn(async (inputs: string[]) => inputs),
     }))
 
     vi.doMock("@/lib/prisma", () => ({
@@ -51,7 +60,7 @@ describe("调试测试", () => {
     const { GET } = await import("@/app/api/user/route")
 
     try {
-      const response = await GET()
+      const response = await GET(new Request("http://localhost:3000/api/user"))
       const data = await response.json()
 
       console.log("\n=== Response Details ===")

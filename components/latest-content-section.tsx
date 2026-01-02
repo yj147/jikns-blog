@@ -73,7 +73,9 @@ export async function LatestContentSection() {
           ))}
           <div className="p-8 text-center">
             <Button variant="ghost" asChild className="text-primary hover:bg-primary/10">
-              <Link href="/blog">查看更多历史文章</Link>
+              <Link href="/blog" prefetch={false}>
+                查看更多历史文章
+              </Link>
             </Button>
           </div>
         </div>

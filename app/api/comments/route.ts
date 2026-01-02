@@ -4,6 +4,7 @@
  */
 
 import { NextRequest } from "next/server"
+import { revalidateTag, unstable_cache } from "next/cache"
 import {
   createComment,
   listComments,
@@ -47,6 +48,9 @@ async function handleGet(request: NextRequest) {
   let actorId: string | undefined
   let actorRole: string | undefined
   let actorStatus: string | undefined
+  let viewerMs = 0
+  let listMs = 0
+  let mapMs = 0
 
   try {
     // 设置请求ID到全局上下文
@@ -54,7 +58,9 @@ async function handleGet(request: NextRequest) {
       ;(globalThis as any).requestId = requestId
     }
 
+    const viewerStart = performance.now()
     const user = await getOptionalViewer({ request })
+    viewerMs = performance.now() - viewerStart
     actorId = user?.id
     actorRole = user?.role
     actorStatus = user?.status
@@ -98,22 +104,46 @@ async function handleGet(request: NextRequest) {
     })
 
     // 获取评论列表（带指标测量）
+    const listStart = performance.now()
     const result = await measureOperation("list", async () => {
-      return await listComments({
+      const loadComments = () =>
+        listComments({
+          targetType,
+          targetId,
+          cursor,
+          limit,
+          parentId,
+          includeReplies,
+          includeAuthor: true,
+        })
+
+      if (process.env.NODE_ENV !== "production") {
+        return await loadComments()
+      }
+
+      const cacheKey = [
+        "api-comments",
         targetType,
         targetId,
-        cursor,
-        limit,
-        parentId,
-        includeReplies,
-        includeAuthor: true,
-      })
-    })
+        parentId ?? "root",
+        cursor ?? "",
+        String(limit),
+        includeReplies ? "replies" : "no-replies",
+      ]
 
+      return await unstable_cache(loadComments, cacheKey, {
+        revalidate: 10,
+        tags: [`comments:${targetType}:${targetId}`],
+      })()
+    })
+    listMs = performance.now() - listStart
+
+    const mapStart = performance.now()
     const commentsWithPermissions = appendCommentPermissions(result.comments, user)
     const validatedComments = commentsWithPermissions.map((comment) =>
       CommentResponseDto.parse(comment)
     )
+    mapMs = performance.now() - mapStart
 
     const duration = performance.now() - startTime
 
@@ -126,12 +156,26 @@ async function handleGet(request: NextRequest) {
       actorStatus,
     })
 
-    return createPaginatedResponse(validatedComments, {
+    const response = createPaginatedResponse(validatedComments, {
       limit,
       total: result.totalCount,
       hasMore: result.hasMore,
       nextCursor: result.nextCursor,
     })
+    response.headers.set(
+      "Server-Timing",
+      [
+        `viewer;dur=${viewerMs.toFixed(1)}`,
+        `list;dur=${listMs.toFixed(1)}`,
+        `map;dur=${mapMs.toFixed(1)}`,
+        `total;dur=${duration.toFixed(1)}`,
+      ].join(", ")
+    )
+    response.headers.set("x-perf-viewer-ms", viewerMs.toFixed(1))
+    response.headers.set("x-perf-list-ms", listMs.toFixed(1))
+    response.headers.set("x-perf-map-ms", mapMs.toFixed(1))
+    response.headers.set("x-perf-total-ms", duration.toFixed(1))
+    return response
   } catch (error) {
     const duration = performance.now() - startTime
 
@@ -312,6 +356,8 @@ async function handlePost(request: NextRequest) {
         parentId: parentId ?? undefined,
       })
     })
+
+    revalidateTag(`comments:${targetType}:${targetId}`)
 
     const validatedComment = CommentResponseDto.parse(comment)
 

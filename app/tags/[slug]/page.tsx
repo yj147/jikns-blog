@@ -3,25 +3,60 @@
  * Phase 10 - M3 阶段
  */
 
-import { cache } from "react"
+import { cache, Suspense } from "react"
 import { Metadata } from "next"
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { getTag } from "@/lib/actions/tags"
+
+import { getTag } from "@/lib/actions/tags/queries-cacheable"
 import { getPosts } from "@/lib/actions/posts"
 import { BlogPostCard } from "@/components/blog/blog-post-card"
-import { ClientPagination } from "@/components/blog/client-pagination"
-import { TagPostsSort } from "@/components/tags/tag-posts-sort"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Hash, FileText, ArrowLeft, AlertCircle } from "lucide-react"
+import { Button, buttonVariants } from "@/components/ui/button"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
+import { cn } from "@/lib/utils"
+import { Hash, FileText, ArrowLeft, AlertCircle, SortDesc } from "lucide-react"
 import { PostListItem } from "@/types/blog"
 import { logger } from "@/lib/utils/logger"
+import { TagPostsClient } from "./tag-posts-client"
+
+export const revalidate = 120
+const PREGENERATE_TAGS_LIMIT = 20
+
+export async function generateStaticParams(): Promise<Array<{ slug: string }>> {
+  try {
+    const { prisma } = await import("@/lib/prisma")
+    const tags = await prisma.tag.findMany({
+      where: {
+        postsCount: {
+          gt: 0,
+        },
+      },
+      orderBy: { postsCount: "desc" },
+      take: PREGENERATE_TAGS_LIMIT,
+      select: { slug: true },
+    })
+    return tags.map((tag) => ({ slug: tag.slug }))
+  } catch (error) {
+    logger.warn("generateStaticParams failed for tags", {
+      limit: PREGENERATE_TAGS_LIMIT,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return []
+  }
+}
 
 interface TagDetailPageProps {
   params: Promise<{ slug: string }>
-  searchParams: Promise<{ page?: string; sort?: string }>
 }
 
 const resolveTag = cache(async (slug: string) => {
@@ -32,7 +67,6 @@ const resolveTag = cache(async (slug: string) => {
   return result.data.tag
 })
 
-// 生成页面元数据
 export async function generateMetadata({ params }: TagDetailPageProps): Promise<Metadata> {
   const { slug } = await params
   const tag = await resolveTag(slug)
@@ -57,48 +91,78 @@ export async function generateMetadata({ params }: TagDetailPageProps): Promise<
   }
 }
 
-export default async function TagDetailPage({ params, searchParams }: TagDetailPageProps) {
+function buildPageNumbers(currentPage: number, totalPages: number) {
+  if (totalPages <= 1) return []
+
+  const pages: Array<number | "ellipsis"> = []
+  pages.push(1)
+
+  const start = Math.max(2, currentPage - 2)
+  const end = Math.min(totalPages - 1, currentPage + 2)
+
+  if (start > 2) {
+    pages.push("ellipsis")
+  }
+
+  for (let page = start; page <= end; page += 1) {
+    pages.push(page)
+  }
+
+  if (end < totalPages - 1) {
+    pages.push("ellipsis")
+  }
+
+  if (totalPages > 1) {
+    pages.push(totalPages)
+  }
+
+  return pages
+}
+
+function buildTagHref(slug: string, sort: "publishedAt" | "viewCount", page: number) {
+  const params = new URLSearchParams()
+  if (page > 1) {
+    params.set("page", String(page))
+  }
+  if (sort !== "publishedAt") {
+    params.set("sort", sort)
+  }
+  const query = params.toString()
+  return query ? `/tags/${slug}?${query}` : `/tags/${slug}`
+}
+
+export default async function TagDetailPage({ params }: TagDetailPageProps) {
   const { slug } = await params
-  const { page: pageParam, sort: sortParam } = await searchParams
-  const parsedPage = Number.parseInt(pageParam ?? "", 10)
-  const currentPage = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1
-  const orderBy = sortParam === "viewCount" ? "viewCount" : "publishedAt"
-  const order = "desc"
-  const sortValue: "publishedAt" | "viewCount" =
-    orderBy === "viewCount" ? "viewCount" : "publishedAt"
 
-  // 获取标签信息
   const tag = await resolveTag(slug)
-
   if (!tag) {
     notFound()
   }
 
-  // 获取该标签下的文章列表
   const postsResult = await getPosts({
-    page: currentPage,
+    page: 1,
     limit: 10,
     tag: slug,
     published: true,
-    orderBy,
-    order,
+    orderBy: "publishedAt",
+    order: "desc",
   })
 
-  let posts: PostListItem[] = []
-  const pagination = postsResult.success ? postsResult.pagination : null
-  let postsError: { code?: string; message: string } | null = null
+  let initialPosts: PostListItem[] = []
+  const initialPagination = postsResult.success ? postsResult.pagination : null
+  let initialError: { code?: string; message: string } | null = null
 
   if (postsResult.success && postsResult.data) {
-    posts = postsResult.data.map((post) => ({
+    initialPosts = postsResult.data.map((post) => ({
       ...post,
       publishedAt: post.publishedAt || post.createdAt,
       tags: post.tags.map((tag) => ({
         ...tag,
-        id: `${post.id}_${tag.slug}`, // 为标签生成复合ID
+        id: `${post.id}_${tag.slug}`,
       })),
     }))
   } else {
-    postsError = {
+    initialError = {
       code: postsResult.error?.code,
       message: postsResult.error?.message || "获取文章列表失败",
     }
@@ -108,14 +172,147 @@ export default async function TagDetailPage({ params, searchParams }: TagDetailP
     })
   }
 
-  const totalPages = Math.max(1, pagination?.totalPages || 1)
+  const fallback = (() => {
+    const currentPage = 1
+    const sortValue = "publishedAt" as const
+    const totalPages = Math.max(1, initialPagination?.totalPages || 1)
+    const pageNumbers = buildPageNumbers(currentPage, totalPages)
+
+    return (
+      <>
+        <div className="mb-6 flex items-center justify-end">
+          <div className="flex items-center gap-2">
+            <SortDesc className="text-muted-foreground h-4 w-4" aria-hidden />
+            <div className="border-border bg-background flex items-center gap-1 rounded-md border p-1">
+              {[
+                { value: "publishedAt" as const, label: "最新" },
+                { value: "viewCount" as const, label: "热门" },
+              ].map((item) => {
+                const isActive = item.value === sortValue
+                return (
+                  <Link
+                    key={item.value}
+                    href={buildTagHref(slug, item.value, 1)}
+                    prefetch={false}
+                    aria-current={isActive ? "page" : undefined}
+                    className={cn(
+                      buttonVariants({
+                        variant: isActive ? "secondary" : "ghost",
+                        size: "sm",
+                      }),
+                      "h-8"
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        {initialError ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+              <AlertCircle className="text-destructive mb-2 h-12 w-12" />
+              <h3 className="text-lg font-semibold">文章加载失败</h3>
+              <p className="text-muted-foreground">
+                {initialError.message}
+                {initialError.code ? `（错误代码：${initialError.code}）` : ""}
+              </p>
+              <Button asChild variant="outline" size="sm">
+                <Link href={buildTagHref(slug, sortValue, currentPage)} prefetch={false}>
+                  重新加载
+                </Link>
+              </Button>
+              <Button asChild size="sm" variant="ghost">
+                <Link href="/blog" prefetch={false}>
+                  浏览全部文章
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : initialPosts.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+              <AlertCircle className="text-muted-foreground mb-4 h-12 w-12" />
+              <h3 className="mb-2 text-lg font-semibold">暂无文章</h3>
+              <p className="text-muted-foreground mb-4">该标签下还没有发布的文章</p>
+              <Button asChild>
+                <Link href="/blog" prefetch={false}>
+                  浏览所有文章
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            <div className="mb-8 space-y-6">
+              {initialPosts.map((post, index) => (
+                <BlogPostCard key={post.id} post={post} index={index} />
+              ))}
+            </div>
+
+            {totalPages > 1 && initialPagination && (
+              <div className="mt-12">
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        href={
+                          initialPagination.hasPrev
+                            ? buildTagHref(slug, sortValue, Math.max(1, currentPage - 1))
+                            : "#"
+                        }
+                        aria-disabled={!initialPagination.hasPrev}
+                        className={
+                          !initialPagination.hasPrev ? "pointer-events-none opacity-50" : ""
+                        }
+                        tabIndex={initialPagination.hasPrev ? undefined : -1}
+                      />
+                    </PaginationItem>
+                    {pageNumbers.map((pageNum, pageIndex) =>
+                      pageNum === "ellipsis" ? (
+                        <PaginationItem key={`ellipsis-${pageIndex}`}>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      ) : (
+                        <PaginationItem key={pageNum}>
+                          <PaginationLink
+                            href={buildTagHref(slug, sortValue, pageNum)}
+                            isActive={pageNum === currentPage}
+                          >
+                            {pageNum}
+                          </PaginationLink>
+                        </PaginationItem>
+                      )
+                    )}
+                    <PaginationItem>
+                      <PaginationNext
+                        href={initialPagination.hasNext ? buildTagHref(slug, sortValue, 2) : "#"}
+                        aria-disabled={!initialPagination.hasNext}
+                        className={
+                          !initialPagination.hasNext ? "pointer-events-none opacity-50" : ""
+                        }
+                        tabIndex={initialPagination.hasNext ? undefined : -1}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            )}
+          </>
+        )}
+      </>
+    )
+  })()
 
   return (
     <div className="bg-background min-h-screen">
       <div className="container mx-auto px-4 py-12">
         {/* 返回按钮 */}
         <div className="mb-8">
-          <Link href="/tags">
+          <Link href="/tags" prefetch={false}>
             <Button variant="ghost" size="sm">
               <ArrowLeft className="mr-2 h-4 w-4" />
               返回标签云
@@ -162,54 +359,14 @@ export default async function TagDetailPage({ params, searchParams }: TagDetailP
           </Card>
         </div>
 
-        {/* 文章列表 */}
-        {postsError ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-              <AlertCircle className="text-destructive mb-2 h-12 w-12" />
-              <h3 className="text-lg font-semibold">文章加载失败</h3>
-              <p className="text-muted-foreground">
-                {postsError.message}
-                {postsError.code ? `（错误代码：${postsError.code}）` : ""}
-              </p>
-              <Button asChild variant="outline" size="sm">
-                <Link href={`/tags/${slug}?page=${currentPage}`}>重新加载</Link>
-              </Button>
-              <Button asChild size="sm" variant="ghost">
-                <Link href="/blog">浏览全部文章</Link>
-              </Button>
-            </CardContent>
-          </Card>
-        ) : posts.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-              <AlertCircle className="text-muted-foreground mb-4 h-12 w-12" />
-              <h3 className="mb-2 text-lg font-semibold">暂无文章</h3>
-              <p className="text-muted-foreground mb-4">该标签下还没有发布的文章</p>
-              <Link href="/blog">
-                <Button>浏览所有文章</Button>
-              </Link>
-            </CardContent>
-          </Card>
-        ) : (
-          <>
-            <div className="mb-6 flex items-center justify-end">
-              <TagPostsSort value={sortValue} />
-            </div>
-            <div className="mb-8 space-y-6">
-              {posts.map((post, index) => (
-                <BlogPostCard key={post.id} post={post} index={index} />
-              ))}
-            </div>
-
-            {/* 分页 */}
-            {totalPages > 1 && pagination && (
-              <div className="mt-12">
-                <ClientPagination pagination={pagination} />
-              </div>
-            )}
-          </>
-        )}
+        <Suspense fallback={fallback}>
+          <TagPostsClient
+            slug={slug}
+            initialPosts={initialPosts}
+            initialPagination={initialPagination}
+            initialError={initialError}
+          />
+        </Suspense>
       </div>
     </div>
   )

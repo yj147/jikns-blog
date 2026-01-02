@@ -4,33 +4,12 @@
  */
 
 import { test, expect, Page } from "@playwright/test"
-import { generateOAuthState } from "@/lib/auth/oauth-state"
 
 const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3999"
-process.env.OAUTH_STATE_SECRET = process.env.OAUTH_STATE_SECRET || "test-oauth-state-e2e"
 
-async function gotoCallbackWithState(page: Page, url: string) {
-  const stateToken = generateOAuthState()
+async function gotoCallback(page: Page, url: string) {
   const absoluteUrl = url.startsWith("http") ? url : `${SITE_ORIGIN}${url}`
-  const targetUrl = absoluteUrl.includes("state=")
-    ? absoluteUrl
-    : `${absoluteUrl}${absoluteUrl.includes("?") ? "&" : "?"}state=${stateToken.state}`
-
-  // 确保同源上下文后再注入 cookie，避免 Playwright 因缺失 url/path 拒绝
-  await page.goto(SITE_ORIGIN)
-
-  await page.context().addCookies([
-    {
-      name: "oauth_state",
-      value: `${stateToken.state}.${stateToken.issuedAt}.${stateToken.signature}`,
-      url: `${SITE_ORIGIN}/auth/callback`,
-      httpOnly: true,
-      secure: SITE_ORIGIN.startsWith("https"),
-      sameSite: "Lax",
-    },
-  ])
-
-  await page.goto(targetUrl)
+  await page.goto(absoluteUrl)
 }
 
 test.describe("用户资料页实时同步 E2E 测试", () => {
@@ -49,7 +28,7 @@ test.describe("用户资料页实时同步 E2E 测试", () => {
 
     // 模拟 GitHub OAuth 成功回调
     // 注意：这里需要配置测试环境的 mock GitHub OAuth 流程
-    await gotoCallbackWithState(page, "/auth/callback?code=test-auth-code")
+    await gotoCallback(page, "/auth/callback?code=test-auth-code")
 
     // 等待重定向到首页并完成会话
     await waitForAuthReady(page)
@@ -83,7 +62,7 @@ test.describe("用户资料页实时同步 E2E 测试", () => {
     // 首次登录
     await page.goto("/login")
     await page.getByText("使用 GitHub 登录").click()
-    await gotoCallbackWithState(page, "/auth/callback?code=test-auth-code-1")
+    await gotoCallback(page, "/auth/callback?code=test-auth-code-1")
     await waitForAuthReady(page)
 
     // 查看初始资料
@@ -103,7 +82,7 @@ test.describe("用户资料页实时同步 E2E 测试", () => {
     // 再次登录（模拟头像已在 GitHub 上更新）
     await page.getByText("登录").click()
     await page.getByText("使用 GitHub 登录").click()
-    await gotoCallbackWithState(page, "/auth/callback?code=test-auth-code-2&avatar_updated=true")
+    await gotoCallback(page, "/auth/callback?code=test-auth-code-2&avatar_updated=true")
     await waitForAuthReady(page)
 
     // 立即查看资料页

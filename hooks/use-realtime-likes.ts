@@ -9,7 +9,6 @@ import type {
   RealtimePostgresChangesPayload,
   SupabaseClient,
 } from "@supabase/supabase-js"
-import { createClient } from "@/lib/supabase"
 import {
   createRetryScheduler,
   ensureSessionReady,
@@ -181,6 +180,7 @@ export function useRealtimeLikes({
 
       if (!supabaseRef.current) {
         try {
+          const { createClient } = await import("@/lib/supabase")
           supabaseRef.current = createClient()
         } catch (err) {
           const normalized = err instanceof Error ? err : new Error("创建 Supabase 客户端失败")

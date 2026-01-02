@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import { ActivityCard } from "@/components/activity-card"
 import { useActivities } from "@/hooks/use-activities"
 import { Users } from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
 
 interface ProfileActivitiesTabProps {
   userId: string
@@ -70,19 +69,11 @@ export function ProfileActivitiesTab({ userId }: ProfileActivitiesTabProps) {
 
   return (
     <div className="space-y-6">
-      <AnimatePresence>
-        {activities.map((activity, index) => (
-          <motion.div
-            key={activity.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3, delay: index * 0.05 }}
-          >
-            <ActivityCard activity={activity} showActions={true} />
-          </motion.div>
-        ))}
-      </AnimatePresence>
+      {activities.map((activity) => (
+        <div key={activity.id} className="animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <ActivityCard activity={activity} showActions={true} />
+        </div>
+      ))}
 
       {hasMore && (
         <div className="py-6 text-center">

@@ -5,11 +5,50 @@
 
 "use client"
 
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useRef, useState } from "react"
 import { logger } from "@/lib/utils/logger"
 import { useRouter } from "next/navigation"
-import type { User as SupabaseUser, Session, SupabaseClient } from "@supabase/supabase-js"
+import type { Session, SupabaseClient } from "@supabase/supabase-js"
 import type { User as DatabaseUser } from "@/lib/generated/prisma"
+
+const AUTH_SESSION_SYNC_COOKIE = "auth_session_sync"
+const USER_PROFILE_CACHE_TTL_MS = 60_000
+
+function isSupabaseSessionCookieName(name?: string): boolean {
+  if (!name || !name.startsWith("sb-")) return false
+  return (
+    name.endsWith("-auth-token") ||
+    name.endsWith("-auth-token.0") ||
+    name.endsWith("-auth-token.1") ||
+    name.endsWith("-refresh-token")
+  )
+}
+
+function hasSupabaseSessionCookieClient(): boolean {
+  if (typeof document === "undefined") return false
+
+  const cookieHeader = document.cookie ?? ""
+  if (!cookieHeader) return false
+
+  return cookieHeader.split(";").some((pair) => {
+    const [rawName, rawValue] = pair.trim().split("=")
+    const name = rawName?.trim() ?? ""
+    const value = rawValue?.trim() ?? ""
+    if (!isSupabaseSessionCookieName(name)) return false
+    return value.length > 0
+  })
+}
+
+function consumeClientCookie(name: string): boolean {
+  if (typeof document === "undefined") return false
+
+  const cookies = document.cookie.split(";").map((cookie) => cookie.trim())
+  const exists = cookies.some((cookie) => cookie.startsWith(`${name}=`))
+  if (!exists) return false
+
+  document.cookie = `${name}=; Max-Age=0; path=/`
+  return true
+}
 
 interface AuthContextType {
   user: DatabaseUser | null
@@ -30,6 +69,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null)
   const router = useRouter()
+  const userProfileRequestRef = useRef<Promise<DatabaseUser | null> | null>(null)
+  const userProfileCacheRef = useRef<{ user: DatabaseUser | null; expiresAt: number } | null>(null)
 
   const debug = (message: string, payload?: Record<string, any>) => {
     if (typeof window === "undefined" || !(window as any).__AUTH_DEBUG__) return
@@ -40,6 +81,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let isMounted = true
 
     const initSupabase = async () => {
+      const currentPath = typeof window !== "undefined" ? window.location.pathname : ""
+      const protectedPaths = ["/profile", "/settings", "/admin", "/notifications"]
+      const shouldInitSupabase =
+        hasSupabaseSessionCookieClient() ||
+        document.cookie.includes(`${AUTH_SESSION_SYNC_COOKIE}=`) ||
+        protectedPaths.some((path) => currentPath.startsWith(path))
+
+      if (!shouldInitSupabase) {
+        if (isMounted) {
+          setLoading(false)
+        }
+        return
+      }
+
       try {
         const { createClient } = await import("@/lib/supabase")
         if (!isMounted) return
@@ -77,20 +132,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setSession(nextSession)
-
-      if (nextSession?.user) {
-        const dbUser = await fetchUserProfile(nextSession.user)
-        setUser(dbUser)
-      } else {
-        setUser(null)
-      }
+      await loadUserProfile(nextSession, { force: true })
     } catch (error) {
       logger.error("刷新用户资料失败", { module: "AuthProvider.refreshUser" }, error)
     }
   }
 
   // 从数据库获取用户完整信息
-  const fetchUserProfile = async (_supabaseUser?: SupabaseUser): Promise<DatabaseUser | null> => {
+  const fetchUserProfile = async (): Promise<DatabaseUser | null> => {
     try {
       const response = await fetch("/api/user", {
         method: "GET",
@@ -121,9 +170,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const loadUserProfile = async (
+    nextSession: Session | null,
+    options?: { force?: boolean }
+  ): Promise<DatabaseUser | null> => {
+    if (!nextSession?.user) {
+      userProfileRequestRef.current = null
+      userProfileCacheRef.current = null
+      setUser(null)
+      return null
+    }
+
+    const force = options?.force === true
+    if (!force) {
+      const cached = userProfileCacheRef.current
+      if (cached && cached.expiresAt > Date.now()) {
+        setUser(cached.user)
+        return cached.user
+      }
+    }
+
+    if (!userProfileRequestRef.current) {
+      userProfileRequestRef.current = fetchUserProfile().finally(() => {
+        userProfileRequestRef.current = null
+      })
+    }
+
+    const dbUser = await userProfileRequestRef.current
+    userProfileCacheRef.current = {
+      user: dbUser,
+      expiresAt: Date.now() + USER_PROFILE_CACHE_TTL_MS,
+    }
+    setUser(dbUser)
+    return dbUser
+  }
+
   // 从服务端 Cookie 同步 Supabase 会话到客户端
-  const syncSessionFromServer = async (): Promise<Session | null> => {
-    if (!supabase) return null
+  const syncSessionFromServer = async (client?: SupabaseClient): Promise<Session | null> => {
+    const activeClient = client ?? supabase
+    if (!activeClient) return null
     try {
       const response = await fetch("/api/auth/session", {
         method: "GET",
@@ -143,7 +228,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return null
       }
 
-      const { data: setResult, error: setError } = await supabase.auth.setSession({
+      const { data: setResult, error: setError } = await activeClient.auth.setSession({
         access_token: serverSession.access_token,
         refresh_token: serverSession.refresh_token,
       })
@@ -198,19 +283,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // 当 Supabase 客户端缺少本地会话（登录通过后端完成）时，尝试从服务端同步
         if (!activeSession) {
-          debug("getInitialSession: local session empty, syncing from server")
-          activeSession = await syncSessionFromServer()
+          const currentPath = window.location.pathname
+          const protectedPaths = ["/profile", "/settings", "/admin", "/notifications"]
+          const shouldSyncFromServer =
+            consumeClientCookie(AUTH_SESSION_SYNC_COOKIE) ||
+            protectedPaths.some((path) => currentPath.startsWith(path))
+
+          if (shouldSyncFromServer) {
+            debug("getInitialSession: local session empty, syncing from server", {
+              currentPath,
+            })
+            activeSession = await syncSessionFromServer()
+          } else {
+            debug("getInitialSession: local session empty, skip server sync", { currentPath })
+          }
         }
 
         setSession(activeSession)
 
-        const dbUser = await fetchUserProfile(activeSession?.user ?? undefined)
+        const dbUser = await loadUserProfile(activeSession)
         if (dbUser) {
           debug("getInitialSession: fetched user profile")
         } else {
           debug("getInitialSession: user profile null")
         }
-        setUser(dbUser)
       } catch (error) {
         logger.error("初始会话查询异常", { module: "AuthProvider.getInitialSession" }, error)
         debug("getInitialSession: exception", { error })
@@ -228,18 +324,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!isMounted) return
 
       setSession(nextSession)
-      if (nextSession?.user) {
-        debug("onAuthStateChange", { event })
-        const dbUser = await fetchUserProfile(nextSession.user)
-        setUser(dbUser)
-      } else {
-        setUser(null)
-      }
-      setLoading(false)
+      if (event === "INITIAL_SESSION") return
 
-      if (event === "SIGNED_IN" || event === "SIGNED_OUT") {
-        router.refresh()
+      if (event === "SIGNED_OUT" || !nextSession?.user) {
+        userProfileRequestRef.current = null
+        userProfileCacheRef.current = null
+        setUser(null)
+        setLoading(false)
+
+        if (event === "SIGNED_OUT") {
+          const currentPath = window.location.pathname
+          const protectedPaths = ["/profile", "/settings", "/admin"]
+
+          if (protectedPaths.some((path) => currentPath.startsWith(path))) {
+            router.push("/")
+          }
+
+          router.refresh()
+        }
+
+        return
       }
+
+      debug("onAuthStateChange", { event })
+
+      if (event === "SIGNED_IN" || event === "USER_UPDATED") {
+        await loadUserProfile(nextSession, event === "USER_UPDATED" ? { force: true } : undefined)
+      }
+
+      setLoading(false)
     })
     subscription = data.subscription
 
@@ -253,17 +366,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const handleServerLogin = async () => {
       setLoading(true)
       try {
-        let nextSession: Session | null = session
-
-        if (supabase) {
-          nextSession = (await syncSessionFromServer()) ?? nextSession
-          if (nextSession) {
-            setSession(nextSession)
-          }
+        let activeSupabase = supabase
+        if (!activeSupabase) {
+          const { createClient } = await import("@/lib/supabase")
+          activeSupabase = createClient()
+          setSupabase(activeSupabase)
         }
 
-        const dbUser = await fetchUserProfile(nextSession?.user ?? undefined)
-        setUser(dbUser)
+        const nextSession =
+          (await syncSessionFromServer(activeSupabase)) ??
+          (await activeSupabase.auth.getSession()).data.session
+        setSession(nextSession)
+        await loadUserProfile(nextSession)
       } finally {
         setLoading(false)
       }
@@ -271,7 +385,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     window.addEventListener("auth:server-login", handleServerLogin)
     return () => window.removeEventListener("auth:server-login", handleServerLogin)
-  }, [session, supabase])
+  }, [supabase])
 
   const signOut = async () => {
     try {
@@ -284,7 +398,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // 登出成功后重定向到首页
       router.push("/")
-      router.refresh()
     } catch (error) {
       logger.error("登出异常", { module: "AuthProvider.signOut" }, error)
       throw error

@@ -4,13 +4,42 @@
  */
 
 import { NextRequest, NextResponse } from "next/server"
-import { createRouteHandlerClient } from "@/lib/supabase"
+import { createRouteHandlerClient, createServiceRoleClient } from "@/lib/supabase"
 import { XSSProtection, RateLimiter } from "@/lib/security"
 import { z } from "zod"
 import { authLogger } from "@/lib/utils/logger"
 import { getSetting, type RegistrationToggle } from "@/lib/services/system-settings"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 import { getClientIp } from "@/lib/api/get-client-ip"
+
+function resolveAuthBaseUrl(request: NextRequest): string {
+  // Auth 回调必须落回 Supabase allowlist 允许的域名（见 app/api/auth/github/route.ts）。
+  const requestOrigin = new URL(request.url).origin
+
+  let origin = requestOrigin
+  if (process.env.VERCEL_ENV === "preview") {
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
+    if (siteUrl) {
+      try {
+        const siteOrigin = new URL(siteUrl).origin
+        if (
+          !siteOrigin.startsWith("http://localhost") &&
+          !siteOrigin.startsWith("http://127.0.0.1")
+        ) {
+          origin = siteOrigin
+        }
+      } catch {
+        origin = requestOrigin
+      }
+    }
+  }
+
+  const url = new URL(origin)
+  if (url.hostname.startsWith("www.")) {
+    url.hostname = url.hostname.replace(/^www\\./, "")
+  }
+  return url.origin
+}
 
 // 注册请求验证 Schema
 const RegisterSchema = z
@@ -96,6 +125,7 @@ async function handlePost(request: NextRequest) {
     }
 
     const { email, password, name, redirectTo } = validationResult.data
+    const baseUrl = resolveAuthBaseUrl(request)
 
     // 创建 Supabase 客户端
     const supabase = await createRouteHandlerClient()
@@ -109,8 +139,8 @@ async function handlePost(request: NextRequest) {
           name: name,
         },
         emailRedirectTo: redirectTo
-          ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?redirect_to=${encodeURIComponent(redirectTo)}`
-          : `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
+          ? `${baseUrl}/auth/callback?redirect_to=${encodeURIComponent(redirectTo)}`
+          : `${baseUrl}/auth/callback`,
       },
     })
 
@@ -166,6 +196,67 @@ async function handlePost(request: NextRequest) {
     }
     // 检查是否需要邮箱确认
     if (!data.session) {
+      if (process.env.VERCEL_ENV === "preview") {
+        try {
+          const adminClient = createServiceRoleClient()
+          const { error: confirmError } = await adminClient.auth.admin.updateUserById(
+            data.user.id,
+            {
+              email_confirm: true,
+            }
+          )
+          if (confirmError) {
+            throw confirmError
+          }
+
+          const signIn = await supabase.auth.signInWithPassword({
+            email: email.toLowerCase(),
+            password,
+          })
+
+          if (signIn.error || !signIn.data.session || !signIn.data.user) {
+            throw signIn.error ?? new Error("Supabase signIn missing session/user")
+          }
+
+          const { syncUserFromAuth } = await import("@/lib/auth")
+          const syncedUser = await syncUserFromAuth({
+            id: signIn.data.user.id,
+            email: signIn.data.user.email,
+            user_metadata: signIn.data.user.user_metadata || {},
+          })
+
+          authLogger.info("Preview 注册自动确认邮箱成功", {
+            userId: syncedUser.id,
+            email: syncedUser.email,
+          })
+
+          return NextResponse.json(
+            {
+              success: true,
+              message: "注册并登录成功！",
+              data: {
+                user: {
+                  id: syncedUser.id,
+                  email: syncedUser.email,
+                  name: syncedUser.name,
+                  role: syncedUser.role,
+                  status: syncedUser.status,
+                  emailConfirmed: true,
+                },
+                redirectTo: redirectTo || "/",
+              },
+            },
+            { status: 201 }
+          )
+        } catch (error) {
+          authLogger.warn("Preview 注册自动确认邮箱失败，回退为邮件确认流程", {
+            email,
+            userId: data.user.id,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
+
       return NextResponse.json(
         {
           success: true,

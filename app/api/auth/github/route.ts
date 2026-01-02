@@ -5,11 +5,67 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { createRouteHandlerClient } from "@/lib/supabase"
-import { validateRedirectUrl, generateOAuthState, setOAuthStateCookie } from "@/lib/auth"
+import { validateRedirectUrl } from "@/lib/auth"
 import { RateLimiter } from "@/lib/security"
 import { authLogger } from "@/lib/utils/logger"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 import { getClientIp } from "@/lib/api/get-client-ip"
+
+const AUTH_REDIRECT_COOKIE = "auth_redirect_to"
+
+function resolveAuthBaseUrl(request: NextRequest): string {
+  // OAuth callback 必须落回 Supabase allowlist 允许的域名。
+  // - Preview: 允许用 NEXT_PUBLIC_SITE_URL 固定回调域名（避免随机 deployment 域名不在 allowlist）
+  // - Production: 站点对外可能是 www 域，但 Supabase Site URL 常配根域（无 www），需归一化
+  const requestOrigin = new URL(request.url).origin
+
+  let origin = requestOrigin
+  if (process.env.VERCEL_ENV === "preview") {
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
+    if (siteUrl) {
+      try {
+        const siteOrigin = new URL(siteUrl).origin
+        if (
+          !siteOrigin.startsWith("http://localhost") &&
+          !siteOrigin.startsWith("http://127.0.0.1")
+        ) {
+          origin = siteOrigin
+        }
+      } catch {
+        origin = requestOrigin
+      }
+    }
+  }
+
+  const url = new URL(origin)
+  if (url.hostname.startsWith("www.")) {
+    url.hostname = url.hostname.replace(/^www\\./, "")
+  }
+  return url.origin
+}
+
+function setAuthRedirectCookie(
+  response: NextResponse,
+  request: NextRequest,
+  redirectTo: string
+): void {
+  if (!redirectTo || redirectTo === "/") return
+
+  const { hostname, protocol } = new URL(request.url)
+  const domain =
+    hostname === "jikns666.xyz" || hostname.endsWith(".jikns666.xyz") ? ".jikns666.xyz" : undefined
+
+  response.cookies.set({
+    name: AUTH_REDIRECT_COOKIE,
+    value: redirectTo,
+    httpOnly: true,
+    sameSite: "lax",
+    secure: protocol === "https:",
+    path: "/",
+    maxAge: 60 * 5,
+    ...(domain ? { domain } : {}),
+  })
+}
 
 async function handlePost(request: NextRequest) {
   const clientIP = getClientIp(request)
@@ -37,22 +93,16 @@ async function handlePost(request: NextRequest) {
 
     // 创建 Supabase 客户端
     const supabase = await createRouteHandlerClient()
-    // 生成 state 并构建 OAuth 重定向 URL
-    const stateToken = generateOAuthState()
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
-    const callbackUrl = `${baseUrl}/auth/callback`
-    const finalCallbackUrl =
-      safeRedirectTo !== "/"
-        ? `${callbackUrl}?redirect_to=${encodeURIComponent(safeRedirectTo)}`
-        : callbackUrl
+    // 构建 OAuth 重定向 URL
+    const baseUrl = resolveAuthBaseUrl(request)
+    const callbackUrl = new URL(`${baseUrl}/auth/callback`)
 
     // 使用 Supabase 启动 GitHub OAuth
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "github",
       options: {
-        redirectTo: finalCallbackUrl,
+        redirectTo: callbackUrl.toString(),
         scopes: "read:user user:email", // 请求基本用户信息和邮箱权限
-        queryParams: { state: stateToken.state },
       },
     })
 
@@ -91,7 +141,7 @@ async function handlePost(request: NextRequest) {
         { status: 500 }
       )
     }
-    // 返回OAuth重定向URL并写入 state Cookie
+    // 返回 OAuth 重定向 URL
     const response = NextResponse.json(
       {
         success: true,
@@ -103,7 +153,7 @@ async function handlePost(request: NextRequest) {
       },
       { status: 200 }
     )
-    setOAuthStateCookie(response, stateToken)
+    setAuthRedirectCookie(response, request, safeRedirectTo)
     return response
   } catch (error) {
     authLogger.error("GitHub OAuth API 异常", { clientIP }, error)
@@ -130,22 +180,16 @@ async function handleGet(request: NextRequest) {
 
     // 创建 Supabase 客户端
     const supabase = await createRouteHandlerClient()
-    // 生成 state 并构建回调URL
-    const stateToken = generateOAuthState()
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
-    const callbackUrl = `${baseUrl}/auth/callback`
-    const finalCallbackUrl =
-      safeRedirectTo !== "/"
-        ? `${callbackUrl}?redirect_to=${encodeURIComponent(safeRedirectTo)}`
-        : callbackUrl
+    // 构建回调 URL
+    const baseUrl = resolveAuthBaseUrl(request)
+    const callbackUrl = new URL(`${baseUrl}/auth/callback`)
 
     // 启动OAuth并直接重定向
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "github",
       options: {
-        redirectTo: finalCallbackUrl,
+        redirectTo: callbackUrl.toString(),
         scopes: "read:user user:email",
-        queryParams: { state: stateToken.state },
       },
     })
 
@@ -154,9 +198,9 @@ async function handleGet(request: NextRequest) {
       return NextResponse.redirect(new URL(`/login?error=oauth_start_failed`, request.url))
     }
 
-    // 直接重定向到GitHub OAuth页面并写入 state Cookie
+    // 直接重定向到 GitHub OAuth 页面
     const response = NextResponse.redirect(data.url)
-    setOAuthStateCookie(response, stateToken)
+    setAuthRedirectCookie(response, request, safeRedirectTo)
     return response
   } catch (error) {
     authLogger.error("GitHub OAuth 重定向异常", {}, error)

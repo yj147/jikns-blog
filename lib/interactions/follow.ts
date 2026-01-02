@@ -236,18 +236,30 @@ async function getFollowList({
     const hasMore = records.length > limit
     const edges = hasMore ? records.slice(0, limit) : records
     const targetIds = edges.map((edge) => edge.followerId)
-    const statusMap = targetIds.length ? await getFollowStatusBatch(userId, targetIds) : {}
+    const mutualIds =
+      targetIds.length > 0
+        ? new Set(
+            (
+              await prisma.follow.findMany({
+                where: {
+                  followerId: userId,
+                  followingId: { in: targetIds },
+                },
+                select: { followingId: true },
+              })
+            ).map((record) => record.followingId)
+          )
+        : new Set<string>()
 
     const items: FollowListItem[] = edges.map((edge) => {
       const follower = edge.follower
-      const status = statusMap[edge.followerId]
       return {
         id: follower.id,
         name: follower.name ?? null,
         avatarUrl: follower.avatarUrl ?? null,
         bio: follower.bio ?? null,
         status: follower.status as UserStatus,
-        isMutual: Boolean(status?.isMutual),
+        isMutual: mutualIds.has(edge.followerId),
         followedAt: edge.createdAt.toISOString(),
       }
     })
@@ -274,18 +286,30 @@ async function getFollowList({
   const hasMore = records.length > limit
   const edges = hasMore ? records.slice(0, limit) : records
   const targetIds = edges.map((edge) => edge.followingId)
-  const statusMap = targetIds.length ? await getFollowStatusBatch(userId, targetIds) : {}
+  const mutualIds =
+    targetIds.length > 0
+      ? new Set(
+          (
+            await prisma.follow.findMany({
+              where: {
+                followerId: { in: targetIds },
+                followingId: userId,
+              },
+              select: { followerId: true },
+            })
+          ).map((record) => record.followerId)
+        )
+      : new Set<string>()
 
   const items: FollowListItem[] = edges.map((edge) => {
     const following = edge.following
-    const status = statusMap[edge.followingId]
     return {
       id: following.id,
       name: following.name ?? null,
       avatarUrl: following.avatarUrl ?? null,
       bio: following.bio ?? null,
       status: following.status as UserStatus,
-      isMutual: Boolean(status?.isMutual),
+      isMutual: mutualIds.has(edge.followingId),
       followedAt: edge.createdAt.toISOString(),
     }
   })

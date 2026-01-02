@@ -2,17 +2,10 @@
 
 import Image from "next/image"
 import dynamic from "next/dynamic"
-import { memo, useMemo } from "react"
+import { memo, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { MoreHorizontal, Pin, Pencil, Trash2, Flag, Link2 } from "lucide-react"
+import { MoreHorizontal, Pin } from "lucide-react"
 import type { ActivityCardProps } from "@/types/activity"
 import { getOptimizedImageUrl } from "@/lib/images/optimizer"
 import Link from "next/link"
@@ -24,6 +17,16 @@ const ActivityCardActions = dynamic(
     loading: () => <div className="bg-muted/30 mt-2 h-8 w-full animate-pulse rounded" />,
   }
 )
+
+const ActivityMoreMenu = dynamic(() => import("./activity/activity-more-menu"), {
+  ssr: false,
+  loading: () => (
+    <Button variant="ghost" size="icon" className="text-muted-foreground -mr-2 h-8 w-8" disabled>
+      <MoreHorizontal className="h-4 w-4" />
+      <span className="sr-only">更多</span>
+    </Button>
+  ),
+})
 
 function formatRelativeTime(date: Date): string {
   const now = new Date()
@@ -56,7 +59,8 @@ function ActivityCardComponent(props: ActivityCardProps) {
 
   const canEdit = activity.canEdit ?? false
   const canDelete = activity.canDelete ?? false
-  const hasMenuItems = canEdit || canDelete
+  const [menuEnabled, setMenuEnabled] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const authorName = activity.author?.name || "匿名用户"
   const authorUsername = activity.author?.name
@@ -85,7 +89,7 @@ function ActivityCardComponent(props: ActivityCardProps) {
 
       <div className="flex gap-4">
         <div className="shrink-0">
-          <Link href={`/profile/${activity.author.id ?? "#"}`}>
+          <Link href={`/profile/${activity.author.id ?? "#"}`} prefetch={false}>
             <Avatar className="h-10 w-10 transition-opacity hover:opacity-90">
               <AvatarImage src={avatarUrl} alt={authorName} />
               <AvatarFallback>{authorName.charAt(0).toUpperCase()}</AvatarFallback>
@@ -98,6 +102,7 @@ function ActivityCardComponent(props: ActivityCardProps) {
             <div className="flex items-center gap-1 text-[15px]">
               <Link
                 href={`/profile/${activity.author.id ?? "#"}`}
+                prefetch={false}
                 className="text-foreground font-bold hover:underline"
               >
                 {authorName}
@@ -113,56 +118,37 @@ function ActivityCardComponent(props: ActivityCardProps) {
               )}
               {authorUsername && <span className="text-muted-foreground">{authorUsername}</span>}
               <span className="text-muted-foreground">·</span>
-              <span className="text-muted-foreground cursor-pointer hover:underline">
+              <span
+                className="text-muted-foreground cursor-pointer hover:underline"
+                suppressHydrationWarning
+              >
                 {timestampLabel}
               </span>
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="text-muted-foreground -mr-2 h-8 w-8">
-                  <MoreHorizontal className="h-4 w-4" />
-                  <span className="sr-only">更多</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem
-                  onClick={() => {
-                    navigator.clipboard.writeText(
-                      `${window.location.origin}/activity/${activity.id}`
-                    )
-                  }}
-                >
-                  <Link2 className="mr-2 h-4 w-4" />
-                  复制链接
-                </DropdownMenuItem>
-
-                {hasMenuItems && <DropdownMenuSeparator />}
-
-                {canEdit && onEdit && (
-                  <DropdownMenuItem onClick={() => onEdit(activity)}>
-                    <Pencil className="mr-2 h-4 w-4" />
-                    编辑
-                  </DropdownMenuItem>
-                )}
-
-                {canDelete && onDelete && (
-                  <DropdownMenuItem variant="destructive" onClick={() => onDelete(activity)}>
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    删除
-                  </DropdownMenuItem>
-                )}
-
-                {!hasMenuItems && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem>
-                      <Flag className="mr-2 h-4 w-4" />
-                      举报
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {menuEnabled ? (
+              <ActivityMoreMenu
+                activityId={activity.id}
+                open={menuOpen}
+                onOpenChange={setMenuOpen}
+                canEdit={canEdit}
+                canDelete={canDelete}
+                onEdit={onEdit ? () => onEdit(activity) : undefined}
+                onDelete={onDelete ? () => onDelete(activity) : undefined}
+              />
+            ) : (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground -mr-2 h-8 w-8"
+                onClick={() => {
+                  setMenuEnabled(true)
+                  setMenuOpen(true)
+                }}
+              >
+                <MoreHorizontal className="h-4 w-4" />
+                <span className="sr-only">更多</span>
+              </Button>
+            )}
           </div>
 
           <div className="text-foreground mt-1 whitespace-pre-wrap break-words text-[15px] leading-relaxed">

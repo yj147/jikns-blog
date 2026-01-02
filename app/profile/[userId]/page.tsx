@@ -361,7 +361,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                       />
                     ) : (
                       <Button asChild>
-                        <Link href="/login">
+                        <Link href="/login" prefetch={false}>
                           <UserPlus className="mr-2 h-4 w-4" />
                           登录后关注
                         </Link>

@@ -266,7 +266,7 @@ export function PostCard({
             </div>
             <span className="flex items-center gap-1">
               <Calendar className="h-4 w-4" />
-              {formatDate(post.createdAt)}
+              <span suppressHydrationWarning>{formatDate(post.createdAt)}</span>
             </span>
           </div>
         </CardContent>
@@ -303,7 +303,9 @@ export function PostCard({
                 </Badge>
               </div>
             </div>
-            <p className="text-muted-foreground truncate text-sm">{formatDate(post.updatedAt)}</p>
+            <p className="text-muted-foreground truncate text-sm" suppressHydrationWarning>
+              {formatDate(post.updatedAt)}
+            </p>
           </div>
 
           {(onEdit || onDelete || onTogglePin || onTogglePublish) && (
@@ -513,7 +515,7 @@ export function PostCard({
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1">
               <Calendar className="h-4 w-4" />
-              {formatDate(post.updatedAt)}
+              <span suppressHydrationWarning>{formatDate(post.updatedAt)}</span>
             </span>
           </div>
         </CardFooter>

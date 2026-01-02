@@ -1,12 +1,12 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { useCallback, useInsertionEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { FeedHeader } from "@/components/feed/feed-header"
 import { FeedList } from "@/components/feed/feed-list"
-import { ActivityEditDialog } from "@/components/activity/activity-edit-dialog"
-import { ActivityDeleteDialog } from "@/components/activity/activity-delete-dialog"
+import TrendingTopicsCard from "@/components/feed/trending-topics-card"
 import { useFeedState, type FeedTab } from "@/components/feed/hooks/use-feed-state"
 import { useAuth } from "@/hooks/use-auth"
 import type { ClientFeatureFlags } from "@/lib/config/client-feature-flags"
@@ -17,7 +17,7 @@ interface FeedPageClientProps {
   initialActivities: ActivityWithAuthor[]
   initialPagination: {
     limit: number
-    total: number
+    total: number | null
     hasMore: boolean
     nextCursor: string | null
   }
@@ -45,46 +45,16 @@ const SuggestedUsersCard = dynamic(() => import("@/components/feed/suggested-use
   ),
 })
 
-const TrendingTopicsCard = dynamic(() => import("@/components/feed/trending-topics-card"), {
-  ssr: true,
-  loading: () => (
-    <div className="space-y-4 p-4">
-      <div className="bg-muted h-4 w-1/3 animate-pulse rounded" />
-      <div className="space-y-2">
-        {[...Array(4)].map((_, i) => (
-          <div key={i} className="bg-muted h-8 animate-pulse rounded" />
-        ))}
-      </div>
-    </div>
-  ),
-})
+const ActivityEditDialog = dynamic(
+  () => import("@/components/activity/activity-edit-dialog").then((mod) => mod.ActivityEditDialog),
+  { ssr: false }
+)
 
-const PERFORMANCE_LABELS = {
-  feedStart: "feed-mount-start",
-  feedEnd: "feed-mount-end",
-  feedMeasure: "feed-mount-total",
-  activitiesBase: "activities-render",
-} as const
-
-const isPerformanceSupported = () =>
-  typeof window !== "undefined" &&
-  typeof window.performance !== "undefined" &&
-  typeof window.performance.mark === "function" &&
-  typeof window.performance.measure === "function"
-
-const markUserTiming = (label: string) => {
-  if (!isPerformanceSupported()) return
-  window.performance.mark(label)
-}
-
-const measureUserTiming = (measureName: string, startLabel: string, endLabel: string) => {
-  if (!isPerformanceSupported()) return
-  try {
-    window.performance.measure(measureName, startLabel, endLabel)
-  } catch (error) {
-    // ignore
-  }
-}
+const ActivityDeleteDialog = dynamic(
+  () =>
+    import("@/components/activity/activity-delete-dialog").then((mod) => mod.ActivityDeleteDialog),
+  { ssr: false }
+)
 
 const ActivityComposer = dynamic(
   () => import("@/components/activity/activity-form").then((mod) => mod.ActivityForm),
@@ -104,11 +74,15 @@ export default function FeedPageClient({
   initialActivities,
   initialPagination,
   initialTab,
-  highlightActivityId,
+  highlightActivityId: highlightActivityIdProp,
 }: FeedPageClientProps) {
-  const { user } = useAuth()
+  const { user, session } = useAuth()
   const canPinComposer = user?.role === "ADMIN"
-  const feedMeasurementRecordedRef = useRef(false)
+  const isAuthenticated = Boolean(session?.user)
+  const searchParams = useSearchParams()
+  const highlightActivityId = useMemo(() => {
+    return highlightActivityIdProp ?? searchParams.get("highlight") ?? undefined
+  }, [highlightActivityIdProp, searchParams])
 
   // 编辑/删除对话框状态
   const [editingActivity, setEditingActivity] = useState<ActivityWithAuthor | null>(null)
@@ -133,48 +107,68 @@ export default function FeedPageClient({
     refresh,
     resolvedOrderBy,
     error,
+    prependActivity,
   } = useFeedState({
     initialActivities,
     initialPagination,
     initialTab,
     highlightActivityId,
     user,
+    isAuthenticated,
   })
 
-  useInsertionEffect(() => {
-    if (feedMeasurementRecordedRef.current) return
-    markUserTiming(PERFORMANCE_LABELS.feedStart)
-  }, [])
+  const hasInitialSnapshot = activeTab === initialTab
+  const initialActivitiesForTab = hasInitialSnapshot ? initialActivities : []
+  const requestedHighlightRef = useRef<string | null>(null)
 
-  useLayoutEffect(() => {
-    if (feedMeasurementRecordedRef.current) return
-    markUserTiming(PERFORMANCE_LABELS.feedEnd)
-    measureUserTiming(
-      PERFORMANCE_LABELS.feedMeasure,
-      PERFORMANCE_LABELS.feedStart,
-      PERFORMANCE_LABELS.feedEnd
-    )
-    feedMeasurementRecordedRef.current = true
-  }, [])
+  useEffect(() => {
+    if (!highlightActivityId) {
+      requestedHighlightRef.current = null
+      return
+    }
 
-  const activitiesMeasureBase = useMemo(
-    () => `${PERFORMANCE_LABELS.activitiesBase}-${resolvedOrderBy}`,
-    [resolvedOrderBy]
-  )
-  const activitiesStartMark = `${activitiesMeasureBase}-start`
-  const activitiesEndMark = `${activitiesMeasureBase}-end`
-  const activitiesMeasureName = `${activitiesMeasureBase}-duration`
+    if (displayActivities.some((activity) => activity.id === highlightActivityId)) {
+      requestedHighlightRef.current = highlightActivityId
+      return
+    }
 
-  useInsertionEffect(() => {
-    if (!activities.length) return
-    markUserTiming(activitiesStartMark)
-  }, [activities.length, activitiesStartMark])
+    if (requestedHighlightRef.current === highlightActivityId) {
+      return
+    }
+    requestedHighlightRef.current = highlightActivityId
 
-  useLayoutEffect(() => {
-    if (!activities.length) return
-    markUserTiming(activitiesEndMark)
-    measureUserTiming(activitiesMeasureName, activitiesStartMark, activitiesEndMark)
-  }, [activities.length, activitiesEndMark, activitiesMeasureName, activitiesStartMark])
+    const controller = new AbortController()
+    void (async () => {
+      try {
+        const response = await fetch(`/api/activities/${highlightActivityId}`, {
+          method: "GET",
+          signal: controller.signal,
+          cache: "no-store",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        })
+
+        if (!response.ok) {
+          return
+        }
+
+        const payload = await response.json()
+        const activity = payload?.data as ActivityWithAuthor | undefined
+        if (!activity?.id) {
+          return
+        }
+
+        prependActivity(activity)
+      } catch (error) {
+        if ((error as Error).name === "AbortError") {
+          return
+        }
+      }
+    })()
+
+    return () => controller.abort()
+  }, [displayActivities, highlightActivityId, prependActivity])
 
   // 编辑/删除回调
   const handleEdit = useCallback((activity: ActivityWithAuthor) => {
@@ -238,6 +232,8 @@ export default function FeedPageClient({
 
           <FeedList
             activities={displayActivities}
+            initialActivities={initialActivitiesForTab}
+            hasInitialSnapshot={hasInitialSnapshot}
             activeTab={activeTab}
             highlightedActivityIds={highlightedActivityIds}
             realtimeActivityIds={realtimeActivityIds}
@@ -262,10 +258,12 @@ export default function FeedPageClient({
               <TrendingTopicsCard />
             </div>
 
-            <div className="bg-muted/30 overflow-hidden rounded-xl">
-              <h3 className="px-4 pb-2 pt-4 text-lg font-bold">推荐关注</h3>
-              <SuggestedUsersCard onFollowChange={refresh} />
-            </div>
+            {isAuthenticated ? (
+              <div className="bg-muted/30 overflow-hidden rounded-xl">
+                <h3 className="px-4 pb-2 pt-4 text-lg font-bold">推荐关注</h3>
+                <SuggestedUsersCard onFollowChange={refresh} />
+              </div>
+            ) : null}
 
             <div className="text-muted-foreground px-4 text-xs">
               <p>&copy; 2025 现代博客平台</p>
@@ -275,20 +273,24 @@ export default function FeedPageClient({
       </div>
 
       {/* 编辑对话框 */}
-      <ActivityEditDialog
-        activity={editingActivity}
-        open={!!editingActivity}
-        onOpenChange={(open) => !open && setEditingActivity(null)}
-        onSuccess={handleEditSuccess}
-      />
+      {editingActivity ? (
+        <ActivityEditDialog
+          activity={editingActivity}
+          open={true}
+          onOpenChange={(open) => !open && setEditingActivity(null)}
+          onSuccess={handleEditSuccess}
+        />
+      ) : null}
 
       {/* 删除确认对话框 */}
-      <ActivityDeleteDialog
-        activity={deletingActivity}
-        open={!!deletingActivity}
-        onOpenChange={(open) => !open && setDeletingActivity(null)}
-        onSuccess={handleDeleteSuccess}
-      />
+      {deletingActivity ? (
+        <ActivityDeleteDialog
+          activity={deletingActivity}
+          open={true}
+          onOpenChange={(open) => !open && setDeletingActivity(null)}
+          onSuccess={handleDeleteSuccess}
+        />
+      ) : null}
     </div>
   )
 }

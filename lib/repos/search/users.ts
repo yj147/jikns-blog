@@ -115,7 +115,7 @@ async function executeSearchUsersFallback(
     status: "ACTIVE" as const,
   }
 
-  const [users, total] = await Promise.all([
+  const [users, total] = await prisma.$transaction([
     prisma.user.findMany({
       where,
       take: limit,

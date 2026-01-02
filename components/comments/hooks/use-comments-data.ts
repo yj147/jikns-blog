@@ -8,6 +8,27 @@ import type { Comment, CommentTargetType } from "@/types/comments"
 
 const PAGE_SIZE = 10
 
+const EMPTY_PAGES: CommentsApiResponse[] = []
+
+type InflightCommentsKey = string
+
+type InflightCommentsMap = Map<InflightCommentsKey, Promise<CommentsApiResponse>>
+
+const inflightCommentsGetRequests: InflightCommentsMap = (() => {
+  const globalWithMap = globalThis as typeof globalThis & {
+    __jiknsCommentsInflightGetRequests?: InflightCommentsMap
+  }
+
+  if (!globalWithMap.__jiknsCommentsInflightGetRequests) {
+    globalWithMap.__jiknsCommentsInflightGetRequests = new Map<
+      InflightCommentsKey,
+      Promise<CommentsApiResponse>
+    >()
+  }
+
+  return globalWithMap.__jiknsCommentsInflightGetRequests
+})()
+
 export type CommentsApiResponse = {
   success: boolean
   data: Comment[]
@@ -33,7 +54,19 @@ export function useCommentsData({
   initialCount = 0,
   enabled = true,
 }: UseCommentsDataOptions) {
-  const fetcher = useCallback(async (url: string) => fetchGet(url), [])
+  const fetcher = useCallback(async (url: string) => {
+    const existing = inflightCommentsGetRequests.get(url)
+    if (existing) {
+      return existing
+    }
+
+    const promise = fetchGet<CommentsApiResponse>(url).finally(() => {
+      inflightCommentsGetRequests.delete(url)
+    })
+
+    inflightCommentsGetRequests.set(url, promise)
+    return promise
+  }, [])
 
   const getKey = useCallback(
     (pageIndex: number, previousPageData: CommentsApiResponse | null) => {
@@ -55,7 +88,7 @@ export function useCommentsData({
 
       return `/api/comments?${params.toString()}`
     },
-    [targetType, targetId]
+    [enabled, targetType, targetId]
   )
 
   const { data, error, isLoading, isValidating, size, setSize, mutate } =
@@ -64,7 +97,7 @@ export function useCommentsData({
       revalidateAll: false,
     })
 
-  const pages = data ?? []
+  const pages = data ?? EMPTY_PAGES
   const comments = useMemo(() => pages.flatMap((page) => page?.data ?? []), [pages])
 
   const totalComments = useMemo(() => {
@@ -92,12 +125,20 @@ export function useCommentsData({
 
   const resetList = useCallback(
     async (preserveSize = false) => {
-      if (!preserveSize) {
-        await setSize(1)
+      if (preserveSize) {
+        await mutate()
+        return
       }
+
+      // setSize() 会触发 revalidate；避免 setSize + mutate 导致重复请求
+      if (size !== 1) {
+        await setSize(1)
+        return
+      }
+
       await mutate()
     },
-    [mutate, setSize]
+    [mutate, setSize, size]
   )
 
   const loadMore = useCallback(() => {

@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button"
 import ArchiveSearch from "@/components/archive/archive-search"
 import { archiveMonthNames } from "@/lib/utils/archive"
 
-export const dynamic = "force-dynamic"
+export const revalidate = 60
 
 interface PageProps {
   params: {

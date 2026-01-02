@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useCallback, useState } from "react"
+import React, { useCallback, useRef, useState } from "react"
 
 import CommentItem from "@/components/comments/comment-item"
 import {
@@ -44,6 +44,8 @@ const CommentList: React.FC<CommentListProps> = ({
 }) => {
   const { user } = useAuth()
   const [replyingTo, setReplyingTo] = useState<string | null>(null)
+  const localCreateIdsRef = useRef<Set<string>>(new Set())
+  const localDeleteIdsRef = useRef<Set<string>>(new Set())
 
   const {
     comments,
@@ -65,7 +67,7 @@ const CommentList: React.FC<CommentListProps> = ({
     isShowing,
     resetAll: resetReplies,
     invalidate,
-    prependReply,
+    addReply,
     removeReply,
   } = useReplyManager(targetType, targetId)
 
@@ -108,17 +110,22 @@ const CommentList: React.FC<CommentListProps> = ({
 
   const bumpTotal = useCallback(
     (delta: number) => {
-      mutate((currentPages) => {
-        if (!currentPages) {
-          return currentPages
-        }
-        const safePages = currentPages.filter((page): page is CommentsApiResponse => Boolean(page))
-        return safePages.map((page, index) => {
-          if (index !== 0) return page
-          const next = bumpPaginationTotal(page, delta)
-          return next ?? page
-        })
-      }, false)
+      mutate(
+        (currentPages) => {
+          if (!currentPages) {
+            return currentPages
+          }
+          const safePages = currentPages.filter((page): page is CommentsApiResponse =>
+            Boolean(page)
+          )
+          return safePages.map((page, index) => {
+            if (index !== 0) return page
+            const next = bumpPaginationTotal(page, delta)
+            return next ?? page
+          })
+        },
+        { revalidate: false }
+      )
 
       // 同步动态列表的 commentsCount，避免计数回退
       if (targetType === "activity") {
@@ -128,62 +135,6 @@ const CommentList: React.FC<CommentListProps> = ({
     [mutate, bumpPaginationTotal, targetType, targetId]
   )
 
-  const handleDelete = useCallback(
-    async (commentId: string) => {
-      if (!user) {
-        toast({
-          title: "请先登录",
-          variant: "destructive",
-        })
-        return
-      }
-
-      try {
-        await fetchDelete(`/api/comments/${commentId}`)
-        await resetList()
-        resetReplies()
-        onCommentDeleted?.()
-        bumpTotal(-1)
-        toast({ title: "删除成功" })
-      } catch (err) {
-        const message = err instanceof FetchError ? err.message : "删除失败，请稍后重试"
-        toast({ title: message, variant: "destructive" })
-      }
-    },
-    [user, resetList, resetReplies, onCommentDeleted, bumpTotal]
-  )
-
-  const handleCommentAdded = useCallback(
-    async (context?: CommentFormSuccessContext) => {
-      const parentId = context?.parentId ?? null
-
-      if (parentId) {
-        await resetList(true)
-        invalidate(parentId)
-
-        if (isShowing(parentId)) {
-          await loadRepliesForComment(parentId)
-        }
-      } else {
-        await resetList()
-        resetReplies()
-      }
-
-      bumpTotal(1)
-      setReplyingTo(null)
-      onCommentAdded?.()
-    },
-    [
-      resetList,
-      invalidate,
-      isShowing,
-      loadRepliesForComment,
-      resetReplies,
-      onCommentAdded,
-      bumpTotal,
-    ]
-  )
-
   const handleReplyToggle = useCallback(
     (comment: Comment) => {
       toggleReplies(comment)
@@ -191,9 +142,20 @@ const CommentList: React.FC<CommentListProps> = ({
     [toggleReplies]
   )
 
-  const handleReplyClick = useCallback((commentId: string) => {
-    setReplyingTo((current) => (current === commentId ? null : commentId))
-  }, [])
+  const handleReplyClick = useCallback(
+    (commentId: string) => {
+      const isClosing = replyingTo === commentId
+      setReplyingTo(isClosing ? null : commentId)
+
+      if (isClosing) return
+      if (isShowing(commentId)) return
+
+      const parentComment = comments.find((comment) => comment.id === commentId)
+      if (!parentComment) return
+      toggleReplies(parentComment)
+    },
+    [comments, isShowing, replyingTo, toggleReplies]
+  )
 
   const handleReplyCancel = useCallback(() => {
     setReplyingTo(null)
@@ -211,88 +173,174 @@ const CommentList: React.FC<CommentListProps> = ({
 
   const addTopLevelComment = useCallback(
     (incoming: Comment) => {
-      mutate((currentPages) => {
-        if (!currentPages || currentPages.length === 0) {
-          return [
-            {
-              success: true,
-              data: [incoming],
-              meta: {
-                pagination: {
-                  total: 1,
-                  hasMore: false,
-                  nextCursor: null,
+      mutate(
+        (currentPages) => {
+          if (!currentPages || currentPages.length === 0) {
+            return [
+              {
+                success: true,
+                data: [incoming],
+                meta: {
+                  pagination: {
+                    total: 1,
+                    hasMore: false,
+                    nextCursor: null,
+                  },
                 },
               },
-            },
-          ]
-        }
-
-        const exists = currentPages.some((page) =>
-          page?.data?.some((comment) => comment.id === incoming.id)
-        )
-        if (exists) {
-          return currentPages
-        }
-
-        let updated = false
-        const nextPages = currentPages.map((page, index) => {
-          if (!page?.data) {
-            return page
+            ]
           }
-          if (index === 0) {
-            updated = true
-            return {
-              ...bumpPaginationTotal(page, 1),
-              success: true,
-              data: [incoming, ...(page.data ?? [])],
+
+          const exists = currentPages.some((page) =>
+            page?.data?.some((comment) => comment.id === incoming.id)
+          )
+          if (exists) {
+            return currentPages
+          }
+
+          let updated = false
+          const nextPages = currentPages.map((page, index) => {
+            if (!page?.data) {
+              return page
             }
-          }
-          return page
-        })
+            if (index === 0) {
+              updated = true
+              return {
+                ...bumpPaginationTotal(page, 1),
+                success: true,
+                data: [incoming, ...(page.data ?? [])],
+              }
+            }
+            return page
+          })
 
-        return updated ? nextPages : currentPages
-      }, false)
+          return updated ? nextPages : currentPages
+        },
+        { revalidate: false }
+      )
     },
     [mutate, bumpPaginationTotal]
   )
 
   const removeTopLevelComment = useCallback(
     (commentId: string) => {
-      mutate((currentPages) => {
-        if (!currentPages) {
-          return currentPages
-        }
-
-        let removed = false
-        const nextPages = currentPages.map((page) => {
-          if (!page?.data) {
-            return page
+      mutate(
+        (currentPages) => {
+          if (!currentPages) {
+            return currentPages
           }
-          const filtered = page.data.filter((comment) => comment.id !== commentId)
-          if (filtered.length !== page.data.length) {
-            removed = true
-            return {
-              ...bumpPaginationTotal(page, -1),
-              success: true,
-              data: filtered,
+
+          let removed = false
+          const nextPages = currentPages.map((page) => {
+            if (!page?.data) {
+              return page
             }
-          }
-          return page
-        })
+            const filtered = page.data.filter((comment) => comment.id !== commentId)
+            if (filtered.length !== page.data.length) {
+              removed = true
+              return {
+                ...bumpPaginationTotal(page, -1),
+                success: true,
+                data: filtered,
+              }
+            }
+            return page
+          })
 
-        return removed ? nextPages : currentPages
-      }, false)
+          return removed ? nextPages : currentPages
+        },
+        { revalidate: false }
+      )
     },
     [mutate, bumpPaginationTotal]
   )
 
+  const handleDelete = useCallback(
+    async (commentId: string) => {
+      if (!user) {
+        toast({
+          title: "请先登录",
+          variant: "destructive",
+        })
+        return
+      }
+
+      localDeleteIdsRef.current.add(commentId)
+
+      try {
+        await fetchDelete(`/api/comments/${commentId}`)
+
+        const isTopLevel = comments.some((comment) => comment.id === commentId)
+
+        if (isTopLevel) {
+          removeTopLevelComment(commentId)
+          resetReplies()
+
+          if (targetType === "activity") {
+            bumpActivityCounts(targetId, { comments: -1 })
+          }
+        } else {
+          removeReply(commentId)
+
+          if (targetType === "activity") {
+            bumpActivityCounts(targetId, { comments: -1 })
+          }
+
+          const parentId =
+            Object.entries(replyCache).find(([, state]) =>
+              state?.data?.some((reply) => reply.id === commentId)
+            )?.[0] ?? null
+
+          await resetList(true)
+
+          if (parentId) {
+            invalidate(parentId)
+            if (isShowing(parentId)) {
+              await loadRepliesForComment(parentId)
+            }
+          }
+        }
+
+        onCommentDeleted?.()
+        toast({ title: "删除成功" })
+
+        setTimeout(() => {
+          localDeleteIdsRef.current.delete(commentId)
+        }, 30000)
+      } catch (err) {
+        localDeleteIdsRef.current.delete(commentId)
+        const message = err instanceof FetchError ? err.message : "删除失败，请稍后重试"
+        toast({ title: message, variant: "destructive" })
+      }
+    },
+    [
+      user,
+      comments,
+      removeTopLevelComment,
+      resetReplies,
+      targetType,
+      targetId,
+      removeReply,
+      onCommentDeleted,
+      replyCache,
+      resetList,
+      invalidate,
+      isShowing,
+      loadRepliesForComment,
+    ]
+  )
+
   const handleRealtimeInsert = useCallback(
     (incoming: Comment) => {
+      if (localCreateIdsRef.current.has(incoming.id)) {
+        localCreateIdsRef.current.delete(incoming.id)
+        return
+      }
+
       const withAuthor = hydrateAuthor(incoming)
 
       if (incoming.parentId) {
-        prependReply(incoming.parentId, withAuthor)
+        addReply(incoming.parentId, withAuthor)
         bumpTotal(1)
         if (!withAuthor.author) {
           void loadRepliesForComment(incoming.parentId, { append: false })
@@ -300,38 +348,150 @@ const CommentList: React.FC<CommentListProps> = ({
         return
       }
 
+      if (comments.some((comment) => comment.id === withAuthor.id)) {
+        return
+      }
+
       addTopLevelComment(withAuthor)
-      bumpTotal(1)
-      if (!withAuthor.author) {
-        void mutate(undefined, true)
+      if (targetType === "activity") {
+        bumpActivityCounts(targetId, { comments: 1 })
       }
     },
-    [addTopLevelComment, prependReply, bumpTotal, hydrateAuthor, loadRepliesForComment, mutate]
+    [
+      hydrateAuthor,
+      addReply,
+      bumpTotal,
+      loadRepliesForComment,
+      comments,
+      addTopLevelComment,
+      targetType,
+      targetId,
+    ]
   )
 
   const handleRealtimeDelete = useCallback(
     (commentId: string) => {
-      removeTopLevelComment(commentId)
+      if (localDeleteIdsRef.current.has(commentId)) {
+        localDeleteIdsRef.current.delete(commentId)
+        return
+      }
+
+      const isTopLevel = comments.some((comment) => comment.id === commentId)
+
+      if (isTopLevel) {
+        removeTopLevelComment(commentId)
+        resetReplies()
+        if (targetType === "activity") {
+          bumpActivityCounts(targetId, { comments: -1 })
+        }
+        return
+      }
+
       removeReply(commentId)
       bumpTotal(-1)
     },
-    [removeReply, removeTopLevelComment, bumpTotal]
+    [comments, removeTopLevelComment, resetReplies, targetType, targetId, removeReply, bumpTotal]
   )
 
-  const { isSubscribed: isCommentsSubscribed, error: commentsRealtimeError } = useRealtimeComments({
+  useRealtimeComments({
     targetType,
     targetId,
-    enabled: Boolean(targetId),
+    enabled: Boolean(user && targetId),
     onInsert: handleRealtimeInsert,
     onDelete: handleRealtimeDelete,
   })
 
+  const handleCommentAdded = useCallback(
+    async (context?: CommentFormSuccessContext) => {
+      const parentId = context?.parentId ?? null
+      const incoming = context?.comment ? hydrateAuthor(context.comment) : null
+
+      if (incoming?.id) {
+        localCreateIdsRef.current.add(incoming.id)
+        setTimeout(() => {
+          localCreateIdsRef.current.delete(incoming.id)
+        }, 30000)
+      }
+
+      if (parentId && incoming) {
+        const parentComment = comments.find((comment) => comment.id === parentId)
+        const hadReplies = (parentComment?._count?.replies ?? 0) > 0
+        const hasLoadedReplies = (replyCache[parentId]?.data?.length ?? 0) > 0
+
+        addReply(parentId, incoming)
+        bumpTotal(1)
+
+        if (!isShowing(parentId)) {
+          if (parentComment) {
+            toggleReplies(parentComment)
+          }
+        }
+
+        if (parentComment && hadReplies && !hasLoadedReplies) {
+          void loadRepliesForComment(parentId, { append: true })
+        }
+
+        setReplyingTo(null)
+        onCommentAdded?.()
+        return
+      } else if (incoming) {
+        // 本端创建评论必须立即更新 UI；realtime 只负责同步给其他客户端，不能作为本端刷新来源。
+        addTopLevelComment(incoming)
+        resetReplies()
+
+        // 重新拉取第一页以刷新 cursor/total，且避免出现重复 GET。
+        void resetList().catch(() => {})
+      } else {
+        await resetList()
+        resetReplies()
+      }
+
+      if (targetType === "activity" && incoming && !parentId) {
+        bumpActivityCounts(targetId, { comments: 1 })
+      }
+
+      setReplyingTo(null)
+      onCommentAdded?.()
+    },
+    [
+      addTopLevelComment,
+      bumpTotal,
+      comments,
+      hydrateAuthor,
+      isShowing,
+      onCommentAdded,
+      addReply,
+      replyCache,
+      loadRepliesForComment,
+      resetList,
+      resetReplies,
+      toggleReplies,
+      targetId,
+      targetType,
+    ]
+  )
+
   if (isInitialLoading) {
     return (
       <div className={`space-y-4 ${className}`} data-testid="loading-skeleton">
-        <div className="animate-pulse">
-          <div className="mb-4 h-20 rounded bg-gray-200" />
-          <div className="mb-4 h-16 rounded bg-gray-200" />
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="flex animate-pulse items-start gap-3">
+              <div className="h-10 w-10 flex-shrink-0 rounded-full bg-gray-200" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="h-4 w-40 rounded bg-gray-200" />
+                <div className="h-4 w-full rounded bg-gray-200" />
+                <div className="h-4 w-5/6 rounded bg-gray-200" />
+              </div>
+            </div>
+          ))}
+
+          {showComposer && (
+            <div className="animate-pulse space-y-2 pt-4">
+              <div className="h-24 w-full rounded bg-gray-200" />
+              <div className="h-9 w-28 rounded bg-gray-200" />
+            </div>
+          )}
         </div>
       </div>
     )

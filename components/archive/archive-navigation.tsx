@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ChevronUp } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { motion, AnimatePresence } from "framer-motion"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 interface ArchiveNavigationProps {
@@ -34,14 +33,6 @@ export default function ArchiveNavigation({ years, currentYear }: ArchiveNavigat
     handleScroll()
     return () => window.removeEventListener("scroll", handleScroll)
   }, [isMobile])
-
-  useEffect(() => {
-    const toPrefetch = years.slice(0, Math.min(4, years.length))
-    toPrefetch.forEach((item) => {
-      const href = `/archive/${item.year}`
-      void router.prefetch(href)
-    })
-  }, [years, router])
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: "smooth" })
@@ -83,7 +74,7 @@ export default function ArchiveNavigation({ years, currentYear }: ArchiveNavigat
                   asChild={currentYear !== yearItem.year && currentYear !== undefined}
                 >
                   {currentYear !== yearItem.year && currentYear !== undefined ? (
-                    <Link href={`/archive/${yearItem.year}`}>
+                    <Link href={`/archive/${yearItem.year}`} prefetch={false}>
                       {yearItem.year} ({yearItem.count})
                     </Link>
                   ) : (
@@ -111,28 +102,20 @@ export default function ArchiveNavigation({ years, currentYear }: ArchiveNavigat
       </div>
 
       {/* 返回顶部按钮 */}
-      <AnimatePresence>
-        {!isMobile && showBackToTop && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            transition={{ duration: 0.2 }}
-            className="fixed bottom-8 right-8 z-50"
+      {!isMobile && showBackToTop && (
+        <div className="fixed bottom-8 right-8 z-50">
+          <Button
+            type="button"
+            size="icon"
+            variant="default"
+            className="rounded-full shadow-lg"
+            onClick={scrollToTop}
+            aria-label="返回顶部"
           >
-            <Button
-              type="button"
-              size="icon"
-              variant="default"
-              className="rounded-full shadow-lg"
-              onClick={scrollToTop}
-              aria-label="返回顶部"
-            >
-              <ChevronUp className="h-4 w-4" />
-            </Button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            <ChevronUp className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </>
   )
 }

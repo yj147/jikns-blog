@@ -49,6 +49,12 @@ type StatsRow = {
   p95: number | null
 }
 
+function getVercelEnvTag(): string | null {
+  const vercelEnv = process.env.VERCEL_ENV
+  if (!vercelEnv) return null
+  return `env:${vercelEnv}`
+}
+
 function resolveBucket(bucket?: MetricsBucket): MetricsBucket {
   if (bucket && BUCKET_SECONDS[bucket]) {
     return bucket
@@ -72,6 +78,11 @@ function buildWhereClause(type: MetricType | undefined, startTime: Date, endTime
     Prisma.sql`"timestamp" >= ${startTime}`,
     Prisma.sql`"timestamp" <= ${endTime}`,
   ]
+
+  const envTag = getVercelEnvTag()
+  if (envTag) {
+    clauses.push(Prisma.sql`"tags" @> ARRAY[${envTag}]::text[]`)
+  }
 
   if (type) {
     clauses.push(Prisma.sql`"type"::text = ${type}`)

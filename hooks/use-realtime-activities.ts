@@ -4,7 +4,6 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { createClient } from "@/lib/supabase"
 import { createRetryScheduler } from "@/lib/realtime/retry"
 import { ensureSessionReady, useNetworkStatus, useOnlineCallback } from "@/lib/realtime/connection"
 import type {
@@ -278,6 +277,7 @@ export function useRealtimeActivities({
 
       try {
         if (!supabaseRef.current) {
+          const { createClient } = await import("@/lib/supabase")
           supabaseRef.current = createClient()
         }
       } catch (err) {
