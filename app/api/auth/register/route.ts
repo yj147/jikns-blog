@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server"
-import { createRouteHandlerClient } from "@/lib/supabase"
+import { createRouteHandlerClient, createServiceRoleClient } from "@/lib/supabase"
 import { XSSProtection, RateLimiter } from "@/lib/security"
 import { z } from "zod"
 import { authLogger } from "@/lib/utils/logger"
@@ -188,6 +188,67 @@ async function handlePost(request: NextRequest) {
     }
     // 检查是否需要邮箱确认
     if (!data.session) {
+      if (process.env.VERCEL_ENV === "preview") {
+        try {
+          const adminClient = createServiceRoleClient()
+          const { error: confirmError } = await adminClient.auth.admin.updateUserById(
+            data.user.id,
+            {
+              email_confirm: true,
+            }
+          )
+          if (confirmError) {
+            throw confirmError
+          }
+
+          const signIn = await supabase.auth.signInWithPassword({
+            email: email.toLowerCase(),
+            password,
+          })
+
+          if (signIn.error || !signIn.data.session || !signIn.data.user) {
+            throw signIn.error ?? new Error("Supabase signIn missing session/user")
+          }
+
+          const { syncUserFromAuth } = await import("@/lib/auth")
+          const syncedUser = await syncUserFromAuth({
+            id: signIn.data.user.id,
+            email: signIn.data.user.email,
+            user_metadata: signIn.data.user.user_metadata || {},
+          })
+
+          authLogger.info("Preview 注册自动确认邮箱成功", {
+            userId: syncedUser.id,
+            email: syncedUser.email,
+          })
+
+          return NextResponse.json(
+            {
+              success: true,
+              message: "注册并登录成功！",
+              data: {
+                user: {
+                  id: syncedUser.id,
+                  email: syncedUser.email,
+                  name: syncedUser.name,
+                  role: syncedUser.role,
+                  status: syncedUser.status,
+                  emailConfirmed: true,
+                },
+                redirectTo: redirectTo || "/",
+              },
+            },
+            { status: 201 }
+          )
+        } catch (error) {
+          authLogger.warn("Preview 注册自动确认邮箱失败，回退为邮件确认流程", {
+            email,
+            userId: data.user.id,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
+
       return NextResponse.json(
         {
           success: true,
