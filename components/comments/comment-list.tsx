@@ -44,6 +44,7 @@ const CommentList: React.FC<CommentListProps> = ({
 }) => {
   const { user } = useAuth()
   const [replyingTo, setReplyingTo] = useState<string | null>(null)
+  const localCreateIdsRef = useRef<Set<string>>(new Set())
   const localDeleteIdsRef = useRef<Set<string>>(new Set())
 
   const {
@@ -66,7 +67,7 @@ const CommentList: React.FC<CommentListProps> = ({
     isShowing,
     resetAll: resetReplies,
     invalidate,
-    prependReply,
+    addReply,
     removeReply,
   } = useReplyManager(targetType, targetId)
 
@@ -141,9 +142,20 @@ const CommentList: React.FC<CommentListProps> = ({
     [toggleReplies]
   )
 
-  const handleReplyClick = useCallback((commentId: string) => {
-    setReplyingTo((current) => (current === commentId ? null : commentId))
-  }, [])
+  const handleReplyClick = useCallback(
+    (commentId: string) => {
+      const isClosing = replyingTo === commentId
+      setReplyingTo(isClosing ? null : commentId)
+
+      if (isClosing) return
+      if (isShowing(commentId)) return
+
+      const parentComment = comments.find((comment) => comment.id === commentId)
+      if (!parentComment) return
+      toggleReplies(parentComment)
+    },
+    [comments, isShowing, replyingTo, toggleReplies]
+  )
 
   const handleReplyCancel = useCallback(() => {
     setReplyingTo(null)
@@ -320,10 +332,15 @@ const CommentList: React.FC<CommentListProps> = ({
 
   const handleRealtimeInsert = useCallback(
     (incoming: Comment) => {
+      if (localCreateIdsRef.current.has(incoming.id)) {
+        localCreateIdsRef.current.delete(incoming.id)
+        return
+      }
+
       const withAuthor = hydrateAuthor(incoming)
 
       if (incoming.parentId) {
-        prependReply(incoming.parentId, withAuthor)
+        addReply(incoming.parentId, withAuthor)
         bumpTotal(1)
         if (!withAuthor.author) {
           void loadRepliesForComment(incoming.parentId, { append: false })
@@ -342,7 +359,7 @@ const CommentList: React.FC<CommentListProps> = ({
     },
     [
       hydrateAuthor,
-      prependReply,
+      addReply,
       bumpTotal,
       loadRepliesForComment,
       comments,
@@ -376,10 +393,10 @@ const CommentList: React.FC<CommentListProps> = ({
     [comments, removeTopLevelComment, resetReplies, targetType, targetId, removeReply, bumpTotal]
   )
 
-  const { isSubscribed: isCommentsSubscribed, error: commentsRealtimeError } = useRealtimeComments({
+  useRealtimeComments({
     targetType,
     targetId,
-    enabled: Boolean(targetId),
+    enabled: Boolean(user && targetId),
     onInsert: handleRealtimeInsert,
     onDelete: handleRealtimeDelete,
   })
@@ -388,17 +405,35 @@ const CommentList: React.FC<CommentListProps> = ({
     async (context?: CommentFormSuccessContext) => {
       const parentId = context?.parentId ?? null
       const incoming = context?.comment ? hydrateAuthor(context.comment) : null
-      const canUseRealtime = Boolean(isCommentsSubscribed && !commentsRealtimeError)
 
-      if (parentId) {
-        if (!canUseRealtime) {
-          await resetList(true)
-          invalidate(parentId)
+      if (incoming?.id) {
+        localCreateIdsRef.current.add(incoming.id)
+        setTimeout(() => {
+          localCreateIdsRef.current.delete(incoming.id)
+        }, 30000)
+      }
 
-          if (isShowing(parentId)) {
-            await loadRepliesForComment(parentId)
+      if (parentId && incoming) {
+        const parentComment = comments.find((comment) => comment.id === parentId)
+        const hadReplies = (parentComment?._count?.replies ?? 0) > 0
+        const hasLoadedReplies = (replyCache[parentId]?.data?.length ?? 0) > 0
+
+        addReply(parentId, incoming)
+        bumpTotal(1)
+
+        if (!isShowing(parentId)) {
+          if (parentComment) {
+            toggleReplies(parentComment)
           }
         }
+
+        if (parentComment && hadReplies && !hasLoadedReplies) {
+          void loadRepliesForComment(parentId, { append: true })
+        }
+
+        setReplyingTo(null)
+        onCommentAdded?.()
+        return
       } else if (incoming) {
         // 本端创建评论必须立即更新 UI；realtime 只负责同步给其他客户端，不能作为本端刷新来源。
         addTopLevelComment(incoming)
@@ -411,7 +446,7 @@ const CommentList: React.FC<CommentListProps> = ({
         resetReplies()
       }
 
-      if (targetType === "activity" && !canUseRealtime) {
+      if (targetType === "activity" && incoming && !parentId) {
         bumpActivityCounts(targetId, { comments: 1 })
       }
 
@@ -420,15 +455,17 @@ const CommentList: React.FC<CommentListProps> = ({
     },
     [
       addTopLevelComment,
-      commentsRealtimeError,
+      bumpTotal,
+      comments,
       hydrateAuthor,
-      invalidate,
-      isCommentsSubscribed,
       isShowing,
-      loadRepliesForComment,
       onCommentAdded,
+      addReply,
+      replyCache,
+      loadRepliesForComment,
       resetList,
       resetReplies,
+      toggleReplies,
       targetId,
       targetType,
     ]

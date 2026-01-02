@@ -8,6 +8,35 @@ import type { Comment, CommentTargetType } from "@/types/comments"
 
 const REPLY_PAGE_SIZE = 20
 
+function compareReplies(a: Comment, b: Comment) {
+  const aCreatedAt = a.createdAt as unknown
+  const bCreatedAt = b.createdAt as unknown
+
+  if (typeof aCreatedAt === "string" && typeof bCreatedAt === "string") {
+    if (aCreatedAt < bCreatedAt) return -1
+    if (aCreatedAt > bCreatedAt) return 1
+  } else {
+    const aTime = new Date(aCreatedAt as any).getTime()
+    const bTime = new Date(bCreatedAt as any).getTime()
+    if (Number.isFinite(aTime) && Number.isFinite(bTime) && aTime !== bTime) {
+      return aTime - bTime
+    }
+  }
+
+  return a.id.localeCompare(b.id)
+}
+
+function mergeReplies(existing: Comment[] | undefined, incoming: Comment[]) {
+  const byId = new Map<string, Comment>()
+  for (const reply of existing ?? []) {
+    byId.set(reply.id, reply)
+  }
+  for (const reply of incoming) {
+    byId.set(reply.id, reply)
+  }
+  return Array.from(byId.values()).sort(compareReplies)
+}
+
 export type ReplyState = {
   data: Comment[]
   loading: boolean
@@ -81,12 +110,12 @@ export function useReplyManager(targetType: CommentTargetType, targetId: string)
 
         setReplyCache((prev) => {
           const previous = prev[commentId]
-          const base = append ? (previous?.data ?? []) : []
+          const nextData = append ? mergeReplies(previous?.data, newReplies) : newReplies
 
           return {
             ...prev,
             [commentId]: {
-              data: append ? [...base, ...newReplies] : newReplies,
+              data: nextData,
               loading: false,
               error: null,
               hasMore: pagination?.hasMore ?? false,
@@ -115,30 +144,17 @@ export function useReplyManager(targetType: CommentTargetType, targetId: string)
 
   const isShowing = useCallback((commentId: string) => openReplies.has(commentId), [openReplies])
 
-  const toggleReplies = useCallback(
-    (comment: Comment) => {
-      let opened = false
-      setOpenReplies((prev) => {
-        const next = new Set(prev)
-        if (next.has(comment.id)) {
-          next.delete(comment.id)
-        } else {
-          next.add(comment.id)
-          opened = true
-        }
-        return next
-      })
-
-      if (opened) {
-        const state = cacheRef.current[comment.id]
-        const shouldFetch = !state || state.data.length === 0 || !!state.error
-        if (shouldFetch) {
-          void loadReplies(comment.id)
-        }
+  const toggleReplies = useCallback((comment: Comment) => {
+    setOpenReplies((prev) => {
+      const next = new Set(prev)
+      if (next.has(comment.id)) {
+        next.delete(comment.id)
+      } else {
+        next.add(comment.id)
       }
-    },
-    [loadReplies]
-  )
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     openReplies.forEach((commentId) => {
@@ -150,22 +166,20 @@ export function useReplyManager(targetType: CommentTargetType, targetId: string)
     })
   }, [openReplies, loadReplies])
 
-  const prependReply = useCallback((parentId: string, reply: Comment) => {
+  const addReply = useCallback((parentId: string, reply: Comment) => {
     setReplyCache((prev) => {
       const existing = prev[parentId]
-      if (existing?.data?.some((item) => item.id === reply.id)) {
-        return prev
-      }
+      const nextData = mergeReplies(existing?.data, [reply])
 
       const nextState: ReplyState = existing
         ? {
             ...existing,
-            data: [reply, ...existing.data],
+            data: nextData,
             loading: false,
             error: null,
           }
         : {
-            data: [reply],
+            data: nextData,
             loading: false,
             error: null,
             hasMore: false,
@@ -212,7 +226,7 @@ export function useReplyManager(targetType: CommentTargetType, targetId: string)
     isShowing,
     resetAll,
     invalidate,
-    prependReply,
+    addReply,
     removeReply,
   }
 }
