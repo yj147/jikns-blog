@@ -806,7 +806,7 @@ export async function getPosts(
   const cacheKey = serializePostsSearchParams(params)
   const cachedFn = unstable_cache(() => getPostsQuery(params), ["posts", "list", cacheKey], {
     tags: [POSTS_LIST_CACHE_TAG],
-    revalidate: 30,
+    revalidate: 120,
   })
 
   try {
