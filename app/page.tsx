@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Github, Twitter } from "lucide-react"
 
+export const revalidate = 120
+
 export default function HomePage() {
   return (
     <div className="bg-background min-h-screen">

@@ -30,9 +30,29 @@ import { logger } from "@/lib/utils/logger"
 import { TagPostsClient } from "./tag-posts-client"
 
 export const revalidate = 120
+const PREGENERATE_TAGS_LIMIT = 20
 
 export async function generateStaticParams(): Promise<Array<{ slug: string }>> {
-  return []
+  try {
+    const { prisma } = await import("@/lib/prisma")
+    const tags = await prisma.tag.findMany({
+      where: {
+        postsCount: {
+          gt: 0,
+        },
+      },
+      orderBy: { postsCount: "desc" },
+      take: PREGENERATE_TAGS_LIMIT,
+      select: { slug: true },
+    })
+    return tags.map((tag) => ({ slug: tag.slug }))
+  } catch (error) {
+    logger.warn("generateStaticParams failed for tags", {
+      limit: PREGENERATE_TAGS_LIMIT,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return []
+  }
 }
 
 interface TagDetailPageProps {
