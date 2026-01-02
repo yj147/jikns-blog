@@ -13,24 +13,8 @@ import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 import { getClientIp } from "@/lib/api/get-client-ip"
 
 function resolveAuthBaseUrl(request: NextRequest): string {
-  const requestOrigin = new URL(request.url).origin
-
-  if (process.env.VERCEL_ENV !== "preview") {
-    return requestOrigin
-  }
-
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
-  if (!siteUrl) return requestOrigin
-
-  try {
-    const siteOrigin = new URL(siteUrl).origin
-    if (siteOrigin.startsWith("http://localhost") || siteOrigin.startsWith("http://127.0.0.1")) {
-      return requestOrigin
-    }
-    return siteOrigin
-  } catch {
-    return requestOrigin
-  }
+  // Preview 注册/邮箱确认需要落回当前部署域名，否则会丢失 cookie 或跳到旧别名。
+  return new URL(request.url).origin
 }
 
 // 注册请求验证 Schema

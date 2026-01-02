@@ -12,24 +12,10 @@ import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 import { getClientIp } from "@/lib/api/get-client-ip"
 
 function resolveAuthBaseUrl(request: NextRequest): string {
-  const requestOrigin = new URL(request.url).origin
-
-  if (process.env.VERCEL_ENV !== "preview") {
-    return requestOrigin
-  }
-
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
-  if (!siteUrl) return requestOrigin
-
-  try {
-    const siteOrigin = new URL(siteUrl).origin
-    if (siteOrigin.startsWith("http://localhost") || siteOrigin.startsWith("http://127.0.0.1")) {
-      return requestOrigin
-    }
-    return siteOrigin
-  } catch {
-    return requestOrigin
-  }
+  // OAuth callback 必须回到「当前请求的 origin」：
+  // - Preview: 每次部署都有独立域名，否则会把用户带去旧 deployment/别名，导致 cookie 不生效
+  // - Production: 也遵循用户实际访问的域名（自定义域 or *.vercel.app）
+  return new URL(request.url).origin
 }
 
 async function handlePost(request: NextRequest) {
