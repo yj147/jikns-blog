@@ -84,12 +84,16 @@ async function handleGet(request: NextRequest) {
 
     // 推荐算法：
     // 1. 优先推荐活跃用户（有发布动态或博客的用户）
-    // 2. 按粉丝数量排序
+    // 2. 按近期活跃排序（避免 _count 排序的重查询成本）
     // 3. 排除已关注的用户和自己
+    const following = await prisma.follow.findMany({
+      where: { followerId: user.id },
+      select: { followingId: true },
+    })
+    const excludedUserIds = [user.id, ...following.map((row) => row.followingId)]
     const suggestedUsers = await prisma.user.findMany({
       where: {
-        id: { not: user.id },
-        followers: { none: { followerId: user.id } },
+        id: { notIn: excludedUserIds },
         status: "ACTIVE",
         OR: [
           { posts: { some: { published: true } } }, // 有发布的博客
@@ -113,8 +117,7 @@ async function handleGet(request: NextRequest) {
         },
       },
       orderBy: [
-        { followers: { _count: "desc" } }, // 按粉丝数排序
-        { activities: { _count: "desc" } }, // 按动态数排序
+        { lastLoginAt: "desc" }, // 近期活跃优先
         { createdAt: "desc" }, // 按注册时间排序
       ],
       take: limit,
