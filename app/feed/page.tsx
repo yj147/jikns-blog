@@ -12,11 +12,13 @@ type FeedTab = "latest" | "trending" | "following"
 export const revalidate = 30
 
 export default async function FeedPage() {
-  const featureFlags = await getFeatureFlags()
-
   // `/feed` 首屏不应该被认证链路阻塞：默认渲染最新流；关注流由客户端在已登录后按需加载。
   const initialTab: FeedTab = "latest"
-  const baseInitialResult = await fetchInitialActivities("latest")
+
+  const [featureFlags, baseInitialResult] = await Promise.all([
+    getFeatureFlags(),
+    fetchInitialActivities("latest"),
+  ])
 
   return (
     <Suspense fallback={<FeedLoading />}>
