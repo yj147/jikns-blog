@@ -3,8 +3,8 @@
  * 监控认证请求响应时间、权限验证性能和错误率统计
  */
 
-import { MetricType as PersistedMetricType } from "./generated/prisma"
-import type { Prisma } from "./generated/prisma"
+import { Prisma, MetricType as PersistedMetricType } from "./generated/prisma"
+import type { Prisma as PrismaTypes } from "./generated/prisma"
 import { logger } from "./utils/logger"
 
 function getVercelEnvTag(): string | null {
@@ -447,6 +447,14 @@ export class PerformanceMonitor {
     const startTime = new Date(now.getTime() - hours * 60 * 60 * 1000)
     const timeRange = { start: startTime, end: now }
 
+    if (typeof window === "undefined") {
+      try {
+        return await this.getPerformanceReportFromDb(timeRange)
+      } catch (error) {
+        logger.warn("数据库性能报告查询失败，回退到内存统计", { hours, error })
+      }
+    }
+
     const memoryMetrics = this.metrics.filter(
       (m) => m.timestamp >= timeRange.start && m.timestamp <= timeRange.end
     )
@@ -532,6 +540,193 @@ export class PerformanceMonitor {
     }
   }
 
+  private async getPerformanceReportFromDb(timeRange: { start: Date; end: Date }): Promise<{
+    summary: {
+      totalRequests: number
+      averageResponseTime: number
+      errorRate: number
+      slowRequestsRate: number
+    }
+    authMetrics: {
+      loginTime: PerformanceStats
+      sessionCheckTime: PerformanceStats
+      permissionCheckTime: PerformanceStats
+    }
+    topSlowEndpoints: Array<{
+      endpoint: string
+      averageTime: number
+      requestCount: number
+    }>
+    errorBreakdown: Array<{
+      type: string
+      count: number
+      percentage: number
+    }>
+  }> {
+    const { prisma } = await import("./prisma")
+    const envTag = getVercelEnvTag()
+
+    type StatsRow = {
+      count: bigint | number | null
+      avg: number | null
+      min: number | null
+      max: number | null
+      p50: number | null
+      p90: number | null
+      p95: number | null
+      p99: number | null
+    }
+
+    type CountRow = { count: bigint | number | null }
+
+    type EndpointRow = {
+      endpoint: string | null
+      average_time: number | null
+      request_count: bigint | number | null
+    }
+
+    const toNumber = (value: bigint | number | null | undefined) =>
+      typeof value === "bigint" ? Number(value) : Number(value ?? 0)
+
+    const buildWhere = (type: PersistedMetricType, extra: Prisma.Sql[] = []) => {
+      const clauses: Prisma.Sql[] = [
+        Prisma.sql`"timestamp" >= ${timeRange.start}`,
+        Prisma.sql`"timestamp" <= ${timeRange.end}`,
+        Prisma.sql`"type"::text = ${type}`,
+        ...extra,
+      ]
+
+      if (envTag) {
+        clauses.push(Prisma.sql`"tags" @> ARRAY[${envTag}]::text[]`)
+      }
+
+      return Prisma.join(clauses, " AND ")
+    }
+
+    const queryStats = async (type: PersistedMetricType): Promise<StatsRow> => {
+      const whereClause = buildWhere(type)
+      const rows = await prisma.$queryRaw<StatsRow[]>(Prisma.sql`
+        SELECT
+          COUNT(*) AS count,
+          COALESCE(AVG("value"), 0) AS avg,
+          COALESCE(MIN("value"), 0) AS min,
+          COALESCE(MAX("value"), 0) AS max,
+          COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY "value"), 0) AS p50,
+          COALESCE(percentile_cont(0.9) WITHIN GROUP (ORDER BY "value"), 0) AS p90,
+          COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY "value"), 0) AS p95,
+          COALESCE(percentile_cont(0.99) WITHIN GROUP (ORDER BY "value"), 0) AS p99
+        FROM "performance_metrics"
+        WHERE ${whereClause}
+      `)
+
+      return (
+        rows[0] ?? {
+          count: 0,
+          avg: 0,
+          min: 0,
+          max: 0,
+          p50: 0,
+          p90: 0,
+          p95: 0,
+          p99: 0,
+        }
+      )
+    }
+
+    const toStats = (metricType: MetricType, row: StatsRow): PerformanceStats => ({
+      metricType,
+      count: toNumber(row.count),
+      average: Number(row.avg ?? 0),
+      min: Number(row.min ?? 0),
+      max: Number(row.max ?? 0),
+      p50: Number(row.p50 ?? 0),
+      p90: Number(row.p90 ?? 0),
+      p95: Number(row.p95 ?? 0),
+      p99: Number(row.p99 ?? 0),
+      errorRate: 0,
+      timeRange,
+    })
+
+    const apiStatsRow = await queryStats(PersistedMetricType.api_response)
+    const totalRequests = toNumber(apiStatsRow.count)
+    const averageResponseTime = Number(apiStatsRow.avg ?? 0)
+
+    const slowWhereClause = buildWhere(PersistedMetricType.api_response, [
+      Prisma.sql`"value" > 1000`,
+    ])
+    const slowRows = await prisma.$queryRaw<CountRow[]>(Prisma.sql`
+      SELECT COUNT(*) AS count
+      FROM "performance_metrics"
+      WHERE ${slowWhereClause}
+    `)
+    const slowRequests = toNumber(slowRows[0]?.count)
+    const slowRequestsRate = totalRequests > 0 ? (slowRequests / totalRequests) * 100 : 0
+
+    const errorMetrics = this.metrics.filter(
+      (m) =>
+        m.type === MetricType.ERROR_RATE &&
+        m.timestamp >= timeRange.start &&
+        m.timestamp <= timeRange.end
+    )
+    const errorRate = totalRequests > 0 ? (errorMetrics.length / totalRequests) * 100 : 0
+
+    const errorTypeMap = new Map<string, number>()
+    errorMetrics.forEach((m) => {
+      const errorType = m.context?.additionalData?.type || "unknown"
+      errorTypeMap.set(errorType, (errorTypeMap.get(errorType) || 0) + 1)
+    })
+
+    const totalErrors = errorMetrics.length
+    const errorBreakdown = Array.from(errorTypeMap.entries())
+      .map(([type, count]) => ({
+        type,
+        count,
+        percentage: totalErrors > 0 ? (count / totalErrors) * 100 : 0,
+      }))
+      .sort((a, b) => b.count - a.count)
+
+    const endpointWhereClause = buildWhere(PersistedMetricType.api_response)
+    const endpointRows = await prisma.$queryRaw<EndpointRow[]>(Prisma.sql`
+      SELECT
+        COALESCE("context"->>'endpoint', 'unknown') AS endpoint,
+        COALESCE(AVG("value"), 0) AS average_time,
+        COUNT(*) AS request_count
+      FROM "performance_metrics"
+      WHERE ${endpointWhereClause}
+      GROUP BY COALESCE("context"->>'endpoint', 'unknown')
+      ORDER BY average_time DESC
+      LIMIT 10
+    `)
+
+    const topSlowEndpoints = endpointRows.map((row) => ({
+      endpoint: row.endpoint ?? "unknown",
+      averageTime: Number(row.average_time ?? 0),
+      requestCount: toNumber(row.request_count),
+    }))
+
+    const [loginStatsRow, sessionStatsRow, permissionStatsRow] = await Promise.all([
+      queryStats(PersistedMetricType.auth_login),
+      queryStats(PersistedMetricType.auth_session),
+      queryStats(PersistedMetricType.permission_check),
+    ])
+
+    return {
+      summary: {
+        totalRequests,
+        averageResponseTime,
+        errorRate,
+        slowRequestsRate,
+      },
+      authMetrics: {
+        loginTime: toStats(MetricType.AUTH_LOGIN_TIME, loginStatsRow),
+        sessionCheckTime: toStats(MetricType.AUTH_SESSION_CHECK_TIME, sessionStatsRow),
+        permissionCheckTime: toStats(MetricType.PERMISSION_CHECK_TIME, permissionStatsRow),
+      },
+      topSlowEndpoints,
+      errorBreakdown,
+    }
+  }
+
   private async fetchDbMetrics(timeRange: {
     start: Date
     end: Date
@@ -580,7 +775,7 @@ export class PerformanceMonitor {
   }
 
   private fromPersistedMetric(
-    metric: Prisma.PerformanceMetricGetPayload<{
+    metric: PrismaTypes.PerformanceMetricGetPayload<{
       select: {
         id: true
         type: true
@@ -699,7 +894,7 @@ export class PerformanceMonitor {
     try {
       const prepared = metrics
         .map((metric) => this.toPersistedMetric(metric))
-        .filter((metric): metric is Prisma.PerformanceMetricCreateManyInput => Boolean(metric))
+        .filter((metric): metric is PrismaTypes.PerformanceMetricCreateManyInput => Boolean(metric))
 
       if (!prepared.length) {
         return
@@ -718,7 +913,7 @@ export class PerformanceMonitor {
 
   private toPersistedMetric(
     metric: PerformanceMetric
-  ): Prisma.PerformanceMetricCreateManyInput | null {
+  ): PrismaTypes.PerformanceMetricCreateManyInput | null {
     const mappedType = this.mapMetricType(metric.type)
 
     if (!mappedType) {

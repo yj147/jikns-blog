@@ -203,9 +203,9 @@ async function assertCanLikeTarget(
 }
 
 /**
- * 保底同步 Activity.likesCount，避免依赖触发器
+ * 修复/对账 Activity.likesCount（低频使用）
  * - 真实计数以 likes 表为准
- * - 更新冗余列，方便列表页直接读取
+ * - 用于数据修复或批量操作后的对账，不要在读路径调用
  */
 async function syncActivityLikeCount(activityId: string | null | undefined): Promise<number> {
   if (!activityId) return 0
@@ -227,7 +227,7 @@ async function syncActivityLikeCount(activityId: string | null | undefined): Pro
  * 处理并发删除场景（P2025）
  *
  * 注：Prisma 单条 delete 操作本身是原子的，无需事务包裹
- * 删除后通过 syncActivityLikeCount 立即回填计数，避免依赖触发器
+ * 删除后读取最新计数用于响应返回
  *
  * @param requestId - 可选的请求ID，用于跨层日志关联
  */
@@ -294,7 +294,7 @@ async function doDelete(
  * 处理并发创建场景（P2002）和外键约束（P2003）
  *
  * 注：Prisma 单条 create 操作本身是原子的，无需事务包裹
- * 创建后通过 syncActivityLikeCount 立即回填计数，避免依赖触发器
+ * 创建后读取最新计数用于响应返回
  *
  * @param requestId - 可选的请求ID，用于跨层日志关联
  */
@@ -717,12 +717,15 @@ export async function getBatchLikeStatus(
  */
 export async function getLikeCount(targetType: LikeTargetType, targetId: string): Promise<number> {
   if (targetType === "activity") {
-    return syncActivityLikeCount(targetId)
-  } else {
-    // 文章侧无冗余计数，直接计算
-    const count = await prisma.like.count({ where: { postId: targetId } })
-    return count
+    const activity = await prisma.activity.findUnique({
+      where: { id: targetId },
+      select: { likesCount: true },
+    })
+    return activity?.likesCount ?? 0
   }
+
+  // 文章侧无冗余计数，直接计算
+  return prisma.like.count({ where: { postId: targetId } })
 }
 
 /**
