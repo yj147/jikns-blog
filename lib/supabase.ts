@@ -32,7 +32,12 @@ if (!supabaseUrl || !supabaseAnonKey) {
  * 用于 Client Components 中的认证操作
  */
 export function createClient() {
-  return createBrowserClient<Database>(supabaseUrl!, supabaseAnonKey!)
+  const domain =
+    typeof window !== "undefined" ? resolveCookieDomain(window.location.hostname) : undefined
+
+  return createBrowserClient<Database>(supabaseUrl!, supabaseAnonKey!, {
+    ...(domain ? { cookieOptions: { domain } } : {}),
+  })
 }
 
 // 导出别名以保持向后兼容
@@ -65,8 +70,11 @@ export async function createRouteHandlerClient() {
   const cookieStore = await cookies()
   const allowCookieWrite = isCookieStoreWritable(cookieStore)
 
+  const domain = await resolveCookieDomainFromHeaders()
+
   return createServerClient<Database>(supabaseUrl!, supabaseAnonKey!, {
     cookies: buildCookieMethods(cookieStore, allowCookieWrite),
+    ...(domain ? { cookieOptions: { domain } } : {}),
   })
 }
 
@@ -126,4 +134,25 @@ function buildCookieMethods(
   }
 
   return cookieMethods
+}
+
+function resolveCookieDomain(hostname?: string | null): string | undefined {
+  if (!hostname) return undefined
+  const normalized = hostname.toLowerCase()
+  if (normalized === "jikns666.xyz" || normalized.endsWith(".jikns666.xyz")) {
+    return ".jikns666.xyz"
+  }
+  return undefined
+}
+
+async function resolveCookieDomainFromHeaders(): Promise<string | undefined> {
+  try {
+    const { headers } = await import("next/headers")
+    const headerStore = await headers()
+    const rawHost = headerStore.get("host") || ""
+    const hostname = rawHost.split(":")[0] || ""
+    return resolveCookieDomain(hostname)
+  } catch {
+    return undefined
+  }
 }

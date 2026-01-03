@@ -44,6 +44,12 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   })
 
   try {
+    const hostname = request.nextUrl.hostname.toLowerCase()
+    const cookieDomain =
+      hostname === "jikns666.xyz" || hostname.endsWith(".jikns666.xyz")
+        ? ".jikns666.xyz"
+        : undefined
+
     // 创建 Supabase 客户端，配置 cookie 处理
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -64,10 +70,14 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
 
             // 设置响应对象的 cookies（返回给客户端）
             cookiesToSet.forEach(({ name, value, options }) =>
-              supabaseResponse.cookies.set(name, value, options)
+              supabaseResponse.cookies.set(name, value, {
+                ...options,
+                ...(cookieDomain ? { domain: cookieDomain } : {}),
+              })
             )
           },
         },
+        ...(cookieDomain ? { cookieOptions: { domain: cookieDomain } } : {}),
       }
     )
 
