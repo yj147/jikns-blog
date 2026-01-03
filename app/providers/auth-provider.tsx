@@ -15,6 +15,11 @@ import type { User as DatabaseUser } from "@/lib/generated/prisma"
 const AUTH_SESSION_SYNC_COOKIE = "auth_session_sync"
 const USER_PROFILE_CACHE_TTL_MS = 60_000
 
+type UserProfileResponseUser = DatabaseUser & {
+  avatarSignedUrl?: string | null
+  coverImageSignedUrl?: string | null
+}
+
 function isSupabaseSessionCookieName(name?: string): boolean {
   if (!name || !name.startsWith("sb-")) return false
   return (
@@ -142,7 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // 从数据库获取用户完整信息
   const fetchUserProfile = async (): Promise<DatabaseUser | null> => {
     try {
-      const data = await fetchJson<{ user: DatabaseUser | null }>("/api/user", {
+      const data = await fetchJson<{ user: UserProfileResponseUser | null }>("/api/user", {
         cache: "no-store",
       })
       const user = data?.user ?? null
