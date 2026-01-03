@@ -18,6 +18,7 @@ export interface UseMetricsTimeseriesParams {
   endTime?: Date
   bucket?: MetricsBucket
   compareWindow?: MetricsCompareWindow
+  scope?: "env" | "sha"
 }
 
 export function useMetricsTimeseries(params: UseMetricsTimeseriesParams) {
@@ -28,9 +29,17 @@ export function useMetricsTimeseries(params: UseMetricsTimeseriesParams) {
       endTime: params.endTime?.toISOString(),
       bucket: params.bucket,
       compareWindow: params.compareWindow,
+      scope: params.scope,
     }
     return JSON.stringify(normalized)
-  }, [params.bucket, params.compareWindow, params.endTime, params.startTime, params.type])
+  }, [
+    params.bucket,
+    params.compareWindow,
+    params.endTime,
+    params.scope,
+    params.startTime,
+    params.type,
+  ])
 
   const swrKey = serializedParams ? ["metrics-timeseries", serializedParams] : null
 

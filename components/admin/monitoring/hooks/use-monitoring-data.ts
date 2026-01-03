@@ -7,6 +7,7 @@ import { logger } from "@/lib/utils/logger"
 import type { MonitoringResponse, PerformanceReport } from "@/types/monitoring"
 
 export type MonitoringRange = "1h" | "24h" | "7d"
+export type MonitoringScope = "env" | "sha"
 
 export interface MonitoringData {
   healthStatus: "healthy" | "degraded" | "unhealthy"
@@ -82,7 +83,10 @@ const mapReportToMonitoringData = (
   topSlowEndpoints: report.topSlowEndpoints,
 })
 
-export const useMonitoringData = (range: MonitoringRange = "24h") => {
+export const useMonitoringData = (
+  range: MonitoringRange = "24h",
+  scope: MonitoringScope = "env"
+) => {
   const [data, setData] = React.useState<MonitoringData | null>(null)
   const [isLoading, setIsLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -97,7 +101,7 @@ export const useMonitoringData = (range: MonitoringRange = "24h") => {
     let uptimeSeconds: number | undefined
 
     try {
-      const url = `/api/admin/monitoring?range=${encodeURIComponent(range)}`
+      const url = `/api/admin/monitoring?range=${encodeURIComponent(range)}&scope=${encodeURIComponent(scope)}`
       const response = await fetchJson<ApiResponse<MonitoringResponse>>(url)
       apiTimestamp = response.meta?.timestamp
       const payload = response.data
@@ -122,7 +126,7 @@ export const useMonitoringData = (range: MonitoringRange = "24h") => {
     setLastUpdated(apiTimestamp ? new Date(apiTimestamp) : new Date())
     setError(null)
     setIsLoading(false)
-  }, [range])
+  }, [range, scope])
 
   React.useEffect(() => {
     loadMonitoringData()

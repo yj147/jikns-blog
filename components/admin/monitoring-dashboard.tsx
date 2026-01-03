@@ -53,6 +53,7 @@ import type { MetricsBucket } from "@/lib/dto/metrics.dto"
 import {
   useMonitoringData,
   METRICS_REFRESH_MS,
+  type MonitoringScope,
 } from "@/components/admin/monitoring/hooks/use-monitoring-data"
 import { StatCard } from "@/components/admin/monitoring/stat-card"
 import { HealthStatus } from "@/components/admin/monitoring/health-status"
@@ -64,6 +65,11 @@ const TIME_RANGE_OPTIONS: Array<{ label: string; value: TimeRangeValue; ms: numb
   { label: "近 1 小时", value: "1h", ms: 60 * 60 * 1000 },
   { label: "近 24 小时", value: "24h", ms: 24 * 60 * 60 * 1000 },
   { label: "近 7 天", value: "7d", ms: 7 * 24 * 60 * 60 * 1000 },
+]
+
+const SCOPE_OPTIONS: Array<{ label: string; value: MonitoringScope }> = [
+  { label: "环境汇总", value: "env" },
+  { label: "当前部署", value: "sha" },
 ]
 
 const BUCKET_OPTIONS: Array<{ label: string; value: MetricsBucket }> = [
@@ -210,6 +216,10 @@ export const MonitoringDashboard: React.FC = () => {
   } = useRealtimeDashboard()
 
   const [timeRange, setTimeRange] = React.useState<TimeRangeValue>("1h")
+  const [scope, setScope] = React.useState<MonitoringScope>(() => {
+    if (typeof window === "undefined") return "env"
+    return window.location.hostname.endsWith(".vercel.app") ? "sha" : "env"
+  })
   const [bucket, setBucket] = React.useState<MetricsBucket>("5m")
   const [compareEnabled, setCompareEnabled] = React.useState(false)
   const [now, setNow] = React.useState(() => new Date())
@@ -220,7 +230,7 @@ export const MonitoringDashboard: React.FC = () => {
     error: performanceError,
     lastUpdated: performanceLastUpdate,
     refresh: refreshPerformance,
-  } = useMonitoringData(timeRange)
+  } = useMonitoringData(timeRange, scope)
 
   React.useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), METRICS_REFRESH_MS)
@@ -257,6 +267,7 @@ export const MonitoringDashboard: React.FC = () => {
     endTime,
     bucket,
     compareWindow,
+    scope,
   })
 
   const refreshAll = React.useCallback(() => {
@@ -411,6 +422,26 @@ export const MonitoringDashboard: React.FC = () => {
                 </SelectTrigger>
                 <SelectContent>
                   {TIME_RANGE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-500 dark:text-gray-400">口径</span>
+              <Select
+                aria-label="选择口径"
+                value={scope}
+                onValueChange={(value) => setScope(value as MonitoringScope)}
+              >
+                <SelectTrigger aria-label="选择口径" className="w-28">
+                  <SelectValue placeholder="口径" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SCOPE_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>

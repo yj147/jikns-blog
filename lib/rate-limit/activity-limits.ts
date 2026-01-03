@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth"
 import { getRedisClient } from "@/lib/rate-limit/redis-client"
 import { performanceMonitor, MetricType } from "@/lib/performance-monitor"
 import { getClientIP } from "@/lib/utils/client-ip"
+import { logger } from "@/lib/utils/logger"
 
 /**
  * Activity 模块速率限制配置和实现
@@ -86,6 +87,7 @@ interface RateLimitSnapshot {
 
 const redisClient = getRedisClient()
 const rateLimitStore = new Map<string, RateLimitRecord>()
+let didWarnRedisRateLimitFallback = false
 
 const REDIS_RATE_LIMIT_SCRIPT = `
 local count = redis.call("INCR", KEYS[1])
@@ -125,24 +127,59 @@ async function applyRateLimit(
   const now = Date.now()
 
   if (redisClient) {
-    const raw = await redisClient.eval(REDIS_RATE_LIMIT_SCRIPT, [key], [String(config.windowMs)])
-    const result = Array.isArray(raw) ? raw : []
-    const parsedCount = Number(result[0] ?? 0)
-    const parsedTtlMs = Number(result[1] ?? config.windowMs)
+    try {
+      const raw = await redisClient.eval(REDIS_RATE_LIMIT_SCRIPT, [key], [String(config.windowMs)])
+      const result = Array.isArray(raw) ? raw : []
+      const parsedCount = Number(result[0] ?? 0)
+      const parsedTtlMs = Number(result[1] ?? config.windowMs)
 
-    const count = Number.isFinite(parsedCount) ? parsedCount : 0
-    const normalizedTtlMs =
-      Number.isFinite(parsedTtlMs) && parsedTtlMs > 0 ? parsedTtlMs : config.windowMs
+      const count = Number.isFinite(parsedCount) ? parsedCount : 0
+      const normalizedTtlMs =
+        Number.isFinite(parsedTtlMs) && parsedTtlMs > 0 ? parsedTtlMs : config.windowMs
 
-    const resetTime = new Date(now + normalizedTtlMs)
-    const remaining = Math.max(config.maxRequests - count, 0)
+      const resetTime = new Date(now + normalizedTtlMs)
+      const remaining = Math.max(config.maxRequests - count, 0)
 
-    return {
-      backend: "redis",
-      count,
-      remaining,
-      resetTime,
-      success: count <= config.maxRequests,
+      return {
+        backend: "redis",
+        count,
+        remaining,
+        resetTime,
+        success: count <= config.maxRequests,
+      }
+    } catch (error) {
+      if (!didWarnRedisRateLimitFallback) {
+        didWarnRedisRateLimitFallback = true
+        logger.warn("Redis 限流脚本执行失败，回退到多次调用/内存限流", {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+
+      try {
+        const count = await redisClient.incr(key)
+        if (count === 1) {
+          await redisClient.pexpire(key, config.windowMs)
+        }
+
+        let ttlMs = await redisClient.pttl(key)
+        if (ttlMs < 0) {
+          await redisClient.pexpire(key, config.windowMs)
+          ttlMs = config.windowMs
+        }
+
+        const resetTime = new Date(now + ttlMs)
+        const remaining = Math.max(config.maxRequests - count, 0)
+
+        return {
+          backend: "redis",
+          count,
+          remaining,
+          resetTime,
+          success: count <= config.maxRequests,
+        }
+      } catch {
+        // Redis 不可用则继续走内存回退（避免 5xx）
+      }
     }
   }
 

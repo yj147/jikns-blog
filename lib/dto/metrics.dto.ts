@@ -2,6 +2,7 @@ import { MetricType } from "@/lib/generated/prisma"
 
 export type MetricsBucket = "60s" | "5m" | "1h"
 export type MetricsCompareWindow = "1h" | "24h"
+export type MetricsScope = "env" | "sha"
 
 export interface MetricsQueryParams {
   type?: MetricType
@@ -9,6 +10,8 @@ export interface MetricsQueryParams {
   endTime?: Date
   bucket?: MetricsBucket
   compareWindow?: MetricsCompareWindow
+  scope?: MetricsScope
+  sha?: string
 }
 
 export interface MetricsTimeseriesDTO {

@@ -343,13 +343,87 @@ export async function createSignedUrls(
     })
   }
 
+  if (pendingByKey.size === 0) {
+    return resolved
+  }
+
+  type PendingResolvedEntry = { cacheKey: string; target: StorageTarget; indices: number[] }
+  const pendingEntries: PendingResolvedEntry[] = [...pendingByKey.entries()].map(
+    ([cacheKey, entry]) => ({
+      cacheKey,
+      target: entry.target,
+      indices: entry.indices,
+    })
+  )
+
+  const entriesByBucket = new Map<string, PendingResolvedEntry[]>()
+  for (const entry of pendingEntries) {
+    const list = entriesByBucket.get(entry.target.bucket)
+    if (list) {
+      list.push(entry)
+    } else {
+      entriesByBucket.set(entry.target.bucket, [entry])
+    }
+  }
+
   await Promise.all(
-    [...pendingByKey.values()].map(async ({ target, indices }) => {
-      const signed = await signSingle(target, expiresInSeconds)
-      if (!signed) return
-      indices.forEach((index) => {
-        resolved[index] = signed
-      })
+    [...entriesByBucket.entries()].map(async ([bucket, entries]) => {
+      if (entries.length === 0) return
+
+      // 单条签名优先走 signSingle，复用 persistent cache + in-flight 合并
+      if (entries.length === 1) {
+        const entry = entries[0]
+        const signed = await signSingle(entry.target, expiresInSeconds)
+        if (!signed) return
+        entry.indices.forEach((index) => {
+          resolved[index] = signed
+        })
+        return
+      }
+
+      try {
+        const supabase = getServiceClient()
+        const storage = supabase.storage.from(bucket)
+        const paths = entries.map((entry) => entry.target.path)
+
+        const { data, error } = await storage.createSignedUrls(paths, expiresInSeconds)
+        if (error || !data || data.length !== entries.length) {
+          throw new Error(error?.message || "批量签名 URL 生成失败")
+        }
+
+        const nowMs = Date.now()
+        for (let index = 0; index < data.length; index += 1) {
+          const signed = data[index]?.signedUrl
+          const entry = entries[index]
+
+          if (!signed) {
+            continue
+          }
+
+          entry.indices.forEach((inputIndex) => {
+            resolved[inputIndex] = signed
+          })
+
+          if (cacheTtlMs > 0) {
+            const expiresAt = getSignedUrlCacheExpiresAtMs(signed, nowMs, cacheTtlMs)
+            if (expiresAt > nowMs) {
+              pruneSignedUrlCache()
+              signedUrlCache.set(entry.cacheKey, { value: signed, expiresAt })
+            }
+          }
+        }
+      } catch {
+        // 批量接口不可用/异常时，回退为逐个签名（仍保持功能正确）
+        await Promise.all(
+          entries.map(async (entry) => {
+            const signed = await signSingle(entry.target, expiresInSeconds)
+            if (!signed) return
+            entry.indices.forEach((index) => {
+              resolved[index] = signed
+            })
+          })
+        )
+      }
     })
   )
 

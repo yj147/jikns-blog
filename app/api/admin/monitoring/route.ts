@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server"
+import { unstable_cache } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { validateApiPermissions } from "@/lib/permissions"
 import { createSuccessResponse, createErrorResponse, ErrorCode } from "@/lib/api/unified-response"
@@ -13,6 +14,7 @@ const MONITORING_CACHE_KEY = "admin:monitoring"
 const MONITORING_CACHE_TTL = 30000
 
 type MonitoringRange = "1h" | "24h" | "7d"
+type MonitoringScope = "env" | "sha"
 
 function resolveHours(request: NextRequest): number {
   const range = request.nextUrl.searchParams.get("range") as MonitoringRange | null
@@ -27,6 +29,19 @@ function resolveHours(request: NextRequest): number {
   }
 
   return 24
+}
+
+function resolveScope(request: NextRequest): MonitoringScope {
+  const raw = request.nextUrl.searchParams.get("scope")
+  if (raw === "sha" || raw === "deployment") {
+    return "sha"
+  }
+  return "env"
+}
+
+function normalizeShaTag(sha: string | null | undefined): string | null {
+  if (!sha) return null
+  return `sha:${sha.slice(0, 7)}`
 }
 
 async function handleGet(request: NextRequest) {
@@ -48,7 +63,15 @@ async function handleGet(request: NextRequest) {
 
   try {
     const hours = resolveHours(request)
-    const cacheKey = `${MONITORING_CACHE_KEY}:${hours}`
+    const scope = resolveScope(request)
+    const shaTag =
+      scope === "sha"
+        ? normalizeShaTag(
+            request.nextUrl.searchParams.get("sha") ?? process.env.VERCEL_GIT_COMMIT_SHA
+          )
+        : null
+    const requiredTags = shaTag ? [shaTag] : []
+    const cacheKey = `${MONITORING_CACHE_KEY}:${hours}:${scope}:${shaTag ?? "no-sha"}`
 
     const cached = getCached<MonitoringResponse>(cacheKey)
     if (cached) {
@@ -71,7 +94,12 @@ async function handleGet(request: NextRequest) {
       prisma.activity.count({ where: { deletedAt: null } }),
     ])
 
-    const performancePromise = performanceMonitor.getPerformanceReport(hours).catch((perfError) => {
+    const envKey = process.env.VERCEL_ENV ?? "local"
+    const performancePromise = unstable_cache(
+      () => performanceMonitor.getPerformanceReport(hours, { requiredTags }),
+      ["admin-monitoring-report", envKey, scope, String(hours), shaTag ?? "no-sha"],
+      { revalidate: 30 }
+    )().catch((perfError) => {
       logger.warn("获取性能报告失败，回退为仅计数", { requestId, error: perfError })
       return null
     })

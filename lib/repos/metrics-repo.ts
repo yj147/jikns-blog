@@ -55,6 +55,28 @@ function getVercelEnvTag(): string | null {
   return `env:${vercelEnv}`
 }
 
+function normalizeShaTag(sha: string | null | undefined): string | null {
+  if (!sha) return null
+  return `sha:${sha.slice(0, 7)}`
+}
+
+function resolveRequiredTags(params: MetricsQueryParams): string[] {
+  const tags: string[] = []
+  const envTag = getVercelEnvTag()
+  if (envTag) {
+    tags.push(envTag)
+  }
+
+  if (params.scope === "sha") {
+    const shaTag = normalizeShaTag(params.sha ?? process.env.VERCEL_GIT_COMMIT_SHA)
+    if (shaTag) {
+      tags.push(shaTag)
+    }
+  }
+
+  return Array.from(new Set(tags))
+}
+
 function resolveBucket(bucket?: MetricsBucket): MetricsBucket {
   if (bucket && BUCKET_SECONDS[bucket]) {
     return bucket
@@ -73,19 +95,19 @@ function resolveRange(params: MetricsQueryParams): { startTime: Date; endTime: D
   return { startTime, endTime }
 }
 
-function buildWhereClause(type: MetricType | undefined, startTime: Date, endTime: Date) {
+function buildWhereClause(params: MetricsQueryParams, startTime: Date, endTime: Date) {
   const clauses: Prisma.Sql[] = [
     Prisma.sql`"timestamp" >= ${startTime}`,
     Prisma.sql`"timestamp" <= ${endTime}`,
   ]
 
-  const envTag = getVercelEnvTag()
-  if (envTag) {
-    clauses.push(Prisma.sql`"tags" @> ARRAY[${envTag}]::text[]`)
+  const requiredTags = resolveRequiredTags(params)
+  for (const tag of requiredTags) {
+    clauses.push(Prisma.sql`"tags" @> ARRAY[${tag}]::text[]`)
   }
 
-  if (type) {
-    clauses.push(Prisma.sql`"type"::text = ${type}`)
+  if (params.type) {
+    clauses.push(Prisma.sql`"type"::text = ${params.type}`)
   }
 
   return Prisma.join(clauses, " AND ")
@@ -122,7 +144,7 @@ async function queryRange(
   range: { startTime: Date; endTime: Date },
   bucketSeconds: number
 ): Promise<Pick<MetricsQueryResultDTO, "timeseries" | "stats" | "range">> {
-  const whereClause = buildWhereClause(params.type, range.startTime, range.endTime)
+  const whereClause = buildWhereClause(params, range.startTime, range.endTime)
 
   const timeseriesPromise = prisma.$queryRaw<TimeseriesRow[]>(Prisma.sql`
     SELECT

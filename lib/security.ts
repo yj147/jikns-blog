@@ -523,8 +523,8 @@ export class RateLimiter {
     limit: number = 100,
     windowMs: number = 15 * 60 * 1000 // 15 分钟
   ): boolean {
-    // E2E/开发环境跳过速率限制
-    if (process.env.DISABLE_RATE_LIMIT === "1" || process.env.NODE_ENV !== "production") {
+    // E2E/开发环境跳过速率限制（测试环境需要可验证的限流行为）
+    if (process.env.DISABLE_RATE_LIMIT === "1" || process.env.NODE_ENV === "development") {
       return true
     }
 
@@ -584,9 +584,9 @@ export class RateLimiter {
    * 重置所有速率限制记录（开发环境使用）
    */
   static resetAllRateLimits(): void {
-    if (process.env.NODE_ENV === "development") {
+    if (process.env.NODE_ENV !== "production") {
       this.requests.clear()
-      logger.debug("开发环境已重置所有速率限制记录")
+      logger.debug("非生产环境已重置所有速率限制记录")
     }
   }
 

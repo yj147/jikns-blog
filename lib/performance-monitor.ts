@@ -19,6 +19,11 @@ function getVercelGitShaTag(): string | null {
   return `sha:${sha.slice(0, 7)}`
 }
 
+function normalizeRequiredTags(tags: Array<string | null | undefined>): string[] {
+  const normalized = tags.map((tag) => tag?.trim()).filter((tag): tag is string => Boolean(tag))
+  return Array.from(new Set(normalized))
+}
+
 function enrichMetric(metric: PerformanceMetric): PerformanceMetric {
   const envTag = getVercelEnvTag()
   const shaTag = getVercelGitShaTag()
@@ -420,7 +425,10 @@ export class PerformanceMonitor {
   /**
    * 获取性能报告
    */
-  async getPerformanceReport(hours: number = 24): Promise<{
+  async getPerformanceReport(
+    hours: number = 24,
+    options?: { requiredTags?: string[] }
+  ): Promise<{
     summary: {
       totalRequests: number
       averageResponseTime: number
@@ -446,23 +454,30 @@ export class PerformanceMonitor {
     const now = new Date()
     const startTime = new Date(now.getTime() - hours * 60 * 60 * 1000)
     const timeRange = { start: startTime, end: now }
+    const requiredTags = normalizeRequiredTags([
+      getVercelEnvTag(),
+      ...(options?.requiredTags ?? []),
+    ])
+
+    const hasAllRequiredTags = (metric: PerformanceMetric) =>
+      requiredTags.length === 0 || requiredTags.every((tag) => metric.tags?.includes(tag))
 
     if (typeof window === "undefined") {
       try {
-        return await this.getPerformanceReportFromDb(timeRange)
+        return await this.getPerformanceReportFromDb(timeRange, requiredTags)
       } catch (error) {
         logger.warn("数据库性能报告查询失败，回退到内存统计", { hours, error })
       }
     }
 
     const memoryMetrics = this.metrics.filter(
-      (m) => m.timestamp >= timeRange.start && m.timestamp <= timeRange.end
+      (m) => m.timestamp >= timeRange.start && m.timestamp <= timeRange.end && hasAllRequiredTags(m)
     )
 
     let mergedMetrics = memoryMetrics
 
     try {
-      const dbMetrics = await this.fetchDbMetrics(timeRange)
+      const dbMetrics = await this.fetchDbMetrics(timeRange, requiredTags)
       mergedMetrics = this.mergeMetrics(dbMetrics, memoryMetrics)
     } catch (error) {
       logger.warn("查询历史性能指标失败，使用内存数据回退", { hours, error })
@@ -540,7 +555,10 @@ export class PerformanceMonitor {
     }
   }
 
-  private async getPerformanceReportFromDb(timeRange: { start: Date; end: Date }): Promise<{
+  private async getPerformanceReportFromDb(
+    timeRange: { start: Date; end: Date },
+    requiredTags: string[]
+  ): Promise<{
     summary: {
       totalRequests: number
       averageResponseTime: number
@@ -564,7 +582,6 @@ export class PerformanceMonitor {
     }>
   }> {
     const { prisma } = await import("./prisma")
-    const envTag = getVercelEnvTag()
 
     type StatsRow = {
       count: bigint | number | null
@@ -596,8 +613,8 @@ export class PerformanceMonitor {
         ...extra,
       ]
 
-      if (envTag) {
-        clauses.push(Prisma.sql`"tags" @> ARRAY[${envTag}]::text[]`)
+      for (const tag of requiredTags) {
+        clauses.push(Prisma.sql`"tags" @> ARRAY[${tag}]::text[]`)
       }
 
       return Prisma.join(clauses, " AND ")
@@ -662,12 +679,17 @@ export class PerformanceMonitor {
     const slowRequests = toNumber(slowRows[0]?.count)
     const slowRequestsRate = totalRequests > 0 ? (slowRequests / totalRequests) * 100 : 0
 
-    const errorMetrics = this.metrics.filter(
-      (m) =>
-        m.type === MetricType.ERROR_RATE &&
-        m.timestamp >= timeRange.start &&
-        m.timestamp <= timeRange.end
-    )
+    const errorMetrics = this.metrics.filter((m) => {
+      if (
+        m.type !== MetricType.ERROR_RATE ||
+        m.timestamp < timeRange.start ||
+        m.timestamp > timeRange.end
+      ) {
+        return false
+      }
+
+      return requiredTags.length === 0 || requiredTags.every((tag) => m.tags?.includes(tag))
+    })
     const errorRate = totalRequests > 0 ? (errorMetrics.length / totalRequests) * 100 : 0
 
     const errorTypeMap = new Map<string, number>()
@@ -727,16 +749,19 @@ export class PerformanceMonitor {
     }
   }
 
-  private async fetchDbMetrics(timeRange: {
-    start: Date
-    end: Date
-  }): Promise<PerformanceMetric[]> {
+  private async fetchDbMetrics(
+    timeRange: {
+      start: Date
+      end: Date
+    },
+    requiredTags: string[] = []
+  ): Promise<PerformanceMetric[]> {
     if (typeof window !== "undefined") {
       return []
     }
 
     const { prisma } = await import("./prisma")
-    const envTag = getVercelEnvTag()
+    const normalizedTags = normalizeRequiredTags([getVercelEnvTag(), ...requiredTags])
 
     const rows = await prisma.performanceMetric.findMany({
       where: {
@@ -754,7 +779,7 @@ export class PerformanceMonitor {
           gte: timeRange.start,
           lte: timeRange.end,
         },
-        ...(envTag ? { tags: { has: envTag } } : {}),
+        ...(normalizedTags.length ? { tags: { hasEvery: normalizedTags } } : {}),
       },
       select: {
         id: true,

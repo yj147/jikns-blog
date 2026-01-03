@@ -91,7 +91,8 @@ export async function notify(
     },
   })
 
-  await broadcastNotification(recipientId, notification)
+  // Realtime broadcast 属于“尽力而为”，不应阻塞交互类接口（点赞/评论/关注等）。
+  void broadcastNotification(recipientId, notification)
 
   enqueueEmailNotification(recipientId, type, data, notification.id).catch((err) => {
     notificationsLogger.warn("Email queue failed", { err, notificationId: notification.id })

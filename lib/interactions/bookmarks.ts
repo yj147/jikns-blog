@@ -8,7 +8,7 @@ import { Prisma } from "@/lib/generated/prisma"
 import { logger } from "@/lib/utils/logger"
 import { PERFORMANCE_THRESHOLDS } from "@/lib/config/performance"
 import { InteractionTargetNotFoundError } from "./errors"
-import { createSignedUrlIfNeeded, signAvatarUrl } from "@/lib/storage/signed-url"
+import { createSignedUrls } from "@/lib/storage/signed-url"
 
 // 导出类型定义
 export type BookmarkStatus = {
@@ -330,33 +330,24 @@ export async function toggleBookmark(
  * @returns 收藏状态和总数
  */
 export async function getBookmarkStatus(postId: string, userId?: string): Promise<BookmarkStatus> {
-  // 获取收藏总数
-  const count = await prisma.bookmark.count({
-    where: { postId },
-  })
-
-  // 匿名用户返回未收藏状态
   if (!userId) {
-    return {
-      isBookmarked: false,
-      count,
-    }
+    const count = await prisma.bookmark.count({ where: { postId } })
+    return { isBookmarked: false, count }
   }
 
-  // 登录用户查询实际收藏状态
-  const bookmark = await prisma.bookmark.findUnique({
-    where: {
-      userId_postId: {
-        userId,
-        postId,
+  const [count, bookmark] = await Promise.all([
+    prisma.bookmark.count({ where: { postId } }),
+    prisma.bookmark.findUnique({
+      where: {
+        userId_postId: {
+          userId,
+          postId,
+        },
       },
-    },
-  })
+    }),
+  ])
 
-  return {
-    isBookmarked: !!bookmark,
-    count,
-  }
+  return { isBookmarked: Boolean(bookmark), count }
 }
 
 /**
@@ -422,12 +413,12 @@ export async function getUserBookmarks(
   const items = hasMore ? bookmarks.slice(0, limit) : bookmarks
 
   const [signedCovers, signedAvatars] = await Promise.all([
-    Promise.all(
-      items.map((bookmark) =>
-        createSignedUrlIfNeeded(bookmark.post.coverImage, POST_IMAGE_SIGN_EXPIRES_IN, "post-images")
-      )
+    createSignedUrls(
+      items.map((bookmark) => bookmark.post.coverImage ?? ""),
+      POST_IMAGE_SIGN_EXPIRES_IN,
+      "post-images"
     ),
-    Promise.all(items.map((bookmark) => signAvatarUrl(bookmark.post.author.avatarUrl))),
+    createSignedUrls(items.map((bookmark) => bookmark.post.author.avatarUrl ?? "")),
   ])
 
   // 转换为返回格式
@@ -439,11 +430,15 @@ export async function getUserBookmarks(
       slug: bookmark.post.slug,
       title: bookmark.post.title,
       coverImage: bookmark.post.coverImage,
-      signedCoverImage: signedCovers[index],
+      signedCoverImage: bookmark.post.coverImage
+        ? signedCovers[index] || bookmark.post.coverImage
+        : null,
       author: {
         id: bookmark.post.author.id,
         name: bookmark.post.author.name,
-        avatarUrl: signedAvatars[index] ?? bookmark.post.author.avatarUrl,
+        avatarUrl: bookmark.post.author.avatarUrl
+          ? signedAvatars[index] || bookmark.post.author.avatarUrl
+          : null,
       },
     },
   }))

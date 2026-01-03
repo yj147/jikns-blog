@@ -57,7 +57,7 @@ async function handleGet(request: NextRequest) {
       const status = await getBookmarkStatus(postId, user?.id)
 
       // 记录审计日志（与 likes 路由保持一致：包含 IP/UA）
-      await auditLogger.logEvent({
+      auditLogger.logEventAsync({
         action: "BOOKMARK_STATUS",
         resource: `post:${postId}`,
         details: {
@@ -122,7 +122,7 @@ async function handleGet(request: NextRequest) {
       const result = await getUserBookmarks(userId, { cursor, limit })
 
       // 记录审计日志
-      await auditLogger.logEvent({
+      auditLogger.logEventAsync({
         action: "BOOKMARK_LIST",
         resource: `user:${userId}`,
         details: {
@@ -206,7 +206,7 @@ async function handlePost(request: NextRequest) {
     const status = await toggleBookmark(postId, user.id, requestId)
 
     // 记录审计日志
-    await auditLogger.logEvent({
+    auditLogger.logEventAsync({
       action: "BOOKMARK_TOGGLE",
       resource: `post:${postId}`,
       details: { action: status.isBookmarked ? "bookmark" : "unbookmark", newCount: status.count },
@@ -276,7 +276,7 @@ async function handlePut(request: NextRequest) {
     const status = await ensureBookmarked(postId, user.id, requestId)
 
     // 记录审计日志
-    await auditLogger.logEvent({
+    auditLogger.logEventAsync({
       action: "BOOKMARK_ENSURE",
       resource: `post:${postId}`,
       details: {
@@ -354,7 +354,7 @@ async function handleDelete(request: NextRequest) {
     const status = await ensureUnbookmarked(postId, user.id, requestId)
 
     // 记录审计日志
-    await auditLogger.logEvent({
+    auditLogger.logEventAsync({
       action: "BOOKMARK_ENSURE",
       resource: `post:${postId}`,
       details: {

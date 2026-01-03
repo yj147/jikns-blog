@@ -13,6 +13,8 @@ const MetricsQuerySchema = z.object({
   endTime: z.string().datetime().optional(),
   bucket: z.enum(["60s", "5m", "1h"]).optional(),
   compareWindow: z.enum(["1h", "24h"]).optional(),
+  scope: z.enum(["env", "sha"]).optional(),
+  sha: z.string().optional(),
 })
 
 export async function GET(request: NextRequest) {
@@ -67,6 +69,8 @@ export async function GET(request: NextRequest) {
       endTime,
       bucket: parsed.data.bucket as MetricsBucket | undefined,
       compareWindow: parsed.data.compareWindow as MetricsCompareWindow | undefined,
+      scope: parsed.data.scope,
+      sha: parsed.data.sha,
     })
 
     return createSuccessResponse(result, {

@@ -31,7 +31,10 @@ vi.mock("@/lib/auth/session", () => ({
   generateRequestId: vi.fn(() => "test-request-id"),
 }))
 vi.mock("@/lib/audit-log", () => ({
-  auditLogger: { logEvent: vi.fn() },
+  auditLogger: {
+    logEvent: vi.fn().mockResolvedValue(undefined),
+    logEventAsync: vi.fn(),
+  },
   getClientIP: vi.fn(() => "127.0.0.1"),
   getClientUserAgent: vi.fn(() => "test-agent"),
 }))
@@ -113,7 +116,7 @@ describe("Bookmarks API Route", () => {
         count: 5,
       })
       expect(mockedInteractions.getBookmarkStatus).toHaveBeenCalledWith("post-1", "user-1")
-      expect(mockedAudit.auditLogger.logEvent).toHaveBeenCalledWith(
+      expect(mockedAudit.auditLogger.logEventAsync).toHaveBeenCalledWith(
         expect.objectContaining({
           action: "BOOKMARK_STATUS",
           resource: "post:post-1",
@@ -309,7 +312,7 @@ describe("Bookmarks API Route", () => {
         "user-1",
         "test-request-id"
       )
-      expect(mockedAudit.auditLogger.logEvent).toHaveBeenCalledWith(
+      expect(mockedAudit.auditLogger.logEventAsync).toHaveBeenCalledWith(
         expect.objectContaining({
           action: "BOOKMARK_TOGGLE",
           resource: "post:post-1",
