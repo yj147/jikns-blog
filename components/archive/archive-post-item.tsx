@@ -2,7 +2,7 @@
 
 import { memo } from "react"
 import { ArchivePost } from "@/lib/actions/archive"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { Calendar } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -34,7 +34,6 @@ function ArchivePostItemComponent({ post }: ArchivePostItemProps) {
         <div className="min-w-0 flex-1">
           <Link
             href={`/blog/${post.slug}`}
-            prefetch={false}
             className={cn("hover:text-primary font-medium transition-colors", "line-clamp-1")}
           >
             {post.title}
@@ -51,7 +50,6 @@ function ArchivePostItemComponent({ post }: ArchivePostItemProps) {
                 <Link
                   key={postTag.tag.id}
                   href={`/tags/${postTag.tag.slug}`}
-                  prefetch={false}
                   className="bg-secondary hover:bg-secondary/80 rounded px-1.5 py-0.5 text-xs transition-colors"
                 >
                   {postTag.tag.name}

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, type ComponentProps } from "react"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard,
@@ -81,7 +81,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             <Link
               key={item.href}
               href={item.href}
-              prefetch={false}
               onClick={() => onNavigate?.()}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",

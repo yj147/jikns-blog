@@ -7,6 +7,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState } from "react"
 import { logger } from "@/lib/utils/logger"
+import { FetchError, fetchJson } from "@/lib/api/fetch-json"
 import { useRouter } from "next/navigation"
 import type { Session, SupabaseClient } from "@supabase/supabase-js"
 import type { User as DatabaseUser } from "@/lib/generated/prisma"
@@ -141,30 +142,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // 从数据库获取用户完整信息
   const fetchUserProfile = async (): Promise<DatabaseUser | null> => {
     try {
-      const response = await fetch("/api/user", {
-        method: "GET",
-        credentials: "include",
+      const data = await fetchJson<{ user: DatabaseUser | null }>("/api/user", {
         cache: "no-store",
-        headers: {
-          "Content-Type": "application/json",
-        },
       })
+      const user = data?.user ?? null
 
-      if (response.ok) {
-        const { user: data } = await response.json()
-        if (data) {
-          data.avatarUrl = data.avatarSignedUrl || data.avatarUrl || null
-          data.coverImage = data.coverImageSignedUrl || data.coverImage || null
+      if (user) {
+        user.avatarUrl = user.avatarSignedUrl || user.avatarUrl || null
+        user.coverImage = user.coverImageSignedUrl || user.coverImage || null
+      }
+
+      return user
+    } catch (error) {
+      if (error instanceof FetchError) {
+        if (error.statusCode === 401) {
+          logger.warn("用户未认证", {
+            module: "AuthProvider.fetchUserProfile",
+            status: error.statusCode,
+          })
+          return null
         }
-        return data
-      } else {
-        logger.warn("用户未认证或 API 返回错误", {
-          module: "AuthProvider.fetchUserProfile",
-          status: response.status,
-        })
+
+        logger.error(
+          "用户资料接口请求失败",
+          { module: "AuthProvider.fetchUserProfile", status: error.statusCode },
+          error
+        )
         return null
       }
-    } catch (error) {
+
       logger.error("获取用户资料失败", { module: "AuthProvider.fetchUserProfile" }, error)
       return null
     }

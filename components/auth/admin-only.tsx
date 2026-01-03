@@ -10,7 +10,7 @@ import { useRouter, usePathname } from "next/navigation"
 import { useAuth } from "@/app/providers/auth-provider"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import Link from "next/link"
+import Link from "@/components/app-link"
 
 interface AdminOnlyProps {
   children: React.ReactNode
@@ -105,9 +105,7 @@ export function AdminOnly({
 
           <div className="flex w-full flex-col gap-2 sm:flex-row">
             <Button asChild className="flex-1">
-              <Link href="/login" prefetch={false}>
-                管理员登录
-              </Link>
+              <Link href="/login">管理员登录</Link>
             </Button>
 
             <Button asChild variant="outline" className="flex-1">

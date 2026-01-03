@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { getCurrentUser } from "@/lib/actions/auth"
 import { getQuickStats, EMPTY_QUICK_STATS, type QuickStats } from "@/lib/profile/stats"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { FollowButton } from "@/components/follow"
 import { ProfileActivitiesTab } from "@/components/profile/profile-activities-tab"
 import { ProfilePostsTab } from "@/components/profile/profile-posts-tab"
@@ -361,7 +361,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                       />
                     ) : (
                       <Button asChild>
-                        <Link href="/login" prefetch={false}>
+                        <Link href="/login">
                           <UserPlus className="mr-2 h-4 w-4" />
                           登录后关注
                         </Link>

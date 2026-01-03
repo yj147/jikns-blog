@@ -6,7 +6,7 @@
 "use client"
 
 import React, { Suspense } from "react"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -45,14 +45,10 @@ function UnauthorizedPageContent() {
           actions: (
             <>
               <Button asChild className="w-full sm:w-auto">
-                <Link href={`/login?redirect=${encodeURIComponent(redirectPath)}`} prefetch={false}>
-                  立即登录
-                </Link>
+                <Link href={`/login?redirect=${encodeURIComponent(redirectPath)}`}>立即登录</Link>
               </Button>
               <Button asChild variant="outline" className="w-full sm:w-auto">
-                <Link href="/register" prefetch={false}>
-                  注册新账户
-                </Link>
+                <Link href="/register">注册新账户</Link>
               </Button>
             </>
           ),

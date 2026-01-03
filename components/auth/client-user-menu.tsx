@@ -17,7 +17,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useAuth } from "@/hooks/use-auth"
 import { LogoutButton } from "./logout-button"
 import { Shield, User, Settings, Loader2 } from "lucide-react"
-import Link from "next/link"
+import Link from "@/components/app-link"
 
 export function ClientUserMenu() {
   const { user, session, isLoading } = useAuth()
@@ -100,11 +100,7 @@ export function ClientUserMenu() {
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <Link
-                  href="/admin"
-                  prefetch={false}
-                  className="flex items-center text-blue-600 dark:text-blue-400"
-                >
+                <Link href="/admin" className="flex items-center text-blue-600 dark:text-blue-400">
                   <Shield className="mr-2 h-4 w-4" />
                   管理后台
                 </Link>

@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { FollowButton } from "@/components/follow"
 import { ArrowLeft, UserPlus } from "lucide-react"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { useAuth } from "@/hooks/use-auth"
 import { useFollowing } from "@/hooks/use-follow-list"
 import { use, useState, useEffect } from "react"
@@ -81,9 +81,7 @@ export default function FollowingPage({ params }: FollowingPageProps) {
             </p>
             {deniedReason === "UNAUTHORIZED" ? (
               <Button asChild>
-                <Link href="/login" prefetch={false}>
-                  登录后重试
-                </Link>
+                <Link href="/login">登录后重试</Link>
               </Button>
             ) : (
               <Button variant="outline" onClick={() => history.back()}>
@@ -118,7 +116,7 @@ export default function FollowingPage({ params }: FollowingPageProps) {
           {/* Header */}
           <div className="mb-6 flex items-center space-x-4">
             <Button variant="ghost" size="sm" asChild>
-              <Link href={`/profile/${userId}`} prefetch={false}>
+              <Link href={`/profile/${userId}`}>
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>

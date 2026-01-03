@@ -1,6 +1,6 @@
 "use client"
 
-import Link from "next/link"
+import Link from "@/components/app-link"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -65,13 +65,13 @@ export default function NavigationUserMenuDropdown({
         </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link href="/profile" prefetch={false} className="flex items-center">
+          <Link href="/profile" className="flex items-center">
             <User className="mr-2 h-4 w-4" />
             <span>个人资料</span>
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href="/settings" prefetch={false} className="flex items-center">
+          <Link href="/settings" className="flex items-center">
             <Settings className="mr-2 h-4 w-4" />
             <span>设置</span>
           </Link>
@@ -80,7 +80,7 @@ export default function NavigationUserMenuDropdown({
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link href="/admin" prefetch={false} className="flex items-center text-blue-600">
+              <Link href="/admin" className="flex items-center text-blue-600">
                 <Shield className="mr-2 h-4 w-4" />
                 <span>管理后台</span>
               </Link>

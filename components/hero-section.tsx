@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { Sparkles, ArrowRight } from "lucide-react"
 
 export function HeroSection() {
@@ -17,15 +17,13 @@ export function HeroSection() {
         </div>
         <div className="flex gap-3">
           <Button asChild className="font-semibold shadow-md">
-            <Link href="/login" prefetch={false}>
+            <Link href="/login">
               加入社区
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
           </Button>
           <Button variant="outline" asChild className="bg-background/50">
-            <Link href="/about" prefetch={false}>
-              了解更多
-            </Link>
+            <Link href="/about">了解更多</Link>
           </Button>
         </div>
       </div>

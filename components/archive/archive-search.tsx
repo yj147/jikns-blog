@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { ArchivePost } from "@/lib/actions/archive"
 import { buildHighlightSegments, buildSearchPreview } from "@/lib/utils/archive-search"
 import { Button } from "@/components/ui/button"
@@ -325,7 +325,6 @@ export default function ArchiveSearch({ years, defaultYear }: ArchiveSearchProps
                       <article className="space-y-2">
                         <Link
                           href={`/blog/${post.slug}`}
-                          prefetch={false}
                           className="hover:text-primary focus-visible:ring-ring text-base font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
                         >
                           {titleSegments.map((segment, index) =>

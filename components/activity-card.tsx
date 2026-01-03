@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { MoreHorizontal, Pin } from "lucide-react"
 import type { ActivityCardProps } from "@/types/activity"
 import { getOptimizedImageUrl } from "@/lib/images/optimizer"
-import Link from "next/link"
+import Link from "@/components/app-link"
 
 const ActivityCardActions = dynamic(
   () => import("./activity/activity-card-actions").then((mod) => mod.ActivityCardActions),
@@ -89,7 +89,7 @@ function ActivityCardComponent(props: ActivityCardProps) {
 
       <div className="flex gap-4">
         <div className="shrink-0">
-          <Link href={`/profile/${activity.author.id ?? "#"}`} prefetch={false}>
+          <Link href={`/profile/${activity.author.id ?? "#"}`}>
             <Avatar className="h-10 w-10 transition-opacity hover:opacity-90">
               <AvatarImage src={avatarUrl} alt={authorName} />
               <AvatarFallback>{authorName.charAt(0).toUpperCase()}</AvatarFallback>
@@ -102,7 +102,6 @@ function ActivityCardComponent(props: ActivityCardProps) {
             <div className="flex items-center gap-1 text-[15px]">
               <Link
                 href={`/profile/${activity.author.id ?? "#"}`}
-                prefetch={false}
                 className="text-foreground font-bold hover:underline"
               >
                 {authorName}

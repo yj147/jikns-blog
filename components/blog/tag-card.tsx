@@ -5,7 +5,7 @@
 
 "use client"
 
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Hash, FileText } from "lucide-react"
 
@@ -39,7 +39,7 @@ function resolveSizeClass(count: number): string {
 export function TagCard({ tag }: TagCardProps) {
   return (
     <div className="transition-transform duration-200 hover:scale-105">
-      <Link href={`/tags/${tag.slug}`} prefetch={false}>
+      <Link href={`/tags/${tag.slug}`}>
         <Card className="group relative h-full overflow-hidden border-2 transition-all duration-300 hover:shadow-lg">
           {/* 背景装饰 */}
           <div
