@@ -53,7 +53,8 @@
 | P4-4.7 Notifications：列表并行 unread stats + avatar 签名                                |   ✅ |           ✅ |           ✅ |              ✅ |              ✅ |
 | P4-4.8 `/api/search`：unifiedSearch 并行化（Promise.all）                                |   ✅ |           ✅ |           ✅ |              ✅ |              ✅ |
 | P4-4.9 `/api/likes`：Activity 点赞计数读路径去写（读 `activities.likesCount`）           |   ✅ |           ✅ |           ✅ |              ✅ |              ✅ |
-| P4-4.10 `/api/admin/monitoring`：统计聚合下推数据库（避免全量拉取）                      |   ✅ |           ✅ |           ✅ |              ✅ |              ✅ |
+| P4-4.10 `/api/admin/monitoring`：统计聚合下推 DB + 缓存 counts + 避免自监控污染          |   ✅ |           ✅ |           ✅ |              ✅ |              ✅ |
+| P4-4.11 `/api/users/suggested`：批量签名头像（减少外部签名往返）                         |   ✅ |              |              |                 |                 |
 
 ### 当前待办（只看未完成）
 
@@ -93,8 +94,11 @@
       Production）
 - [x] P4-4.9 `/api/likes`：Activity 点赞计数读路径去写（✅ Preview + ✅
       Production）
-- [x] P4-4.10 `/api/admin/monitoring`：统计聚合下推数据库（✅ Preview + ✅
-      Production）
+- [x] P4-4.10
+      `/api/admin/monitoring`：聚合下推 DB + 缓存 counts + 避免自监控污染（✅
+      Preview + ✅ Production）
+- [ ] P4-4.11
+      `/api/users/suggested`：批量签名头像（等待 Preview 复验 + 监控对账）
 - [x] TD-0.3 Preview OAuth：callback
       base 归一化到稳定域（避免跨域 PKCE 错误，便于逐分支 Preview 复验）
 - [x] P0-0.12 公共页不初始化 Supabase（✅：未登录访问公开页不再强制初始化 Supabase，减少 Supabase 相关 chunk 加载）
@@ -144,6 +148,15 @@
 - `/blog`：LCP `487ms`（TTFB `192ms`，render delay `296ms`）
 - `/tags`：LCP `796ms`（TTFB `192ms`，render delay `604ms`）
 - `/blog/[slug]`：LCP `956ms`（TTFB `572ms`，render delay `384ms`）
+
+### Lighthouse（lab，Preview，2026-01-03）
+
+> 口径：复用已登录的 Chrome（remote debugging `9222`）跑 Lighthouse
+> desktop（仅 Performance）。
+
+- `/`：Performance `100`；首屏 Next.js JS transfer `~216KB`（< `400KB`）
+- `/feed`：Performance `96`；首屏 Next.js JS transfer `~314KB`（< `400KB`）
+- `/blog`：Performance `99`；首屏 Next.js JS transfer `~223KB`（< `400KB`）
 
 ### Network（线上观测，Production，2026-01-02）
 
