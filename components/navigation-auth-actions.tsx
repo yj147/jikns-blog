@@ -1,6 +1,6 @@
 "use client"
 
-import Link from "next/link"
+import Link from "@/components/app-link"
 import dynamic from "next/dynamic"
 
 import { Button } from "@/components/ui/button"
@@ -24,12 +24,12 @@ export default function AuthActions() {
   if (!user) {
     return (
       <div className="hidden items-center space-x-3 sm:flex">
-        <Link href="/login" prefetch={false}>
+        <Link href="/login">
           <Button variant="ghost" size="sm">
             登录
           </Button>
         </Link>
-        <Link href="/register" prefetch={false}>
+        <Link href="/register">
           <Button size="sm">注册</Button>
         </Link>
       </div>

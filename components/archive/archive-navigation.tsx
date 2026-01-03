@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
@@ -74,7 +74,7 @@ export default function ArchiveNavigation({ years, currentYear }: ArchiveNavigat
                   asChild={currentYear !== yearItem.year && currentYear !== undefined}
                 >
                   {currentYear !== yearItem.year && currentYear !== undefined ? (
-                    <Link href={`/archive/${yearItem.year}`} prefetch={false}>
+                    <Link href={`/archive/${yearItem.year}`}>
                       {yearItem.year} ({yearItem.count})
                     </Link>
                   ) : (

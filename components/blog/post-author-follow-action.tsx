@@ -1,6 +1,6 @@
 "use client"
 
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { UserPlus } from "lucide-react"
 import FollowButton from "@/components/follow/follow-button"
 import { Button } from "@/components/ui/button"
@@ -42,7 +42,7 @@ export function PostAuthorFollowAction({
 
     return (
       <Button variant="outline" size={size} className={className} asChild>
-        <Link href="/login" prefetch={false}>
+        <Link href="/login">
           <UserPlus className="mr-1 h-3 w-3" />
           登录后关注
         </Link>

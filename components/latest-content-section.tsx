@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { ArrowRight, RefreshCw } from "lucide-react"
 import { getPosts } from "@/lib/actions/posts"
 import { logger } from "@/lib/utils/logger"
@@ -73,9 +73,7 @@ export async function LatestContentSection() {
           ))}
           <div className="p-8 text-center">
             <Button variant="ghost" asChild className="text-primary hover:bg-primary/10">
-              <Link href="/blog" prefetch={false}>
-                查看更多历史文章
-              </Link>
+              <Link href="/blog">查看更多历史文章</Link>
             </Button>
           </div>
         </div>

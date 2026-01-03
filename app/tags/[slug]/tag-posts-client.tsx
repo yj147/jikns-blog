@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { useSearchParams } from "next/navigation"
 import useSWR from "swr"
 import { AlertCircle, SortDesc } from "lucide-react"
@@ -218,7 +218,6 @@ export function TagPostsClient({
                 <Link
                   key={item.value}
                   href={buildTagHref(slug, item.value, 1)}
-                  prefetch={false}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
                     buttonVariants({
@@ -249,9 +248,7 @@ export function TagPostsClient({
               重新加载
             </Button>
             <Button asChild size="sm" variant="ghost">
-              <Link href="/blog" prefetch={false}>
-                浏览全部文章
-              </Link>
+              <Link href="/blog">浏览全部文章</Link>
             </Button>
           </CardContent>
         </Card>
@@ -268,9 +265,7 @@ export function TagPostsClient({
             <h3 className="mb-2 text-lg font-semibold">暂无文章</h3>
             <p className="text-muted-foreground mb-4">该标签下还没有发布的文章</p>
             <Button asChild>
-              <Link href="/blog" prefetch={false}>
-                浏览所有文章
-              </Link>
+              <Link href="/blog">浏览所有文章</Link>
             </Button>
           </CardContent>
         </Card>

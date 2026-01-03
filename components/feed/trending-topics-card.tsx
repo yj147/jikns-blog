@@ -1,6 +1,6 @@
 "use client"
 
-import Link from "next/link"
+import Link from "@/components/app-link"
 
 interface TrendingTopic {
   name: string
@@ -33,7 +33,6 @@ export default function TrendingTopicsCard({ topics = defaultTopics }: TrendingT
         {topics.map((topic, index) => (
           <Link
             href={`/search?q=${encodeURIComponent(topic.name)}`}
-            prefetch={false}
             key={topic.name}
             className="hover:bg-muted/60 group -mx-4 flex items-start gap-3 rounded-lg px-4 py-3 transition-colors"
           >
@@ -52,11 +51,7 @@ export default function TrendingTopicsCard({ topics = defaultTopics }: TrendingT
           </Link>
         ))}
       </div>
-      <Link
-        href="/tags"
-        prefetch={false}
-        className="text-primary mt-4 block text-sm hover:underline"
-      >
+      <Link href="/tags" className="text-primary mt-4 block text-sm hover:underline">
         显示更多
       </Link>
     </div>

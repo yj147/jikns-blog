@@ -6,7 +6,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -162,7 +162,7 @@ export function PopularTags({
               key={tag.id}
               className="transition-transform duration-200 hover:scale-105 active:scale-95"
             >
-              <Link href={`/tags/${tag.slug}`} prefetch={false}>
+              <Link href={`/tags/${tag.slug}`}>
                 <Badge
                   variant="outline"
                   className="hover:bg-primary hover:text-primary-foreground cursor-pointer transition-all hover:shadow-md"

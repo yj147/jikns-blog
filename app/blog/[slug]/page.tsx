@@ -5,7 +5,7 @@
 
 import { Suspense, cache } from "react"
 import { Metadata } from "next"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { notFound } from "next/navigation"
 import { getPost } from "@/lib/actions/posts"
 import { Button } from "@/components/ui/button"
@@ -111,7 +111,6 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
             <div className="mb-6">
               <Link
                 href="/blog"
-                prefetch={false}
                 className="text-muted-foreground hover:text-primary flex items-center gap-1 text-sm transition-colors"
               >
                 <ArrowLeft className="h-3 w-3" />
@@ -126,7 +125,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
               </h1>
 
               <div className="mb-6 flex items-center gap-3">
-                <Link href={`/profile/${post.author.id ?? "#"}`} prefetch={false}>
+                <Link href={`/profile/${post.author.id ?? "#"}`}>
                   <Avatar className="ring-background h-10 w-10 ring-2">
                     <AvatarImage
                       src={post.author.avatarUrl || "/placeholder.svg"}
@@ -263,7 +262,7 @@ function BlogSidebar({ post, toc }: { post: PostDetail; toc: TocItem[] }) {
           <div className="bg-muted/30 rounded-xl border-none p-4">
             <h3 className="mb-2 text-sm font-bold">所属系列</h3>
             <div>
-              <Link href={`/blog?series=${post.series.slug}`} prefetch={false}>
+              <Link href={`/blog?series=${post.series.slug}`}>
                 <h4 className="text-primary cursor-pointer font-medium hover:underline">
                   {post.series.title}
                 </h4>
@@ -280,7 +279,7 @@ function BlogSidebar({ post, toc }: { post: PostDetail; toc: TocItem[] }) {
             </h3>
             <div className="flex flex-wrap gap-2">
               {post.tags.map((tag) => (
-                <Link key={tag.id} href={`/blog?tag=${tag.slug}`} prefetch={false}>
+                <Link key={tag.id} href={`/blog?tag=${tag.slug}`}>
                   <Badge
                     variant="secondary"
                     className="hover:bg-primary hover:text-primary-foreground cursor-pointer transition-colors"

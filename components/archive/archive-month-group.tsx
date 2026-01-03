@@ -4,7 +4,7 @@ import { memo, useState } from "react"
 import { ArchiveMonth } from "@/lib/actions/archive"
 import ArchivePostItem from "./archive-post-item"
 import { ChevronRight } from "lucide-react"
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { cn } from "@/lib/utils"
 
 interface ArchiveMonthGroupProps {
@@ -43,7 +43,6 @@ function ArchiveMonthGroupComponent({ year, monthData }: ArchiveMonthGroupProps)
 
         <Link
           href={`/archive/${year}/${monthData.month.toString().padStart(2, "0")}`}
-          prefetch={false}
           className="text-muted-foreground hover:text-primary focus-visible:ring-ring rounded-md px-2 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
           aria-label={`${year} 年 ${monthData.monthName}的所有文章`}
         >
@@ -66,7 +65,6 @@ function ArchiveMonthGroupComponent({ year, monthData }: ArchiveMonthGroupProps)
             {remainingCount > 0 && (
               <Link
                 href={`/archive/${year}/${monthData.month.toString().padStart(2, "0")}`}
-                prefetch={false}
                 className="text-muted-foreground hover:text-primary block pl-8 text-sm transition-colors"
                 aria-label={`查看 ${year} 年 ${monthData.monthName}的更多文章`}
               >

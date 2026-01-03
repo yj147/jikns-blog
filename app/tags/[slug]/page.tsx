@@ -6,7 +6,7 @@
 import { cache, Suspense } from "react"
 import { Metadata } from "next"
 import { notFound } from "next/navigation"
-import Link from "next/link"
+import Link from "@/components/app-link"
 
 import { getTag } from "@/lib/actions/tags/queries-cacheable"
 import { getPosts } from "@/lib/actions/posts"
@@ -193,7 +193,6 @@ export default async function TagDetailPage({ params }: TagDetailPageProps) {
                   <Link
                     key={item.value}
                     href={buildTagHref(slug, item.value, 1)}
-                    prefetch={false}
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
                       buttonVariants({
@@ -221,14 +220,10 @@ export default async function TagDetailPage({ params }: TagDetailPageProps) {
                 {initialError.code ? `（错误代码：${initialError.code}）` : ""}
               </p>
               <Button asChild variant="outline" size="sm">
-                <Link href={buildTagHref(slug, sortValue, currentPage)} prefetch={false}>
-                  重新加载
-                </Link>
+                <Link href={buildTagHref(slug, sortValue, currentPage)}>重新加载</Link>
               </Button>
               <Button asChild size="sm" variant="ghost">
-                <Link href="/blog" prefetch={false}>
-                  浏览全部文章
-                </Link>
+                <Link href="/blog">浏览全部文章</Link>
               </Button>
             </CardContent>
           </Card>
@@ -239,9 +234,7 @@ export default async function TagDetailPage({ params }: TagDetailPageProps) {
               <h3 className="mb-2 text-lg font-semibold">暂无文章</h3>
               <p className="text-muted-foreground mb-4">该标签下还没有发布的文章</p>
               <Button asChild>
-                <Link href="/blog" prefetch={false}>
-                  浏览所有文章
-                </Link>
+                <Link href="/blog">浏览所有文章</Link>
               </Button>
             </CardContent>
           </Card>
@@ -312,7 +305,7 @@ export default async function TagDetailPage({ params }: TagDetailPageProps) {
       <div className="container mx-auto px-4 py-12">
         {/* 返回按钮 */}
         <div className="mb-8">
-          <Link href="/tags" prefetch={false}>
+          <Link href="/tags">
             <Button variant="ghost" size="sm">
               <ArrowLeft className="mr-2 h-4 w-4" />
               返回标签云

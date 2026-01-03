@@ -15,7 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { getCurrentUser } from "@/lib/auth"
 import { LogoutButton } from "./logout-button"
 import { Shield, User, Settings } from "lucide-react"
-import Link from "next/link"
+import Link from "@/components/app-link"
 
 export async function UserMenu() {
   // 获取完整的用户信息，包括角色等业务数据
@@ -84,11 +84,7 @@ export async function UserMenu() {
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <Link
-                  href="/admin"
-                  prefetch={false}
-                  className="flex items-center text-blue-600 dark:text-blue-400"
-                >
+                <Link href="/admin" className="flex items-center text-blue-600 dark:text-blue-400">
                   <Shield className="mr-2 h-4 w-4" />
                   管理后台
                 </Link>

@@ -1,6 +1,6 @@
 "use client"
 
-import Link from "next/link"
+import Link from "@/components/app-link"
 import { useState } from "react"
 import { usePathname } from "next/navigation"
 
@@ -56,7 +56,6 @@ export default function MobileNavigation() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  prefetch={false}
                   onClick={() => setIsOpen(false)}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
@@ -105,12 +104,12 @@ function MobileUserSection({ closeSheet }: { closeSheet: () => void }) {
             className="justify-start gap-2"
             onClick={closeSheet}
           >
-            <Link href="/login" prefetch={false}>
+            <Link href="/login">
               <LogIn className="h-4 w-4" /> 登录
             </Link>
           </Button>
           <Button asChild size="lg" className="justify-start gap-2" onClick={closeSheet}>
-            <Link href="/register" prefetch={false}>
+            <Link href="/register">
               <UserPlus className="h-4 w-4" /> 注册
             </Link>
           </Button>
@@ -146,17 +145,17 @@ function MobileUserSection({ closeSheet }: { closeSheet: () => void }) {
 
       <div className="grid gap-2">
         <Button asChild variant="ghost" className="justify-start gap-2" onClick={closeSheet}>
-          <Link href="/notifications" prefetch={false}>
+          <Link href="/notifications">
             <Bell className="h-4 w-4" /> 通知
           </Link>
         </Button>
         <Button asChild variant="ghost" className="justify-start gap-2" onClick={closeSheet}>
-          <Link href="/profile" prefetch={false}>
+          <Link href="/profile">
             <User className="h-4 w-4" /> 个人资料
           </Link>
         </Button>
         <Button asChild variant="ghost" className="justify-start gap-2" onClick={closeSheet}>
-          <Link href="/settings" prefetch={false}>
+          <Link href="/settings">
             <Settings className="h-4 w-4" /> 设置
           </Link>
         </Button>
@@ -167,7 +166,7 @@ function MobileUserSection({ closeSheet }: { closeSheet: () => void }) {
             className="justify-start gap-2 text-blue-600 hover:text-blue-700"
             onClick={closeSheet}
           >
-            <Link href="/admin" prefetch={false}>
+            <Link href="/admin">
               <Shield className="h-4 w-4" /> 管理后台
             </Link>
           </Button>
