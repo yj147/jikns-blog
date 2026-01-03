@@ -87,14 +87,19 @@ async function handleGet(request: NextRequest) {
     }
 
     const now = new Date()
-    const countsPromise = prisma.$transaction([
-      prisma.user.count(),
-      prisma.post.count(),
-      prisma.comment.count({ where: { deletedAt: null } }),
-      prisma.activity.count({ where: { deletedAt: null } }),
-    ])
-
     const envKey = process.env.VERCEL_ENV ?? "local"
+
+    const countsPromise = unstable_cache(
+      () =>
+        Promise.all([
+          prisma.user.count(),
+          prisma.post.count(),
+          prisma.comment.count({ where: { deletedAt: null } }),
+          prisma.activity.count({ where: { deletedAt: null } }),
+        ]),
+      ["admin-monitoring-counts", envKey],
+      { revalidate: 60 }
+    )()
     const performancePromise = unstable_cache(
       () => performanceMonitor.getPerformanceReport(hours, { requiredTags }),
       ["admin-monitoring-report", envKey, scope, String(hours), shaTag ?? "no-sha"],
@@ -138,4 +143,5 @@ async function handleGet(request: NextRequest) {
   }
 }
 
-export const GET = withApiResponseMetrics(handleGet)
+// 监控接口本身会被后台轮询；不采样避免“自监控污染监控”
+export const GET = withApiResponseMetrics(handleGet, { sampleRate: 0 })

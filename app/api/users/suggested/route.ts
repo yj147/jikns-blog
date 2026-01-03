@@ -12,7 +12,7 @@ import { assertPolicy, generateRequestId } from "@/lib/auth/session"
 import { auditLogger, getClientIP, getClientUserAgent } from "@/lib/audit-log"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
 import { getCached, setCached } from "@/lib/cache/simple-cache"
-import { signAvatarUrl } from "@/lib/storage/signed-url"
+import { createSignedUrls } from "@/lib/storage/signed-url"
 
 const SUGGESTED_CACHE_TTL = 60000
 type SuggestedResponse = {
@@ -120,23 +120,37 @@ async function handleGet(request: NextRequest) {
       take: limit,
     })
 
-    // 转换数据格式，添加用户名，并签名头像 URL
-    const formattedUsers = await Promise.all(
-      suggestedUsers.map(async (suggestedUser) => ({
-        id: suggestedUser.id,
-        name: suggestedUser.name,
-        username: `@${suggestedUser.name?.toLowerCase().replace(/\s+/g, "_") || "user"}`,
-        avatarUrl: await signAvatarUrl(suggestedUser.avatarUrl),
-        bio:
-          suggestedUser.bio ||
-          `${suggestedUser.role === "ADMIN" ? "博客作者" : "用户"}，加入于 ${suggestedUser.createdAt.getFullYear()} 年`,
-        role: suggestedUser.role,
-        followers: suggestedUser._count.followers,
-        postsCount: suggestedUser._count.posts,
-        activitiesCount: suggestedUser._count.activities,
-        isVerified: suggestedUser.role === "ADMIN", // 管理员显示为验证用户
-      }))
+    const avatarInputs = Array.from(
+      new Set(
+        suggestedUsers
+          .map((suggestedUser) => suggestedUser.avatarUrl)
+          .filter((value): value is string => typeof value === "string" && value.length > 0)
+      )
     )
+
+    const signedAvatars = await createSignedUrls(avatarInputs)
+    const avatarMap = new Map<string, string>()
+    avatarInputs.forEach((original, index) => {
+      avatarMap.set(original, signedAvatars[index] ?? original)
+    })
+
+    // 转换数据格式，添加用户名，并批量签名头像 URL
+    const formattedUsers = suggestedUsers.map((suggestedUser) => ({
+      id: suggestedUser.id,
+      name: suggestedUser.name,
+      username: `@${suggestedUser.name?.toLowerCase().replace(/\s+/g, "_") || "user"}`,
+      avatarUrl: suggestedUser.avatarUrl
+        ? (avatarMap.get(suggestedUser.avatarUrl) ?? suggestedUser.avatarUrl)
+        : null,
+      bio:
+        suggestedUser.bio ||
+        `${suggestedUser.role === "ADMIN" ? "博客作者" : "用户"}，加入于 ${suggestedUser.createdAt.getFullYear()} 年`,
+      role: suggestedUser.role,
+      followers: suggestedUser._count.followers,
+      postsCount: suggestedUser._count.posts,
+      activitiesCount: suggestedUser._count.activities,
+      isVerified: suggestedUser.role === "ADMIN", // 管理员显示为验证用户
+    }))
 
     const responsePayload = {
       data: formattedUsers,
