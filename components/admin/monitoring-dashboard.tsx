@@ -209,17 +209,18 @@ export const MonitoringDashboard: React.FC = () => {
     refresh: refreshStats,
   } = useRealtimeDashboard()
 
+  const [timeRange, setTimeRange] = React.useState<TimeRangeValue>("1h")
+  const [bucket, setBucket] = React.useState<MetricsBucket>("5m")
+  const [compareEnabled, setCompareEnabled] = React.useState(false)
+  const [now, setNow] = React.useState(() => new Date())
+
   const {
     data: performanceData,
     isLoading: performanceLoading,
     error: performanceError,
     lastUpdated: performanceLastUpdate,
     refresh: refreshPerformance,
-  } = useMonitoringData()
-  const [timeRange, setTimeRange] = React.useState<TimeRangeValue>("1h")
-  const [bucket, setBucket] = React.useState<MetricsBucket>("5m")
-  const [compareEnabled, setCompareEnabled] = React.useState(false)
-  const [now, setNow] = React.useState(() => new Date())
+  } = useMonitoringData(timeRange)
 
   React.useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), METRICS_REFRESH_MS)
@@ -236,6 +237,11 @@ export const MonitoringDashboard: React.FC = () => {
   const startTime = React.useMemo(
     () => new Date(endTime.getTime() - rangeDuration),
     [endTime, rangeDuration]
+  )
+
+  const rangeLabel = React.useMemo(
+    () => TIME_RANGE_OPTIONS.find((option) => option.value === timeRange)?.label ?? "近 24 小时",
+    [timeRange]
   )
 
   const compareWindow = compareEnabled ? (timeRange === "1h" ? "1h" : "24h") : undefined
@@ -467,21 +473,21 @@ export const MonitoringDashboard: React.FC = () => {
         <StatCard
           title="总请求数"
           value={performanceData.summary.totalRequests.toLocaleString()}
-          description="过去24小时"
+          description={rangeLabel}
           icon={Activity}
           status="good"
         />
         <StatCard
           title="平均响应时间"
           value={`${Math.round(performanceData.summary.averageResponseTime)}ms`}
-          description="过去24小时平均值"
+          description={`${rangeLabel}平均值`}
           icon={Clock}
           status={performanceData.summary.averageResponseTime > 1000 ? "warning" : "good"}
         />
         <StatCard
           title="错误率"
           value={`${performanceData.summary.errorRate.toFixed(2)}%`}
-          description="过去24小时"
+          description={rangeLabel}
           icon={AlertTriangle}
           status={
             performanceData.summary.errorRate > 5
@@ -494,7 +500,7 @@ export const MonitoringDashboard: React.FC = () => {
         <StatCard
           title="慢请求率"
           value={`${performanceData.summary.slowRequestsRate.toFixed(2)}%`}
-          description=">1秒的请求比例"
+          description={`${rangeLabel}内 >1秒 的请求比例`}
           icon={TrendingDown}
           status={
             performanceData.summary.slowRequestsRate > 10

@@ -60,8 +60,11 @@ C:\\Users\\
 # Supabase temporary files
 supabase/.temp/
 
-# Development documentation (not for public repo)
-docs/
+# Development documentation (default ignored; whitelist specific published docs)
+docs/**
+!docs/
+!docs/e2e-production-test-plan.md
+!docs/performance-optimization-plan.md
 
 # AI assistant rule files
 CLAUDE.md

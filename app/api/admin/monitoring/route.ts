@@ -12,6 +12,23 @@ import type { MonitoringResponse } from "@/types/monitoring"
 const MONITORING_CACHE_KEY = "admin:monitoring"
 const MONITORING_CACHE_TTL = 30000
 
+type MonitoringRange = "1h" | "24h" | "7d"
+
+function resolveHours(request: NextRequest): number {
+  const range = request.nextUrl.searchParams.get("range") as MonitoringRange | null
+  if (range === "1h") return 1
+  if (range === "24h") return 24
+  if (range === "7d") return 24 * 7
+
+  const hoursParam = request.nextUrl.searchParams.get("hours")
+  const parsed = hoursParam ? Number(hoursParam) : Number.NaN
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return Math.min(Math.max(parsed, 0.05), 24 * 30)
+  }
+
+  return 24
+}
+
 async function handleGet(request: NextRequest) {
   const requestId = request.headers.get("x-request-id") ?? generateRequestId()
   const { success, error, user } = await validateApiPermissions(request, "admin")
@@ -30,7 +47,10 @@ async function handleGet(request: NextRequest) {
   }
 
   try {
-    const cached = getCached<MonitoringResponse>(MONITORING_CACHE_KEY)
+    const hours = resolveHours(request)
+    const cacheKey = `${MONITORING_CACHE_KEY}:${hours}`
+
+    const cached = getCached<MonitoringResponse>(cacheKey)
     if (cached) {
       return createSuccessResponse(cached, {
         requestId,
@@ -51,7 +71,7 @@ async function handleGet(request: NextRequest) {
       prisma.activity.count({ where: { deletedAt: null } }),
     ])
 
-    const performancePromise = performanceMonitor.getPerformanceReport(24).catch((perfError) => {
+    const performancePromise = performanceMonitor.getPerformanceReport(hours).catch((perfError) => {
       logger.warn("获取性能报告失败，回退为仅计数", { requestId, error: perfError })
       return null
     })
@@ -71,7 +91,7 @@ async function handleGet(request: NextRequest) {
       ...(performanceReport ? { performanceReport } : {}),
     }
 
-    setCached(MONITORING_CACHE_KEY, payload, MONITORING_CACHE_TTL)
+    setCached(cacheKey, payload, MONITORING_CACHE_TTL)
 
     return createSuccessResponse(payload, {
       requestId,

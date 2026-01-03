@@ -43,6 +43,13 @@ export async function handleFollowListRequest({
   params,
   type,
 }: HandleOptions): Promise<NextResponse> {
+  const totalStart = performance.now()
+  let rateMs = 0
+  let viewerMs = 0
+  let accessMs = 0
+  let countMs = 0
+  let listMs = 0
+
   const { userId } = params
   const requestId = generateRequestId()
   const searchParams = req.nextUrl.searchParams
@@ -75,7 +82,9 @@ export async function handleFollowListRequest({
   // Linus 原则：实用主义
   // 读操作使用 read 配额（100次/分钟），而非写操作的 follow 配额（30次/分钟）
   // 符合设计文档 Phase9-关注系统设计.md:126-130 的限流策略
-  const rateLimit = await rateLimitCheck(req, "read")
+  const rateStart = performance.now()
+  const rateLimit = await rateLimitCheck(req, "read", { userId: null })
+  rateMs = performance.now() - rateStart
   if (!rateLimit.success) {
     await auditLogger.logEvent({
       action: "USER_FOLLOW_LIST_VIEW",
@@ -105,13 +114,24 @@ export async function handleFollowListRequest({
       429,
       { requestId }
     )
+    const totalMs = performance.now() - totalStart
+    response.headers.set(
+      "Server-Timing",
+      `rate;dur=${rateMs.toFixed(1)}, total;dur=${totalMs.toFixed(1)}`
+    )
+    response.headers.set("x-perf-rate-ms", rateMs.toFixed(1))
+    response.headers.set("x-perf-total-ms", totalMs.toFixed(1))
     response.headers.set("Retry-After", String(Math.max(1, retryAfterSeconds)))
     return response
   }
 
   try {
+    const viewerStart = performance.now()
     const viewer = await getOptionalViewer({ request: req })
+    viewerMs = performance.now() - viewerStart
+    const accessStart = performance.now()
     const access = await evaluateFollowListAccess(userId, viewer)
+    accessMs = performance.now() - accessStart
 
     if (access.denyReason === "NOT_FOUND") {
       await auditLogger.logEvent({
@@ -160,22 +180,33 @@ export async function handleFollowListRequest({
     // Linus 原则：实用主义
     // 仅在客户端显式请求时执行 COUNT(*)，避免高关注用户场景下的热点查询
     // 对于无限滚动场景，客户端通常只需要 hasMore 标志，不需要总量
-    const total = includeTotal
-      ? await prisma.follow.count({
-          where: type === "followers" ? { followingId: userId } : { followerId: userId },
-        })
-      : null
-
     const listOptions: FollowListOptions = cursor
       ? { limit, cursor }
       : offset !== undefined
         ? { limit, offset }
         : { limit }
 
-    const listResult =
-      type === "followers"
-        ? await listFollowers(userId, listOptions)
-        : await listFollowing(userId, listOptions)
+    const countStart = performance.now()
+    const totalPromise = includeTotal
+      ? prisma.follow
+          .count({
+            where: type === "followers" ? { followingId: userId } : { followerId: userId },
+          })
+          .then((value) => {
+            countMs = performance.now() - countStart
+            return value
+          })
+      : Promise.resolve(null)
+
+    const listStart = performance.now()
+    const listResultPromise =
+      type === "followers" ? listFollowers(userId, listOptions) : listFollowing(userId, listOptions)
+    const listPromise = listResultPromise.then((value) => {
+      listMs = performance.now() - listStart
+      return value
+    })
+
+    const [total, listResult] = await Promise.all([totalPromise, listPromise])
 
     await auditLogger.logEvent({
       action: "USER_FOLLOW_LIST_VIEW",
@@ -217,7 +248,7 @@ export async function handleFollowListRequest({
     // total 字段可选：仅在 includeTotal=true 时返回，避免不必要的 COUNT(*) 查询
     const paginationNextCursor = listResult.nextCursor ?? null
 
-    return createPaginatedResponse(
+    const response = createPaginatedResponse(
       listResult.items,
       {
         page,
@@ -237,6 +268,25 @@ export async function handleFollowListRequest({
           : undefined,
       }
     )
+    const totalMs = performance.now() - totalStart
+    response.headers.set(
+      "Server-Timing",
+      [
+        `rate;dur=${rateMs.toFixed(1)}`,
+        `viewer;dur=${viewerMs.toFixed(1)}`,
+        `access;dur=${accessMs.toFixed(1)}`,
+        `count;dur=${countMs.toFixed(1)}`,
+        `list;dur=${listMs.toFixed(1)}`,
+        `total;dur=${totalMs.toFixed(1)}`,
+      ].join(", ")
+    )
+    response.headers.set("x-perf-rate-ms", rateMs.toFixed(1))
+    response.headers.set("x-perf-viewer-ms", viewerMs.toFixed(1))
+    response.headers.set("x-perf-access-ms", accessMs.toFixed(1))
+    response.headers.set("x-perf-count-ms", countMs.toFixed(1))
+    response.headers.set("x-perf-list-ms", listMs.toFixed(1))
+    response.headers.set("x-perf-total-ms", totalMs.toFixed(1))
+    return response
   } catch (error) {
     if (error instanceof FollowServiceError) {
       const statusCode = error.code === "INVALID_CURSOR" ? 400 : 400

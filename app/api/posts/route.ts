@@ -4,6 +4,7 @@
  */
 
 import { NextRequest } from "next/server"
+import { unstable_cache } from "next/cache"
 import { getClientIp } from "@/lib/api/get-client-ip"
 import { Prisma } from "@/lib/generated/prisma"
 import {
@@ -258,16 +259,35 @@ async function handleGet(request: NextRequest) {
     } satisfies Prisma.PostSelect
 
     const dbStart = performance.now()
-    const [posts, totalCount] = await Promise.all([
-      prisma.post.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: orderByClauses,
-        select: postSelect,
-      }),
-      prisma.post.count({ where }),
-    ])
+
+    const shouldCache = process.env.NODE_ENV === "production"
+    const cacheKey = [
+      "api-posts-public",
+      String(page),
+      String(limit),
+      orderByField,
+      orderDirection,
+      search,
+      tag ?? "",
+      seriesId ?? "",
+      hideAuthorEmail ? "hide-email" : "show-email",
+    ]
+
+    const loadPosts = () =>
+      Promise.all([
+        prisma.post.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: orderByClauses,
+          select: postSelect,
+        }),
+        prisma.post.count({ where }),
+      ])
+
+    const [posts, totalCount] = await (shouldCache
+      ? unstable_cache(loadPosts, cacheKey, { revalidate: 30, tags: ["posts:list"] })()
+      : loadPosts())
     const dbMs = performance.now() - dbStart
 
     const avatarInputs = Array.from(

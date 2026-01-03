@@ -20,7 +20,7 @@ export function resolveAuthBaseUrl(request: NextRequest): string {
 
   // OAuth callback 必须落回 Supabase allowlist 允许的域名。
   // - Preview: 优先使用“稳定域”（如 branch 的 `*-git-<ref>-*.vercel.app` 或自定义 preview 域）
-  // - Production: 站点对外可能是 www 域，但 Supabase Site URL 常配根域（无 www），需归一化
+  // - Production: 必须保持与当前请求同域，否则 PKCE verifier cookie 可能因跨域丢失导致登录失败
   let origin = requestOrigin
 
   if (process.env.VERCEL_ENV === "preview") {
@@ -60,11 +60,7 @@ export function resolveAuthBaseUrl(request: NextRequest): string {
     }
   }
 
-  const url = new URL(origin)
-  if (url.hostname.startsWith("www.")) {
-    url.hostname = url.hostname.slice(4)
-  }
-  return url.origin
+  return new URL(origin).origin
 }
 
 function isLocalOrigin(origin: string): boolean {

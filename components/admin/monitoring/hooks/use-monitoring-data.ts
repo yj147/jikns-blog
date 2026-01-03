@@ -6,6 +6,8 @@ import type { ApiResponse } from "@/lib/api/unified-response"
 import { logger } from "@/lib/utils/logger"
 import type { MonitoringResponse, PerformanceReport } from "@/types/monitoring"
 
+export type MonitoringRange = "1h" | "24h" | "7d"
+
 export interface MonitoringData {
   healthStatus: "healthy" | "degraded" | "unhealthy"
   uptime: number
@@ -80,7 +82,7 @@ const mapReportToMonitoringData = (
   topSlowEndpoints: report.topSlowEndpoints,
 })
 
-export const useMonitoringData = () => {
+export const useMonitoringData = (range: MonitoringRange = "24h") => {
   const [data, setData] = React.useState<MonitoringData | null>(null)
   const [isLoading, setIsLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -95,7 +97,8 @@ export const useMonitoringData = () => {
     let uptimeSeconds: number | undefined
 
     try {
-      const response = await fetchJson<ApiResponse<MonitoringResponse>>("/api/admin/monitoring")
+      const url = `/api/admin/monitoring?range=${encodeURIComponent(range)}`
+      const response = await fetchJson<ApiResponse<MonitoringResponse>>(url)
       apiTimestamp = response.meta?.timestamp
       const payload = response.data
       report = payload?.performanceReport ?? null
@@ -119,7 +122,7 @@ export const useMonitoringData = () => {
     setLastUpdated(apiTimestamp ? new Date(apiTimestamp) : new Date())
     setError(null)
     setIsLoading(false)
-  }, [])
+  }, [range])
 
   React.useEffect(() => {
     loadMonitoringData()

@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server"
 import { z } from "zod"
+import { unstable_cache } from "next/cache"
 import { createErrorResponse, createSuccessResponse, ErrorCode } from "@/lib/api/unified-response"
 import { handleApiError } from "@/lib/api/error-handler"
 import { getClientIP } from "@/lib/audit-log"
@@ -47,6 +48,10 @@ function mapQueryParams(params: z.infer<typeof SearchQuerySchema>): {
 }
 
 async function handleGet(request: NextRequest) {
+  const totalStart = performance.now()
+  let rateMs = 0
+  let searchMs = 0
+
   try {
     const parsed = SearchQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams))
     if (!parsed.success) {
@@ -60,7 +65,9 @@ async function handleGet(request: NextRequest) {
     }
 
     const ip = getClientIP(request)
+    const rateStart = performance.now()
     const rateResult = await checkSearchRateLimit({ ip })
+    rateMs = performance.now() - rateStart
     if (!rateResult.allowed) {
       return createErrorResponse(
         ErrorCode.RATE_LIMIT_EXCEEDED,
@@ -70,9 +77,35 @@ async function handleGet(request: NextRequest) {
       )
     }
 
-    const result = await unifiedSearch(mapQueryParams(parsed.data))
+    const searchStart = performance.now()
+    const mapped = mapQueryParams(parsed.data)
+    const cacheKey = [
+      "api-search",
+      mapped.query,
+      mapped.type ?? "all",
+      mapped.sort ?? "relevance",
+      String(mapped.page ?? 1),
+      String(mapped.limit ?? 10),
+    ]
+    const shouldCache = process.env.NODE_ENV === "production"
+    const result = await (shouldCache
+      ? unstable_cache(() => unifiedSearch(mapped), cacheKey, {
+          revalidate: 30,
+          tags: ["search"],
+        })()
+      : unifiedSearch(mapped))
+    searchMs = performance.now() - searchStart
 
-    return createSuccessResponse(result, { requestId: crypto.randomUUID() })
+    const response = createSuccessResponse(result, { requestId: crypto.randomUUID() })
+    const totalMs = performance.now() - totalStart
+    response.headers.set(
+      "Server-Timing",
+      `rate;dur=${rateMs.toFixed(1)}, search;dur=${searchMs.toFixed(1)}, total;dur=${totalMs.toFixed(1)}`
+    )
+    response.headers.set("x-perf-rate-ms", rateMs.toFixed(1))
+    response.headers.set("x-perf-search-ms", searchMs.toFixed(1))
+    response.headers.set("x-perf-total-ms", totalMs.toFixed(1))
+    return response
   } catch (error) {
     if (error instanceof SearchValidationError) {
       return createErrorResponse(ErrorCode.VALIDATION_ERROR, error.message, error.details, 400)

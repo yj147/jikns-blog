@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
-import { Prisma } from "@/lib/generated/prisma"
 import { prisma } from "@/lib/prisma"
 import { apiLogger } from "@/lib/utils/logger"
 import { generateRequestId } from "@/lib/auth/session"
 import { calculateReadingMinutes } from "@/lib/utils/reading-time"
 import { withApiResponseMetrics } from "@/lib/api/response-wrapper"
-import { createSignedUrlIfNeeded } from "@/lib/storage/signed-url"
+import { createSignedUrls } from "@/lib/storage/signed-url"
 
 function parsePositiveInt(value: string | null, fallback: number): number {
   const parsed = Number.parseInt(value ?? "", 10)
@@ -19,6 +18,7 @@ async function handleGet(
   { params }: { params: Promise<{ userId: string }> }
 ) {
   const requestId = generateRequestId()
+  const totalStart = performance.now()
 
   try {
     const { userId } = await params
@@ -33,26 +33,7 @@ async function handleGet(
       published: true,
     }
 
-    const userExists = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true },
-    })
-
-    if (!userExists) {
-      apiLogger.info("user posts requested for unknown user", { requestId, userId })
-
-      return NextResponse.json({
-        success: true,
-        data: [],
-        pagination: {
-          page,
-          limit,
-          total: 0,
-          hasMore: false,
-        },
-      })
-    }
-
+    const dbStart = performance.now()
     const [posts, total] = await Promise.all([
       prisma.post.findMany({
         where,
@@ -68,6 +49,7 @@ async function handleGet(
           publishedAt: true,
           createdAt: true,
           viewCount: true,
+          contentTokens: true,
           tags: {
             select: {
               tag: {
@@ -89,49 +71,38 @@ async function handleGet(
       }),
       prisma.post.count({ where }),
     ])
+    const dbMs = performance.now() - dbStart
 
-    const wordsCountMap = new Map<string, number>()
-
-    if (posts.length > 0) {
-      const wordCounts = await prisma.$queryRaw<
-        Array<{ id: string; words_count: bigint | number | null }>
-      >(Prisma.sql`
-        SELECT id,
-               COALESCE(
-                 array_length(
-                   regexp_split_to_array(
-                     regexp_replace(content, '<[^>]+>', ' ', 'g'),
-                     '\\s+'
-                   ),
-                   1
-                 ),
-                 0
-               ) AS words_count
-        FROM posts
-        WHERE id IN (${Prisma.join(posts.map((post) => post.id))})
-      `)
-
-      wordCounts.forEach(({ id, words_count }) => {
-        wordsCountMap.set(id, Number(words_count ?? 0))
-      })
-    }
-
-    const signedCoverImages = await Promise.all(
-      posts.map((post) =>
-        createSignedUrlIfNeeded(post.coverImage, POST_IMAGE_SIGN_EXPIRES_IN, "post-images")
+    const coverInputs = Array.from(
+      new Set(
+        posts
+          .map((post) => post.coverImage)
+          .filter((value): value is string => typeof value === "string" && value.length > 0)
       )
     )
 
-    const normalizedPosts = posts.map((post, index) => ({
+    const signStart = performance.now()
+    const signedCoverImages =
+      coverInputs.length > 0
+        ? await createSignedUrls(coverInputs, POST_IMAGE_SIGN_EXPIRES_IN, "post-images")
+        : []
+    const signMs = performance.now() - signStart
+
+    const coverMap = new Map<string, string>()
+    coverInputs.forEach((original, index) => {
+      coverMap.set(original, signedCoverImages[index] ?? original)
+    })
+
+    const normalizedPosts = posts.map((post) => ({
       id: post.id,
       title: post.title,
       slug: post.slug,
       excerpt: post.excerpt,
       coverImage: post.coverImage,
-      signedCoverImage: signedCoverImages[index],
+      signedCoverImage: post.coverImage ? (coverMap.get(post.coverImage) ?? post.coverImage) : null,
       publishedAt: (post.publishedAt ?? post.createdAt)?.toISOString() ?? null,
       viewCount: post.viewCount,
-      readTimeMinutes: calculateReadingMinutes(wordsCountMap.get(post.id) ?? 0),
+      readTimeMinutes: calculateReadingMinutes(post.contentTokens ?? post.excerpt ?? post.title),
       tags: post.tags
         .map((relation) => relation.tag)
         .filter((tag): tag is { id: string; name: string; slug: string } =>
@@ -151,7 +122,7 @@ async function handleGet(
       returned: posts.length,
     })
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: normalizedPosts,
       pagination: {
@@ -161,6 +132,15 @@ async function handleGet(
         hasMore,
       },
     })
+    const totalMs = performance.now() - totalStart
+    response.headers.set(
+      "Server-Timing",
+      `db;dur=${dbMs.toFixed(1)}, sign;dur=${signMs.toFixed(1)}, total;dur=${totalMs.toFixed(1)}`
+    )
+    response.headers.set("x-perf-db-ms", dbMs.toFixed(1))
+    response.headers.set("x-perf-sign-ms", signMs.toFixed(1))
+    response.headers.set("x-perf-total-ms", totalMs.toFixed(1))
+    return response
   } catch (error) {
     apiLogger.error("user posts fetch failed", { requestId }, error)
 

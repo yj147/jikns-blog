@@ -87,6 +87,19 @@ interface RateLimitSnapshot {
 const redisClient = getRedisClient()
 const rateLimitStore = new Map<string, RateLimitRecord>()
 
+const REDIS_RATE_LIMIT_SCRIPT = `
+local count = redis.call("INCR", KEYS[1])
+if count == 1 then
+  redis.call("PEXPIRE", KEYS[1], ARGV[1])
+end
+local ttl = redis.call("PTTL", KEYS[1])
+if ttl < 0 then
+  redis.call("PEXPIRE", KEYS[1], ARGV[1])
+  ttl = ARGV[1]
+end
+return {count, ttl}
+`
+
 if (!redisClient) {
   const CLEANUP_INTERVAL = 5 * 60 * 1000
   setInterval(() => {
@@ -112,19 +125,16 @@ async function applyRateLimit(
   const now = Date.now()
 
   if (redisClient) {
-    const count = await redisClient.incr(key)
+    const raw = await redisClient.eval(REDIS_RATE_LIMIT_SCRIPT, [key], [String(config.windowMs)])
+    const result = Array.isArray(raw) ? raw : []
+    const parsedCount = Number(result[0] ?? 0)
+    const parsedTtlMs = Number(result[1] ?? config.windowMs)
 
-    if (count === 1) {
-      await redisClient.pexpire(key, config.windowMs)
-    }
+    const count = Number.isFinite(parsedCount) ? parsedCount : 0
+    const normalizedTtlMs =
+      Number.isFinite(parsedTtlMs) && parsedTtlMs > 0 ? parsedTtlMs : config.windowMs
 
-    let ttlMs = await redisClient.pttl(key)
-    if (ttlMs < 0) {
-      await redisClient.pexpire(key, config.windowMs)
-      ttlMs = config.windowMs
-    }
-
-    const resetTime = new Date(now + ttlMs)
+    const resetTime = new Date(now + normalizedTtlMs)
     const remaining = Math.max(config.maxRequests - count, 0)
 
     return {
@@ -242,12 +252,16 @@ function recordRateLimitMetric(params: {
 
 export async function rateLimitCheck(
   request: NextRequest,
-  type: RateLimitType
+  type: RateLimitType,
+  options?: { userId?: string | null }
 ): Promise<RateLimitResult> {
   const config = RATE_LIMITS[type]
-  const user = await getCurrentUser()
   const ip = getClientIP(request)
-  const key = generateRateLimitKey(user?.id || null, ip, type)
+  const resolvedUserId =
+    options && Object.prototype.hasOwnProperty.call(options, "userId")
+      ? (options.userId ?? null)
+      : ((await getCurrentUser())?.id ?? null)
+  const key = generateRateLimitKey(resolvedUserId, ip, type)
 
   const computation = await applyRateLimit(key, config)
 
@@ -255,7 +269,7 @@ export async function rateLimitCheck(
     type,
     backend: computation.backend,
     allowed: computation.success,
-    userId: user?.id,
+    userId: resolvedUserId,
     ip,
     remaining: Math.max(computation.remaining, 0),
     maxRequests: config.maxRequests,
