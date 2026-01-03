@@ -36,7 +36,7 @@ function resolveAuthBaseUrl(request: NextRequest): string {
 
   const url = new URL(origin)
   if (url.hostname.startsWith("www.")) {
-    url.hostname = url.hostname.replace(/^www\\./, "")
+    url.hostname = url.hostname.slice(4)
   }
   return url.origin
 }
