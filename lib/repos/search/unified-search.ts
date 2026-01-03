@@ -162,32 +162,31 @@ export async function unifiedSearch(params: UnifiedSearchParams): Promise<Unifie
   const shouldFetchUsers = shouldFetchItems("users")
   const shouldFetchTags = shouldFetchItems("tags")
 
-  const postsResult = await searchPosts({
-    query: normalized.query,
-    limit: resolveLimit(shouldFetchPosts),
-    offset: resolveOffset(shouldFetchPosts),
-    sort: normalized.sort,
-  })
-
-  const activitiesResult = await searchActivities({
-    query: normalized.query,
-    limit: resolveLimit(shouldFetchActivities),
-    offset: resolveOffset(shouldFetchActivities),
-    sort: normalized.sort,
-  })
-
-  const usersResult = await searchUsers({
-    query: normalized.query,
-    limit: resolveLimit(shouldFetchUsers),
-    offset: resolveOffset(shouldFetchUsers),
-  })
-
-  const tagsResult = await searchTags({
-    query: normalized.query,
-    limit: resolveLimit(shouldFetchTags),
-    offset: resolveOffset(shouldFetchTags),
-    sort: normalized.sort,
-  })
+  const [postsResult, activitiesResult, usersResult, tagsResult] = await Promise.all([
+    searchPosts({
+      query: normalized.query,
+      limit: resolveLimit(shouldFetchPosts),
+      offset: resolveOffset(shouldFetchPosts),
+      sort: normalized.sort,
+    }),
+    searchActivities({
+      query: normalized.query,
+      limit: resolveLimit(shouldFetchActivities),
+      offset: resolveOffset(shouldFetchActivities),
+      sort: normalized.sort,
+    }),
+    searchUsers({
+      query: normalized.query,
+      limit: resolveLimit(shouldFetchUsers),
+      offset: resolveOffset(shouldFetchUsers),
+    }),
+    searchTags({
+      query: normalized.query,
+      limit: resolveLimit(shouldFetchTags),
+      offset: resolveOffset(shouldFetchTags),
+      sort: normalized.sort,
+    }),
+  ])
 
   const postsItems = shouldFetchPosts ? postsResult.items.map(mapPostHit) : []
   const activitiesItems = shouldFetchActivities ? activitiesResult.items.map(mapActivityHit) : []
